@@ -5,3 +5,6 @@ venv/
 .env
 .DS_Store
 node_modules/
+.coverage
+htmlcov/
+.pytest_cache/
