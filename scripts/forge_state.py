@@ -271,7 +271,13 @@ class Decision:
 
 
 def list_decisions(forge_dir: Path) -> list[Decision]:
-    """Every decision, oldest first. A broken record names itself and stops."""
+    """Every decision, oldest first. A broken record names itself and stops.
+
+    Paths are sorted before the ids are, and that is not redundant: decision
+    018 accepts that two branches can both take the same id, and Python's sort
+    is stable. Sorting by filename first means two records sharing an id keep a
+    deterministic order rather than depending on directory iteration.
+    """
     folder = forge_dir / DECISIONS
     if not folder.is_dir():
         return []

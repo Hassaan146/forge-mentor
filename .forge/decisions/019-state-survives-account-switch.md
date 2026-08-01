@@ -25,8 +25,8 @@ fails offline — to solve a problem `git pull` already solves.
    impossible because there is no memory.
 3. **Write the instant a decision is made** — not at the end of a phase. A token running
    out mid-sentence loses nothing.
-4. **Save unfinished work too** — the question asked, its options, and that no answer
-   came yet. Resume mid-question, not at the start of it.
+4. **Save unfinished work too** — the question asked, its options, and the fact that no
+   answer has been given yet. Resume mid-question, not at the start of it.
 5. **Commit and push after every write** — disk survives an account switch; the repo
    survives a lost laptop.
 6. **Prove continuity on every start** — open with what is recorded, what is open, and

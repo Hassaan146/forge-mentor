@@ -13,9 +13,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-
-import forge_ui as ui  # noqa: E402
+import forge_ui as ui
 
 ANSI = re.compile(r"\033\[[0-9;]*m")
 

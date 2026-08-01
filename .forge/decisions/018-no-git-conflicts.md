@@ -24,6 +24,6 @@ a mutable field two branches fight over.
 | Two branches ask different questions | Different files — no conflict |
 | Two branches answer the same question | Same file — conflicts, and should |
 | `progress.md` conflicts | Delete and regenerate; never hand-merged |
-| Duplicate ID taken on two branches | Later one renumbers at merge |
+| Duplicate ID taken on two branches | The later one renumbers at merge |
 
 `progress.md` becomes a generated summary for humans, not a source of truth.

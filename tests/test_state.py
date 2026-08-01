@@ -14,9 +14,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-
-import forge_state as fs  # noqa: E402
+import forge_state as fs
 
 GOVERNOR = Path(__file__).resolve().parents[1] / "scripts" / "governor.py"
 
@@ -79,6 +77,23 @@ def test_line_without_colon_is_rejected(tmp_path: Path) -> None:
     assert "colon" in str(err.value)
 
 
+def test_comments_blank_lines_and_padding_are_tolerated(tmp_path: Path) -> None:
+    """Users edit these files by hand, so the parser must forgive human spacing."""
+    text = (
+        "---\n"
+        "# a comment, ignored\n"
+        "\n"
+        "   stage   :   live-loop   \n"
+        "open_question:  none  \n"
+        "---\n"
+        "\n"
+        "Body starts here\n"
+    )
+    header, body = fs.parse_header(text, tmp_path / "progress.md")
+    assert header == {"stage": "live-loop", "open_question": "none"}
+    assert body.startswith("Body starts here")
+
+
 # --------------------------------------------------------------------------
 # init and resume — decisions 011, 016, 019
 # --------------------------------------------------------------------------
@@ -107,6 +122,38 @@ def test_not_a_forge_project(tmp_path: Path) -> None:
     assert fs.is_forge_project(tmp_path) is False
 
 
+def test_a_stray_home_forge_never_adopts_a_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression guard for a real bug.
+
+    An unbounded upward walk found `~/.forge` and switched Forge on in every
+    project on the machine — the opposite of decision 014, which says Forge
+    acts only where it was invited.
+    """
+    home = tmp_path / "home"
+    (home / ".forge").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    project = home / "some-project"
+    project.mkdir()
+
+    assert fs.find_forge_dir(project) is None
+
+
+def test_the_search_stops_at_the_repository_root(tmp_path: Path) -> None:
+    """`.forge/` lives inside the project repo (016), so the repo bounds it."""
+    outer = tmp_path / "outer"
+    (outer / ".forge").mkdir(parents=True)
+
+    repo = outer / "repo"
+    (repo / ".git").mkdir(parents=True)
+    inside = repo / "src"
+    inside.mkdir()
+
+    assert fs.find_forge_dir(inside) is None, "must not escape past the repo root"
+
+
 def test_progress_survives_a_write_read_cycle(project: Path) -> None:
     forge = project / ".forge"
     before = fs.Progress.read(forge)
@@ -119,16 +166,38 @@ def test_progress_survives_a_write_read_cycle(project: Path) -> None:
     assert after.stage == "live-loop"
 
 
-def test_resume_line_reports_the_open_question_first(project: Path) -> None:
+def test_missing_progress_file_says_how_to_recover(project: Path) -> None:
+    (project / ".forge" / "progress.md").unlink()
+    with pytest.raises(fs.StateError) as err:
+        fs.Progress.read(project / ".forge")
+    assert "/forge:start" in str(err.value)
+
+
+def test_in_flight_work_travels_to_the_next_session(project: Path) -> None:
+    """Decision 011: another account resumes mid-question, not at the start."""
     forge = project / ".forge"
     fs.ask(forge, "how people log in")
     progress = fs.Progress.read(forge)
     progress.current_step = "rate limiting"
     progress.write(forge)
 
-    # in-flight state must travel (decision 011)
-    assert "rate limiting" in fs.Progress.read(forge).resume_line() or True
+    # what a fresh session on another account would read
+    assert fs.Progress.read(forge).current_step == "rate limiting"
+    assert "rate limiting" in fs.Progress.read(forge).resume_line()
     assert fs.open_question(forge).question == "how people log in"
+
+
+def test_resume_line_falls_back_through_what_it_knows(project: Path) -> None:
+    forge = project / ".forge"
+    progress = fs.Progress.read(forge)
+
+    progress.current_step = ""
+    progress.next_action = "begin the interrogation"
+    assert "begin the interrogation" in progress.resume_line()
+
+    progress.next_action = ""
+    progress.stage = "live-loop"
+    assert "live-loop" in progress.resume_line()
 
 
 def test_missing_required_field_is_a_broken_file(project: Path) -> None:

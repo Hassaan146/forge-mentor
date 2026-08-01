@@ -17,11 +17,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-import forge_state as fs  # noqa: E402
-import governor  # noqa: E402
+import forge_state as fs
+import governor
 
 
 @pytest.fixture()
@@ -153,3 +150,38 @@ def test_deny_and_allow_emit_valid_wire_format(capsys) -> None:
     with pytest.raises(SystemExit):
         governor.allow()
     assert json.loads(capsys.readouterr().out) == {}
+
+
+# --------------------------------------------------------------------------
+# Forge writing its own notes — path handling, not string matching
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        ".forge/decisions/001-x.md",          # relative, no leading separator
+        "proj/.forge/progress.md",            # nested, no leading separator
+        "/abs/proj/.forge/decisions/002.md",  # absolute posix
+        r"C:\proj\.forge\progress.md",        # windows separators
+        ".forge",                             # the folder itself
+    ],
+)
+def test_forge_owned_paths_are_recognised(target: str) -> None:
+    """A substring heuristic missed relative paths and blocked Forge's own writes."""
+    assert governor.is_forge_owned(target) is True
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["app.py", "src/.forgery/x.md", "notforge/progress.md", "src/forge/app.py", ""],
+)
+def test_ordinary_paths_are_not_forge_owned(target: str) -> None:
+    assert governor.is_forge_owned(target) is False
+
+
+def test_relative_forge_write_is_allowed(project, monkeypatch, capsys) -> None:
+    """End to end: the bug Sourcery caught would have blocked this."""
+    fs.ask(project / ".forge", "rate limiting")
+    payload = write_payload(project, target=".forge/decisions/002-next.md")
+    assert not is_deny(invoke(monkeypatch, capsys, payload))

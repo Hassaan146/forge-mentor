@@ -28,16 +28,29 @@ import json
 import sys
 from pathlib import Path
 
+# Claude Code invokes this file directly as a hook command, so it runs as a
+# standalone script with no package context. There is no install step for a
+# plugin, so the sibling import has to be made reachable here.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from forge_state import StateError, find_forge_dir, writes_allowed  # noqa: E402
+from forge_state import FORGE_DIR, StateError, find_forge_dir, writes_allowed  # noqa: E402
 
 # Tools that write to the project. Reads are never blocked — the mentor has to
 # be able to look at the code in order to teach it.
 WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
 
-# Forge writing its own records must never be blocked by itself.
-SELF_MARKER = "/.forge/"
+
+def is_forge_owned(target: str) -> bool:
+    """True when this write is Forge writing its own notes.
+
+    Compares path *segments* rather than matching a substring. A separator
+    heuristic such as "/.forge/" misses a relative target like
+    ".forge/decisions/001.md" — which would block Forge from recording the very
+    decision that unblocks the user.
+    """
+    if not target:
+        return False
+    return FORGE_DIR in Path(target.replace("\\", "/")).parts
 
 
 def allow() -> None:
@@ -77,8 +90,7 @@ def main() -> None:
     if forge_dir is None:
         allow()  # not a Forge project
 
-    target = str(payload.get("tool_input", {}).get("file_path", "")).replace("\\", "/")
-    if SELF_MARKER in target or target.endswith("/.forge"):
+    if is_forge_owned(str(payload.get("tool_input", {}).get("file_path", ""))):
         allow()  # Forge writing its own notes
 
     try:
