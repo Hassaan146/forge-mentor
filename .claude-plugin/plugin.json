@@ -1,0 +1,21 @@
+{
+  "name": "forge",
+  "displayName": "Forge Mentor",
+  "version": "0.1.0",
+  "description": "Decide-then-code. Forge Mentor teaches every load-bearing decision, records your choice, and blocks code from moving past a decision you have not made yet.",
+  "author": {
+    "name": "Muhammad Hassaan",
+    "url": "https://github.com/Hassaan146"
+  },
+  "homepage": "https://github.com/Hassaan146/forge-mentor",
+  "repository": "https://github.com/Hassaan146/forge-mentor",
+  "license": "MIT",
+  "keywords": [
+    "mentor",
+    "teaching",
+    "architecture-decisions",
+    "adr",
+    "code-review",
+    "governance"
+  ]
+}
