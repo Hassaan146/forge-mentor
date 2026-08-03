@@ -124,6 +124,10 @@ class Progress:
     questions_total_estimate: int = 0
     current_step: str = ""
     next_action: str = ""
+    # Decision 009: after three failed attempts at a step, stop looping and
+    # escalate to the user. Kept here so the count survives a crash, a new
+    # session, or a switch to another account (decision 011).
+    gate_attempts: int = 0
     updated: str = field(default_factory=lambda: date.today().isoformat())
     body: str = ""
 
@@ -181,6 +185,7 @@ class Progress:
             questions_total_estimate=_int(header.get("questions_total_estimate")),
             current_step=header.get("current_step", ""),
             next_action=header.get("next_action", ""),
+            gate_attempts=_int(header.get("gate_attempts")),
             updated=header.get("updated", ""),
             body=body,
         )
@@ -198,6 +203,7 @@ class Progress:
                 "questions_total_estimate": str(self.questions_total_estimate),
                 "current_step": self.current_step,
                 "next_action": self.next_action,
+                "gate_attempts": str(self.gate_attempts),
                 "updated": date.today().isoformat(),
             }
         )
