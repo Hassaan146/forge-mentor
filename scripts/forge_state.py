@@ -113,8 +113,12 @@ def render_header(fields: dict[str, str]) -> str:
 class Progress:
     """Where the project is right now.
 
-    `open_question` is the field the governor reads. When it names a question,
-    code is blocked. When it is `none`, code may be written.
+    Note on `open_question`: decision 018 moved the authority for this out of
+    the progress file and into the decision records themselves — a question is
+    a record with `status: open`. The field is kept only as a readable summary
+    for a person opening this file, and is written from the computed value. The
+    governor and `resume_line` both take the real answer as an argument, so a
+    stale field here can never decide anything.
     """
 
     stage: str = "foundation-interrogation"
@@ -133,22 +137,18 @@ class Progress:
 
     # -- derived ----------------------------------------------------------
 
-    @property
-    def has_open_question(self) -> bool:
-        return self.open_question.strip().lower() not in _NONE
-
-    @property
-    def writes_allowed(self) -> bool:
-        """The governor's rule, in one place so it cannot be restated wrongly."""
-        return self.override_active or not self.has_open_question
-
-    def resume_line(self) -> str:
+    def resume_line(self, open_question: str | None = None) -> str:
         """What a brand-new session on another account says first.
 
         Decision 011: nothing is retyped, nothing is re-explained.
+
+        The open question is passed in rather than read from this file. Since
+        decision 018 the records are the authority, and reading the summary
+        field here would show a stale question on exactly the account-switch
+        path decision 011 exists to protect.
         """
-        if self.has_open_question:
-            return f"Open question: {self.open_question}"
+        if open_question:
+            return f"Open question: {open_question}"
         if self.current_step:
             return f"In progress: {self.current_step}"
         if self.next_action:
