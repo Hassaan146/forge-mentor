@@ -1,0 +1,330 @@
+"""Forge Mentor — the MCP server.
+
+The engine behind the plugin. Claude Code drives the conversation; this server
+owns the work that must happen the same way every time, whatever the model
+decides to say:
+
+  * turning a free-text answer into a decision record
+  * choosing which model does which job (decision 002)
+  * recording an override, so bypassing the rule leaves a trail (decision 004)
+  * reporting whether the decision history can be trusted (decisions 021-022)
+
+Why a server rather than instructions in a prompt: a prompt is advice the model
+may follow. Recording a decision, verifying a chain, and repairing damage are
+guarantees, so they live in code the model calls but cannot alter.
+
+Note on the folder name: this file sits in `server/`, not `mcp/`. A folder
+called `mcp/` in the project root shadows the installed MCP SDK, and imports
+then fail only when run from the project directory — a confusing failure that
+cost time to find once already.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any
+
+from mcp.server.mcpserver import MCPServer
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import forge_integrity as fi  # noqa: E402
+import forge_repair as fr  # noqa: E402
+import forge_state as fs  # noqa: E402
+
+server = MCPServer(
+    name="forge",
+    title="Forge Mentor",
+    instructions=(
+        "The engine behind Forge Mentor. Use these tools to record decisions, "
+        "check that the decision history is intact, and choose which model "
+        "should do a job. Never write a decision record by hand — a "
+        "hand-written record is not trusted by the governor."
+    ),
+)
+
+
+# --------------------------------------------------------------------------
+# which model does which job — decision 002, with the fallback from 003
+# --------------------------------------------------------------------------
+
+# Preferred model per job, then what to fall back to when a plan does not
+# include it. Stored as an ordered list rather than written into the code, so a
+# newer model is one line to add (decision 003).
+ROUTING: dict[str, list[str]] = {
+    "teaching": ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
+    "planning": ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
+    "building": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+    "structuring": ["claude-haiku-4-5", "claude-sonnet-5"],
+    "fixing": ["claude-opus-4-8", "claude-sonnet-5"],
+}
+
+JOB_REASONS = {
+    "teaching": "teaching quality is the product, so this job gets the strongest model",
+    "planning": "planning shapes everything after it, so it gets the strongest model",
+    "building": "the strongest coding model, because this writes the code",
+    "structuring": "small and constant — the cheapest job is where cost is won or lost",
+    "fixing": "real code editing, so it belongs with the coding model",
+}
+
+
+@server.tool(
+    name="choose_model",
+    description=(
+        "Choose which model should do a job. Jobs: teaching, planning, "
+        "building, structuring, fixing. Pass the models available on this "
+        "plan to get a fallback when the preferred one is missing."
+    ),
+)
+def choose_model(job: str, available: list[str] | None = None) -> dict[str, Any]:
+    job = job.strip().lower()
+    if job not in ROUTING:
+        return {
+            "error": f"Unknown job {job!r}.",
+            "jobs": sorted(ROUTING),
+        }
+
+    order = ROUTING[job]
+    if not available:
+        return {"job": job, "model": order[0], "why": JOB_REASONS[job], "fell_back": False}
+
+    for candidate in order:
+        if candidate in available:
+            return {
+                "job": job,
+                "model": candidate,
+                "why": JOB_REASONS[job],
+                "fell_back": candidate != order[0],
+            }
+
+    # Decision 003: nobody is blocked because of their plan.
+    return {
+        "job": job,
+        "model": available[0],
+        "why": "none of the preferred models are on this plan, so the first available is used",
+        "fell_back": True,
+    }
+
+
+# --------------------------------------------------------------------------
+# decisions — asking, answering, and what the governor reads
+# --------------------------------------------------------------------------
+
+
+def _forge_dir(project: str) -> Path:
+    found = fs.find_forge_dir(Path(project))
+    if found is None:
+        raise ValueError(
+            "This is not a Forge project. Run /forge:start here first."
+        )
+    return found
+
+
+@server.tool(
+    name="ask_question",
+    description=(
+        "Record that a question has been asked, before the user answers. This "
+        "blocks code from being written until the question is answered. Always "
+        "call this when putting a decision to the user."
+    ),
+)
+def ask_question(project: str, question: str, affects: str = "") -> dict[str, Any]:
+    forge = _forge_dir(project)
+    decision = fs.ask(forge, question, affects=affects)
+    fr.write_chain(forge)
+    return {
+        "id": decision.id,
+        "question": decision.question,
+        "file": decision.filename(),
+        "writes_blocked": True,
+    }
+
+
+@server.tool(
+    name="record_answer",
+    description=(
+        "Record the user's decision, turning free text into a structured "
+        "record. Include the options considered and why this one was chosen — "
+        "the record is what the user reads back months later."
+    ),
+)
+def record_answer(
+    project: str,
+    decision_id: int,
+    choice: str,
+    reasoning: str,
+    options_considered: list[str] | None = None,
+    recommendation: str = "",
+) -> dict[str, Any]:
+    forge = _forge_dir(project)
+
+    body = [f"# {choice}", ""]
+    if options_considered:
+        body += ["**Options considered**", ""]
+        body += [f"- {option}" for option in options_considered]
+        body.append("")
+    if recommendation:
+        body += [f"**Recommended:** {recommendation} · **Decided:** {choice}", ""]
+    body += ["## Why", "", reasoning, ""]
+
+    decision = fs.answer(forge, decision_id, "\n".join(body))
+    fr.write_chain(forge)
+
+    checked = fi.verify_decision(forge, decision_id)
+    return {
+        "id": decision.id,
+        "file": decision.filename(),
+        "verified": bool(checked and checked.trusted),
+        "writes_blocked": not fs.writes_allowed(forge)[0],
+    }
+
+
+@server.tool(
+    name="current_state",
+    description=(
+        "What is open, what is decided, and where the work stands. Call this "
+        "at the start of every session — it is how Forge resumes on another "
+        "machine or another account without asking the user to repeat anything."
+    ),
+)
+def current_state(project: str) -> dict[str, Any]:
+    forge = _forge_dir(project)
+    pending = fs.open_question(forge)
+
+    try:
+        progress = fs.Progress.read(forge)
+        resume = progress.resume_line(pending.question if pending else None)
+        stage = progress.stage
+        attempts = progress.gate_attempts
+    except fs.StateError as exc:
+        return {"error": str(exc), "needs_repair": True}
+
+    # Asked of the same function the governor uses, never restated here. Stating
+    # the rule twice is how the two drift: this reported writes as blocked while
+    # an override was active, so a client would refuse work the governor would
+    # have allowed.
+    allowed, _ = fs.writes_allowed(forge)
+
+    # Keep the readable summary in the progress file in step with the truth,
+    # so a person opening that file by hand is not misled (decision 018).
+    summary = pending.question if pending else "none"
+    if progress.open_question != summary:
+        progress.open_question = summary
+        progress.write(forge)
+
+    decisions = fs.list_decisions(forge)
+    return {
+        "stage": stage,
+        "resume": resume,
+        "open_question": pending.question if pending else None,
+        "open_question_id": pending.id if pending else None,
+        "writes_blocked": not allowed,
+        "override_active": progress.override_active,
+        "decided": sum(1 for d in decisions if d.status == fs.STATUS_DECIDED),
+        "total": len(decisions),
+        "failed_attempts_on_this_step": attempts,
+    }
+
+
+# --------------------------------------------------------------------------
+# the override — decision 004
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="record_override",
+    description=(
+        "Record that the user chose to write code without deciding first. Only "
+        "call this after the user has explicitly asked and confirmed. The "
+        "override is written into the notes so it is visible later."
+    ),
+)
+def record_override(project: str, reason: str = "") -> dict[str, Any]:
+    forge = _forge_dir(project)
+    pending = fs.open_question(forge)
+
+    progress = fs.Progress.read(forge)
+    progress.override_active = True
+    progress.write(forge)
+
+    note = fs.ask(
+        forge,
+        f"Override: code written without deciding {pending.question!r}"
+        if pending
+        else "Override: code written without a recorded decision",
+    )
+    fs.answer(
+        forge,
+        note.id,
+        "# Override used\n\n"
+        f"The user chose to write code without recording a decision first.\n\n"
+        f"**Reason given:** {reason or 'none given'}\n\n"
+        "Recorded because a bypass that leaves no trace is not a bypass, it is "
+        "a hole (decision 004).\n",
+        decided_by="user-override",
+    )
+    fr.write_chain(forge)
+
+    return {"override_active": True, "recorded_as": note.id}
+
+
+@server.tool(
+    name="clear_override",
+    description="Turn the override off again once the step is finished.",
+)
+def clear_override(project: str) -> dict[str, Any]:
+    forge = _forge_dir(project)
+    progress = fs.Progress.read(forge)
+    progress.override_active = False
+    progress.write(forge)
+    return {"override_active": False}
+
+
+# --------------------------------------------------------------------------
+# integrity — decisions 021 and 022
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="check_history",
+    description=(
+        "Check whether the decision history can be trusted. Returns any record "
+        "that was altered, hand-written, or slipped into the history."
+    ),
+)
+def check_history(project: str) -> dict[str, Any]:
+    forge = _forge_dir(project)
+    problems = fr.diagnose(forge)
+    return {
+        "intact": not problems,
+        "warning": fr.warn(problems),
+        "problems": [
+            {
+                "id": p.decision_id,
+                "state": p.integrity.value,
+                "meaning": p.integrity.explanation,
+                "remedy": p.remedy.value,
+            }
+            for p in problems
+        ],
+    }
+
+
+@server.tool(
+    name="repair_history",
+    description=(
+        "Repair the decision history: restore altered records from their "
+        "committed version, and move aside any record that was never "
+        "committed. Only call this after the user has confirmed — it "
+        "overwrites files."
+    ),
+)
+def repair_history(project: str) -> dict[str, Any]:
+    forge = _forge_dir(project)
+    actions = fr.repair(forge)
+    return {"actions": actions, "intact_now": fr.verify_after_repair(forge)}
+
+
+if __name__ == "__main__":
+    server.run()
