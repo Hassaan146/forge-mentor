@@ -217,3 +217,42 @@ def test_verifying_an_unknown_id_returns_nothing(forge: Path) -> None:
 def test_no_decisions_at_all_is_not_an_error(project: Path) -> None:
     assert fi.check_all(project / ".forge") == []
     assert fi.untrusted(project / ".forge") == []
+
+
+# --------------------------------------------------------------------------
+# the fingerprint is a denylist, so new fields are covered by default
+# --------------------------------------------------------------------------
+
+
+def test_a_new_field_is_protected_without_anyone_remembering(forge: Path) -> None:
+    """The reason it is a denylist.
+
+    With a list of fields to hash, a field added later silently escapes the
+    fingerprint and can then be altered undetected. Deriving from the record
+    minus the exclusions closes that by default.
+    """
+    settle(forge, "which backend")
+    decision = fs.list_decisions(forge)[0]
+
+    before = fi.fingerprint(decision)
+    decision.affects = "phase-9"  # a field that carries meaning
+    assert fi.fingerprint(decision) != before, "meaningful fields must move the hash"
+
+
+def test_the_excluded_fields_are_the_ones_forge_rewrites(forge: Path) -> None:
+    settle(forge, "which backend")
+    decision = fs.list_decisions(forge)[0]
+
+    covered = fi.signed_fields(decision)
+    assert "question" in covered and "status" in covered
+    assert "date" not in covered, "Forge rewrites the date on every re-sign"
+
+
+def test_the_body_is_always_hashed(forge: Path) -> None:
+    """It carries most of the meaning, so it is hashed explicitly."""
+    settle(forge, "which backend", "# Original\n")
+    decision = fs.list_decisions(forge)[0]
+
+    before = fi.fingerprint(decision)
+    decision.body = "# Something else entirely\n"
+    assert fi.fingerprint(decision) != before

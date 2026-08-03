@@ -250,3 +250,18 @@ def test_a_safety_failure_does_not_block_ordinary_work(monkeypatch, capsys) -> N
         safety.main()
     assert exit_info.value.code == 0
     assert not is_deny(json.loads(capsys.readouterr().out or "{}"))
+
+
+def test_the_counter_survives_an_unreadable_progress_file(project: Path) -> None:
+    """Returning 0 here switched off decision 009's escalation silently.
+
+    A damaged progress file is exactly when a user is most likely to be stuck,
+    so that is the worst possible moment for the three-strike rule to stop
+    counting.
+    """
+    forge = project / ".forge"
+    (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
+
+    assert gates.bump_attempts(forge) == 1, "a broken file must not stop the count"
+    assert fs.Progress.read(forge).gate_attempts == 1, "and it must be written down"
+    assert gates.bump_attempts(forge) == 2, "counting continues from there"

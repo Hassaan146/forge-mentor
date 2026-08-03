@@ -176,7 +176,7 @@ def record_answer(
         "id": decision.id,
         "file": decision.filename(),
         "verified": bool(checked and checked.trusted),
-        "writes_blocked": fs.open_question(forge) is not None,
+        "writes_blocked": not fs.writes_allowed(forge)[0],
     }
 
 
@@ -200,6 +200,12 @@ def current_state(project: str) -> dict[str, Any]:
     except fs.StateError as exc:
         return {"error": str(exc), "needs_repair": True}
 
+    # Asked of the same function the governor uses, never restated here. Stating
+    # the rule twice is how the two drift: this reported writes as blocked while
+    # an override was active, so a client would refuse work the governor would
+    # have allowed.
+    allowed, _ = fs.writes_allowed(forge)
+
     # Keep the readable summary in the progress file in step with the truth,
     # so a person opening that file by hand is not misled (decision 018).
     summary = pending.question if pending else "none"
@@ -213,7 +219,8 @@ def current_state(project: str) -> dict[str, Any]:
         "resume": resume,
         "open_question": pending.question if pending else None,
         "open_question_id": pending.id if pending else None,
-        "writes_blocked": pending is not None,
+        "writes_blocked": not allowed,
+        "override_active": progress.override_active,
         "decided": sum(1 for d in decisions if d.status == fs.STATUS_DECIDED),
         "total": len(decisions),
         "failed_attempts_on_this_step": attempts,

@@ -283,3 +283,27 @@ def test_every_tool_describes_itself() -> None:
 
     for tool in asyncio.run(srv.server.list_tools()):
         assert tool.description and len(tool.description) > 30, tool.name
+
+
+def test_an_active_override_is_reported_and_unblocks_writes(project: str) -> None:
+    """The governor's rule must not be restated anywhere.
+
+    current_state used to report writes as blocked whenever a question was
+    open, ignoring the override — so a client would refuse work the governor
+    would have allowed. Both now ask the same function.
+    """
+    ask_question(project, "rate limiting")
+    assert current_state(project)["writes_blocked"] is True
+
+    record_override(project, reason="prototype")
+    state = current_state(project)
+
+    assert state["override_active"] is True
+    assert state["writes_blocked"] is False, "must agree with the governor"
+
+
+def test_clearing_the_override_blocks_again(project: str) -> None:
+    ask_question(project, "rate limiting")
+    record_override(project)
+    clear_override(project)
+    assert current_state(project)["writes_blocked"] is True

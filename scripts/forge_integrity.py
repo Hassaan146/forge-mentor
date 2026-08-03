@@ -41,11 +41,18 @@ import forge_state as fs
 CONTENT_SHA = "content_sha"
 PREV_SHA = "prev_sha"
 
-# The fingerprint covers the question, the outcome, and the prose — everything
-# that carries meaning. Fields Forge maintains itself (the fingerprints, and
-# the date it was written) are excluded, or the hash could never be stable.
-SIGNED_FIELDS = ("id", "question", "status", "decided_by", "affects")
-EXCLUDED_FROM_HASH = {CONTENT_SHA, PREV_SHA, "date"}
+# The fingerprint covers everything on a record *except* these.
+#
+# Deliberately a denylist rather than a list of what to hash. With an allowlist,
+# any field added to a record later would silently fall outside the fingerprint
+# and could then be altered without detection — a hole that opens itself the
+# next time someone extends the format. A denylist covers new fields by default;
+# leaving one out has to be a deliberate act.
+#
+# Excluded because Forge maintains them itself and they change on every write:
+#   content_sha / prev_sha  the fingerprints, which cannot hash themselves
+#   date                    rewritten whenever a record is re-signed
+EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "date", "body"})
 
 GENESIS = "genesis"  # what the first record points back to
 
@@ -83,15 +90,31 @@ class Checked:
         return self.integrity.trusted
 
 
+def signed_fields(decision: fs.Decision) -> list[str]:
+    """Every field on a record that the fingerprint covers.
+
+    Derived from the record itself minus the exclusions, so a field added to
+    `Decision` in future is protected automatically rather than quietly
+    escaping the hash.
+    """
+    return sorted(
+        name for name in vars(decision) if name not in EXCLUDED_FROM_HASH
+    )
+
+
 def fingerprint(decision: fs.Decision) -> str:
     """A stable fingerprint of a record's meaningful content.
 
-    Built from an explicit field list rather than the raw file bytes, so that
-    a reformat — line endings, trailing whitespace, key order — does not look
-    like tampering. Meaning is what is protected, not byte layout.
+    Built from named fields rather than the raw file bytes, so that a reformat
+    — line endings, trailing whitespace, key order — does not look like
+    tampering. Meaning is what is protected, not byte layout.
+
+    The body is hashed last and explicitly, because it carries most of the
+    meaning and must never be dropped by a change to the field list.
     """
     parts = [
-        f"{field}={_normalise(getattr(decision, field, ''))}" for field in SIGNED_FIELDS
+        f"{name}={_normalise(getattr(decision, name, ''))}"
+        for name in signed_fields(decision)
     ]
     parts.append(f"body={_normalise(decision.body)}")
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
