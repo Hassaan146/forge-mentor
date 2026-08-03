@@ -238,20 +238,26 @@ class Decision:
     def filename(self) -> str:
         return f"{self.slug()}.md"
 
-    def write(self, forge_dir: Path) -> Path:
+    def write(self, forge_dir: Path, signature: dict[str, str] | None = None) -> Path:
+        """Write the record, optionally carrying its tamper-evident fields.
+
+        Signing lives in `forge_integrity` rather than here so the state layer
+        stays readable on its own; callers use `ask()` and `answer()`, which
+        apply it automatically.
+        """
         path = forge_dir / DECISIONS / self.filename()
         path.parent.mkdir(parents=True, exist_ok=True)
-        header = render_header(
-            {
-                "id": f"{self.id:03d}",
-                "question": self.question,
-                "status": self.status,
-                "date": self.date,
-                "decided_by": self.decided_by,
-                "affects": self.affects,
-            }
-        )
-        path.write_text(header + "\n" + self.body, encoding="utf-8")
+        fields = {
+            "id": f"{self.id:03d}",
+            "question": self.question,
+            "status": self.status,
+            "date": self.date,
+            "decided_by": self.decided_by,
+            "affects": self.affects,
+        }
+        if signature:
+            fields.update(signature)
+        path.write_text(render_header(fields) + "\n" + self.body, encoding="utf-8")
         return path
 
     @classmethod
@@ -313,6 +319,18 @@ def open_question(forge_dir: Path) -> Decision | None:
     return openers[0] if openers else None
 
 
+def _sign_for(forge_dir: Path, decision: "Decision") -> dict[str, str]:
+    """Fingerprint a record against the one before it (decisions 020, 021).
+
+    Imported here rather than at module scope: the integrity module imports
+    this one, so a top-level import would be circular.
+    """
+    import forge_integrity
+
+    earlier = [d for d in list_decisions(forge_dir) if d.id < decision.id]
+    return forge_integrity.sign(decision, earlier[-1] if earlier else None)
+
+
 def ask(forge_dir: Path, question: str, body: str = "", affects: str = "") -> Decision:
     """Record that a question has been asked. Blocks writes until answered."""
     decision = Decision(
@@ -323,7 +341,7 @@ def ask(forge_dir: Path, question: str, body: str = "", affects: str = "") -> De
         affects=affects,
         body=body or f"# {question}\n\n_Awaiting the user's decision._\n",
     )
-    decision.write(forge_dir)
+    decision.write(forge_dir, signature=_sign_for(forge_dir, decision))
     return decision
 
 
@@ -342,7 +360,8 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
         decision.decided_by = decided_by
         decision.date = date.today().isoformat()
         decision.body = body
-        decision.write(forge_dir)
+        # Re-signed: the content changed, so the old fingerprint no longer holds.
+        decision.write(forge_dir, signature=_sign_for(forge_dir, decision))
         return decision
 
     raise StateError(
