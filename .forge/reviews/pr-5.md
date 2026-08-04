@@ -5,7 +5,7 @@ reviewers: [coderabbit, sourcery]
 open: 2
 resolved: 5
 clean: false
-fetched: 2026-08-04T11:53:19
+fetched: 2026-08-04T11:59:05
 ---
 
 # Review — pull request #5
@@ -93,6 +93,21 @@ Help me be more useful! Please click 👍 or 👎 on each comment and I'll use t
 <sub>
 Help me be more useful! Please click 👍 or 👎 on each comment and I'll use the feedback to improve your reviews.
 </sub>
+
+**coderabbit** — > [!CAUTION]
+> Some comments are outside the diff and can’t be posted inline due to platform limitations.
+> 
+> 
+> 
+> 
+> 
+> 
+> 
+> </blockquote>
+> 
+> </blockquote>
+
+---
 ---
 </untrusted>
 
