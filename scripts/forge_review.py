@@ -168,8 +168,12 @@ def github_token() -> str | None:
     # The GitHub CLI keeps a token once the user has signed in with it.
     for command in (["gh", "auth", "token"], ["gh.exe", "auth", "token"]):
         try:
-            result = subprocess.run(
-                command, capture_output=True, text=True, timeout=10
+            # shell=False stated rather than left to the default: the audit
+            # rule that flags this cannot tell a fixed argument list from an
+            # interpolated string, and saying so is cheaper than explaining it
+            # on every review. There is no user input in `command`.
+            result = subprocess.run(  # noqa: S603
+                command, capture_output=True, text=True, timeout=10, shell=False
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()

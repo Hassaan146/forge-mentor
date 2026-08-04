@@ -126,7 +126,8 @@ def _forge_dir(project: str) -> Path:
     description=(
         "Record that a question has been asked, before the user answers. This "
         "blocks code from being written until the question is answered. Always "
-        "call this when putting a decision to the user."
+        "call this when putting a decision to the user. **Writes to disk** — "
+        "creates the decision record and updates .forge/chain.log."
     ),
 )
 def ask_question(project: str, question: str, affects: str = "") -> dict[str, Any]:
@@ -146,7 +147,9 @@ def ask_question(project: str, question: str, affects: str = "") -> dict[str, An
     description=(
         "Record the user's decision, turning free text into a structured "
         "record. Include the options considered and why this one was chosen — "
-        "the record is what the user reads back months later."
+        "the record is what the user reads back months later. **Writes to "
+        "disk** — fills in the decision record and updates .forge/chain.log, "
+        "which unblocks code writing."
     ),
 )
 def record_answer(
@@ -271,7 +274,9 @@ def record_override(project: str, reason: str = "") -> dict[str, Any]:
 
 @server.tool(
     name="clear_override",
-    description="Turn the override off again once the step is finished.",
+    description="Turn the override off again once the step is finished. **Writes to "
+        "disk** — clears the flag in .forge/progress.md, so the governor "
+        "blocks writes again from the next check onward.",
 )
 def clear_override(project: str) -> dict[str, Any]:
     forge = _forge_dir(project)
@@ -334,9 +339,12 @@ def repair_history(project: str) -> dict[str, Any]:
 @server.tool(
     name="check_review_setup",
     description=(
-        "Is the review service connected to this repository? Call this during "
-        "setup. If it is not, the answer carries the steps to connect it — ask "
-        "once, then never again."
+        "Are both reviewers connected to this repository? Call this during "
+        "setup. Returns `ready` (true only when CodeRabbit *and* Sourcery have "
+        "both been seen — they look at different things, so one is not the "
+        "bar), `reviewers` seen so far, `missing`, and a `guide` with the "
+        "steps to connect whichever is absent. Ask once, then never again. "
+        "Reads only; changes nothing."
     ),
 )
 def check_review_setup(project: str) -> dict[str, Any]:
