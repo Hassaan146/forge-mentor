@@ -260,6 +260,13 @@ def summarise(turns: list[Turn]) -> Usage:
 
 def measure(project: Path) -> Usage:
     """Read and total this project's usage. Never raises."""
+    # Deliberately broad. This function's whole contract is that it never
+    # raises: the meter is a display, and decision 024 accepts that it reads a
+    # format nobody promised to keep. Catching OSError alone left real paths
+    # uncovered — `Path.home()` raises RuntimeError with no home directory,
+    # and a surprise value in the log can raise from anywhere in the parse.
+    # A crash here would take down whatever called it, for a number nothing
+    # waits on.
     try:
         root = transcript_root()
         if not root.is_dir():
@@ -268,7 +275,7 @@ def measure(project: Path) -> Usage:
                 reason="Claude Code keeps no session logs on this machine.",
             )
         turns = read_turns(project)
-    except OSError as exc:
+    except Exception as exc:  # noqa: BLE001 - see above
         return Usage(available=False, reason=f"Could not read the session logs: {exc}")
 
     if not turns:

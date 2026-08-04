@@ -384,7 +384,16 @@ def fetch_review(project: str, pr: int) -> dict[str, Any]:
 def usage_report(project: str) -> dict[str, Any]:
     import forge_meter as fm
 
-    return fm.report(Path(project), _forge_dir(project))
+    # An error the model can read, rather than an exception it sees as a broken
+    # server. The tools added in phases 3-5 still let this propagate; making
+    # all ten consistent is a change to their signatures and belongs in its own
+    # commit, not buried in this one.
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    return fm.report(Path(project), forge)
 
 
 @server.tool(
@@ -417,10 +426,11 @@ def assemble_request(project: str, blocks: list[dict[str, str]]) -> dict[str, An
 
     try:
         assembly = fa.assemble(parsed)
-    except fa.AssemblyError as exc:
+        forge = _forge_dir(project)
+    except (fa.AssemblyError, ValueError) as exc:
         return {"error": str(exc)}
 
-    result = fa.check(_forge_dir(project), assembly)
+    result = fa.check(forge, assembly)
     result["text"] = assembly.text
     return result
 
