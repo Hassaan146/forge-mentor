@@ -1,0 +1,227 @@
+"""Forge Mentor — which skills load at which stage, and who runs the job.
+
+Two layers, and keeping them apart is the point (decision 028):
+
+**Forge's own skills** ship inside the plugin. Four of them, versioned with the
+code: the teaching voice, the coding standards, the security floor, and the
+explain-back gate. These are the product. Forge's behaviour cannot depend on
+what a user happens to have installed, so none of them are drawn from a library.
+
+**The library** is installed on the user's machine at setup — all 438 of it, so
+a routed skill is never missing. Forge names skills from it; it never ships them.
+
+**The routing is a table, not a judgement.** Phase 7's bar is that interrogation
+steps load the Socratic set and build steps load the coding standards
+*deterministically* — decided by the stage, not by a model deciding what feels
+relevant. A model that can talk itself out of loading the coding standards is a
+model that will, on the step where it matters.
+
+The security floor is in every stage's list on purpose. It is the one skill that
+is never conditional, because decision 004's fail-closed rule and the floor's
+non-overridable minimums have to hold on the steps nobody was thinking about.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+# The user's curated collection (decision 028). Installed whole at setup, so
+# every machine running Forge has the same set available.
+LIBRARY_REPO = "https://github.com/Hassaan146/claude-skills"
+LIBRARY_DIRNAME = "skills"
+
+# Forge's own, bundled in the plugin. Absence is a packaging bug, not a
+# fallback — `missing_bundled` exists so it fails loudly at setup.
+BUNDLED = (
+    "forge-teaching",  # how a decision is taught and questioned
+    "forge-coding-standards",  # how generated code is written
+    "forge-security-floor",  # the minimums no decision can override
+    "forge-explain-back",  # the gate at the end of a step
+)
+
+# Stage -> the skills that load. Ordered: the floor first, so it is never the
+# thing that got truncated.
+ROUTE: dict[str, tuple[str, ...]] = {
+    "interrogation": ("forge-security-floor", "forge-teaching", "socratic", "socrates", "learn"),
+    "challenge": ("forge-security-floor", "premortem", "redteam"),
+    "planning": ("forge-security-floor", "forge-teaching", "writing-plans"),
+    "building": (
+        "forge-security-floor",
+        "forge-coding-standards",
+        "vibe-coding-rules",
+        "test-driven-development",
+    ),
+    "review-fix": (
+        "forge-security-floor",
+        "forge-coding-standards",
+        "systematic-debugging",
+        "receiving-code-review",
+    ),
+    "teach-back": ("forge-security-floor", "forge-explain-back", "socratic"),
+}
+
+# Which subagent does a stage's work, and the job name it reports.
+STAGE_AGENT: dict[str, str] = {
+    "interrogation": "planner",
+    "challenge": "planner",
+    "planning": "planner",
+    "building": "builder",
+    "review-fix": "review-fixer",
+    "teach-back": "planner",
+}
+
+
+class SkillError(Exception):
+    """A skill or the library could not be found or installed."""
+
+
+@dataclass(frozen=True)
+class Agent:
+    """One subagent: what it is for, and the model that runs it.
+
+    The model here is documentation of what the agent file declares. Decision
+    029 makes the agent file authoritative, because Claude Code reads it at
+    dispatch — a table that disagreed with the file would report one model
+    while another did the work.
+    """
+
+    name: str
+    job: str
+    model: str
+    does: str
+
+
+AGENTS: tuple[Agent, ...] = (
+    Agent("planner", "planning", "claude-fable-5", "teaches, questions, and compiles phases"),
+    Agent("builder", "building", "claude-opus-4-8", "writes the code for a recorded decision"),
+    Agent("structurer", "structuring", "claude-haiku-4-5", "turns free text into a decision record"),
+    Agent("review-fixer", "fixing", "claude-opus-4-8", "applies what the reviewers found"),
+)
+
+AGENTS_BY_NAME: dict[str, Agent] = {agent.name: agent for agent in AGENTS}
+
+
+def skills_for(stage: str) -> tuple[str, ...]:
+    """The skills that load at a stage. Same answer every time, by design."""
+    try:
+        return ROUTE[stage]
+    except KeyError:
+        raise SkillError(
+            f"No skills are mapped to the stage {stage!r}. "
+            f"Known stages: {', '.join(sorted(ROUTE))}."
+        ) from None
+
+
+def agent_for(stage: str) -> Agent:
+    """Which subagent runs a stage, and therefore which model."""
+    try:
+        return AGENTS_BY_NAME[STAGE_AGENT[stage]]
+    except KeyError:
+        raise SkillError(f"No subagent is mapped to the stage {stage!r}.") from None
+
+
+# --------------------------------------------------------------------------
+# the plugin's own skills
+# --------------------------------------------------------------------------
+
+
+def plugin_root() -> Path:
+    """The installed plugin directory — this file's parent's parent."""
+    return Path(__file__).resolve().parents[1]
+
+
+def missing_bundled(root: Path | None = None) -> list[str]:
+    """Any of Forge's own skills that did not ship.
+
+    Checked rather than assumed: a skill silently absent degrades Forge into
+    ordinary Claude Code wearing a banner, and the coding-standards skill going
+    missing would not announce itself in the output — only in the code.
+    """
+    base = (root or plugin_root()) / "skills"
+    return [name for name in BUNDLED if not (base / name / "SKILL.md").is_file()]
+
+
+def routed_library_skills() -> tuple[str, ...]:
+    """Every skill the route names that is not one of Forge's own."""
+    named = {skill for skills in ROUTE.values() for skill in skills}
+    return tuple(sorted(named - set(BUNDLED)))
+
+
+# --------------------------------------------------------------------------
+# the library — installed once, at setup
+# --------------------------------------------------------------------------
+
+
+def library_dir(home: Path | None = None) -> Path:
+    return (home or Path.home()) / ".claude" / LIBRARY_DIRNAME
+
+
+def library_installed(home: Path | None = None) -> bool:
+    """Is the library there at all?
+
+    True on any non-empty skills directory rather than on a count. A user may
+    curate their own; demanding an exact 438 would call a pruned library broken.
+    """
+    folder = library_dir(home)
+    return folder.is_dir() and any(folder.glob("*/SKILL.md"))
+
+
+def missing_routed(home: Path | None = None) -> list[str]:
+    """Routed skills the installed library does not actually contain.
+
+    Reported rather than raised. A missing library skill degrades one stage;
+    stopping the whole session over it would be worse than saying so.
+    """
+    folder = library_dir(home)
+    if not folder.is_dir():
+        return list(routed_library_skills())
+    return [
+        name for name in routed_library_skills() if not (folder / name / "SKILL.md").is_file()
+    ]
+
+
+def install_library(home: Path | None = None, repo: str = LIBRARY_REPO) -> dict[str, object]:
+    """Put the library on this machine. Runs once, at setup (decision 028).
+
+    Clones rather than downloading a zip so the user can update it with `git
+    pull` and see what changed — the same reasoning as state living in the
+    repository (decision 011).
+    """
+    folder = library_dir(home)
+    if library_installed(home):
+        return {"installed": True, "already": True, "path": str(folder)}
+
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = subprocess.run(
+            ["git", "clone", "--depth", "1", repo, str(folder)],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+    except FileNotFoundError:
+        raise SkillError("git is not installed, so the skill library cannot be fetched.") from None
+    except subprocess.TimeoutExpired:
+        raise SkillError("Fetching the skill library timed out.") from None
+
+    if result.returncode != 0:
+        raise SkillError(f"Could not fetch the skill library: {result.stderr.strip()[:300]}")
+
+    return {"installed": True, "already": False, "path": str(folder)}
+
+
+def status(home: Path | None = None, root: Path | None = None) -> dict[str, object]:
+    """What is present and what is not — for setup, and for the tests."""
+    bundled_gaps = missing_bundled(root)
+    routed_gaps = missing_routed(home)
+    return {
+        "library_installed": library_installed(home),
+        "library_path": str(library_dir(home)),
+        "missing_bundled": bundled_gaps,
+        "missing_routed": routed_gaps,
+        # Forge's own skills going missing is a packaging fault and breaks the
+        # product; a library gap only weakens a stage.
+        "ready": not bundled_gaps,
+    }

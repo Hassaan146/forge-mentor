@@ -285,7 +285,23 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "repair_history",
         "check_review_setup",
         "fetch_review",
+        "skills_for_stage",
+        "check_skills",
+        "install_skill_library",
     }
+
+
+def test_the_stage_tool_names_the_skills_and_the_model() -> None:
+    """The plugin has to be able to ask, or the routing table helps nobody."""
+    answer = srv.skills_for_stage("building")
+    assert "forge-coding-standards" in answer["skills"]
+    assert answer["agent"] == "builder"
+    assert answer["model"] == "claude-opus-4-8"
+
+
+def test_an_unknown_stage_returns_an_error_rather_than_raising() -> None:
+    """A tool that raises reads to the model as a broken server."""
+    assert "error" in srv.skills_for_stage("vibes")
 
 
 def test_the_server_starts_only_after_every_tool_is_registered() -> None:

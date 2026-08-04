@@ -425,6 +425,69 @@ def assemble_request(project: str, blocks: list[dict[str, str]]) -> dict[str, An
     return result
 
 
+# --------------------------------------------------------------------------
+# skills and subagents — decisions 028, 029
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="skills_for_stage",
+    description=(
+        "Which skills load at a stage, and which subagent runs it. Stages: "
+        "interrogation, challenge, planning, building, review-fix, teach-back. "
+        "The answer is a fixed table, not a judgement — do not substitute your "
+        "own choice of skills for it. Reads only; changes nothing."
+    ),
+)
+def skills_for_stage(stage: str) -> dict[str, Any]:
+    import forge_skills as sk
+
+    try:
+        agent = sk.agent_for(stage)
+        return {
+            "stage": stage,
+            "skills": list(sk.skills_for(stage)),
+            "agent": agent.name,
+            "model": agent.model,
+            "why": JOB_REASONS.get(agent.job, ""),
+        }
+    except sk.SkillError as exc:
+        return {"error": str(exc)}
+
+
+@server.tool(
+    name="check_skills",
+    description=(
+        "Is everything Forge needs installed? Call this during setup. Reports "
+        "whether the skill library is present and names anything missing. "
+        "`ready` is false only when one of Forge's own bundled skills is "
+        "absent, which is a packaging fault; a gap in the library only weakens "
+        "one stage. Reads only; changes nothing."
+    ),
+)
+def check_skills() -> dict[str, Any]:
+    import forge_skills as sk
+
+    return sk.status()
+
+
+@server.tool(
+    name="install_skill_library",
+    description=(
+        "Fetch the skill library onto this machine. Call once, during setup "
+        "(decision 028). **Writes to disk** — clones roughly 46 MB into "
+        "~/.claude/skills. Does nothing if a library is already there."
+    ),
+)
+def install_skill_library() -> dict[str, Any]:
+    import forge_skills as sk
+
+    try:
+        return sk.install_library()
+    except sk.SkillError as exc:
+        return {"error": str(exc)}
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom. This sat above the review tools once, and
     # because `run()` blocks, every tool defined below it was never registered

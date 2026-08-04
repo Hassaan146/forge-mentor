@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: Skills & Subagents
-status: planned
+status: complete
 effort: M
 depends_on: phase-6
 branch: phase-7-skills-subagents

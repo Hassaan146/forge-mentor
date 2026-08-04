@@ -26,7 +26,8 @@ and 7 high-priority ones. C2 and C3 are resolved in code; **C1 is closed by deci
 | 4 — Hooks & enforcement | code complete · [PR #2](https://github.com/Hassaan146/forge-mentor/pull/2) open |
 | 5 — MCP server core | code complete · [PR #3](https://github.com/Hassaan146/forge-mentor/pull/3) open |
 | 6 — MCP server extended | code complete · [PR #4](https://github.com/Hassaan146/forge-mentor/pull/4) open |
-| 7–10 | branches and draft pull requests opened; no code yet |
+| 7 — Skills & subagents | code complete · [PR #5](https://github.com/Hassaan146/forge-mentor/pull/5) open |
+| 8–10 | branches and draft pull requests opened; no code yet |
 
 **Phase 6 delivered:** the usage meter (decision 024), cache-stable request assembly with
 drift detection, the second reviewer (decision 025), and the workflow that keeps review notes
