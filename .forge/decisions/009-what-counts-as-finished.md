@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-4, phase-8]
+content_sha: d4f607887290e879e1650cf079a420d11eb2d2f64ee566fa5fc5be13727d323c
+prev_sha: 259aec07eee04ba15288d44d56e19da1fb1a9afe8d33c6c81f9e57b25e3cd5dc
 ---
-
 # Tests pass, review clean, and you can explain it back
 
 **Options considered**

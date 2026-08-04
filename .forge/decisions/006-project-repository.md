@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-8, phase-9]
+content_sha: c956524da17ce0b1511e53719ce1b7b3ad2af6e9906d09e9ff348a849da5efae
+prev_sha: aeb1490bf0e72bc6942f0b54ff6a51f7e5f7592cd298956a026634b2b166f0ca
 ---
-
 # The user creates it; private first; public only if reviews require it
 
 **Options considered**

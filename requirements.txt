@@ -1,0 +1,4 @@
+# Forge Mentor
+mcp>=2.0.0        # the engine speaks the Model Context Protocol
+pytest>=8.0       # core logic is tested with the model mocked
+pytest-cov>=5.0   # the program requires >=70% coverage on core logic

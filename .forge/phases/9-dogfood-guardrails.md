@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: Dogfood Run, Review & Guardrails
-status: planned
+status: complete
 effort: M
 depends_on: phase-8
 branch: phase-9-dogfood-guardrails

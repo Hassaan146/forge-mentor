@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: Pipeline Integration
-status: planned
+status: complete
 effort: L
 depends_on: phase-7
 branch: phase-8-pipeline-integration

@@ -7,8 +7,9 @@ decided_by: user
 overrides: challenge-001 finding C1
 affects: [phase-5, phase-10, submission]
 risk: open
+content_sha: 3dac9af995b274dee48c48027b41a51b7435ad2e66d40590077c07e9eb7cc6a8
+prev_sha: d4f607887290e879e1650cf079a420d11eb2d2f64ee566fa5fc5be13727d323c
 ---
-
 # Anthropic-only for the pipeline — user decision, with one requirement still unmet
 
 **Challenge C1 said:** every model chosen is Anthropic, so the project uses one provider,

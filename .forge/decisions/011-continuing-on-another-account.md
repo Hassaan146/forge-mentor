@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-8]
+content_sha: ecb78913b881e15eb9e6c97872131c8b34b5343030c30db71131c9af2f699626
+prev_sha: 3dac9af995b274dee48c48027b41a51b7435ad2e66d40590077c07e9eb7cc6a8
 ---
-
 # The repository is the memory — the chat is not
 
 **The user's question:** *"I have Forge on one account, then I go to another account and want

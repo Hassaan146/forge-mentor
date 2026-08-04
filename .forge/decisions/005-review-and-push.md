@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-6, phase-8, phase-9]
+content_sha: aeb1490bf0e72bc6942f0b54ff6a51f7e5f7592cd298956a026634b2b166f0ca
+prev_sha: c57e3729fa768db4d7489c123a92d4f9998cdbb42b5eeae503fb37459213c386
 ---
-
 # Push to GitHub immediately, then the pipeline reviews it
 
 **Options considered**
