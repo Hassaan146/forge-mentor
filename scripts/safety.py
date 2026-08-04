@@ -45,10 +45,17 @@ SECRET_NAMES = {
     "id_rsa",
     "id_ed25519",
     "id_ecdsa",
+    "id_dsa",
     ".htpasswd",
+    # Written in the clear by `git config credential.helper store`.
+    ".git-credentials",
+    # PostgreSQL's password file.
+    ".pgpass",
 }
 
-SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"}
+# `.ppk` is the PuTTY private key — the Windows counterpart of `.pem`, and the
+# one most likely to be sitting in a project on this project's own platform.
+SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".ppk"}
 
 # `.env.example` and friends exist to be read — they hold names, not values.
 SAFE_SUFFIXES = (".example", ".sample", ".template", ".dist")
@@ -124,11 +131,17 @@ def is_secret_file(path: str, cwd: str | Path | None = None) -> bool:
 
     # Follow the link. A failure here must not be read as "safe" — an
     # unreadable path is simply one this check cannot clear.
+    #
+    # So it fails closed, matching decision 004 and the sentence above, which
+    # the code used to contradict by returning False. `resolve()` does not
+    # raise for a path that merely does not exist, so what reaches this branch
+    # is a real filesystem fault or a symlink loop — exactly the conditions
+    # under which "I could not check" must not be reported as "it is fine".
     try:
         base = Path(cwd) if cwd else Path.cwd()
         resolved = (base / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
     except (OSError, RuntimeError, ValueError):
-        return False
+        return True
 
     if _name_is_secret(resolved.name):
         return True
@@ -199,18 +212,30 @@ def wrap_untrusted(source: str, text: str) -> str:
     )
 
 
+_TAG = "untrusted"
+_ZERO_WIDTH = "​"
+
+
 def _neutralise_delimiters(text: str) -> str:
     """Stop quoted content closing the boundary that quotes it.
 
     A zero-width space inside the tag keeps the text readable to a person while
     making it inert as markup.
+
+    **Split by position, not by searching for the word.** This matched the tag
+    case-insensitively and then neutralised it with a case-sensitive
+    `str.replace("untrusted", ...)`, which found nothing in `</UNTRUSTED>` — so
+    an alternate-case delimiter passed through whole and closed the wrapper it
+    was supposed to be sealed inside. The match is used as its own anchor now,
+    and whatever casing it arrived in is preserved.
     """
-    return re.sub(
-        r"</?\s*untrusted",
-        lambda m: m.group(0).replace("untrusted", "untru​sted"),
-        text,
-        flags=re.IGNORECASE,
-    )
+
+    def seal(match: re.Match[str]) -> str:
+        matched = match.group(0)
+        head, word = matched[: -len(_TAG)], matched[-len(_TAG) :]
+        return f"{head}{word[:5]}{_ZERO_WIDTH}{word[5:]}"
+
+    return re.sub(rf"</?\s*{_TAG}", seal, text, flags=re.IGNORECASE)
 
 
 def main() -> None:

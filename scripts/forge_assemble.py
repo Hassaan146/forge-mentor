@@ -107,8 +107,14 @@ class Assembly:
 
 
 def _kill_risks(block: Block) -> list[str]:
-    """Anything in a frozen block that will move between calls."""
-    if block.tier is not Tier.FROZEN:
+    """Anything in a cached block that will move between calls.
+
+    Both frozen *and* slow blocks are scanned. Only the volatile tier sits
+    outside the prefix, so a date in a slow block costs exactly as much as a
+    date in a frozen one — the first draft checked frozen alone and would have
+    missed half the cases it exists to catch.
+    """
+    if block.tier is Tier.VOLATILE:
         return []
     found = []
     for what, pattern in _CACHE_KILLERS:

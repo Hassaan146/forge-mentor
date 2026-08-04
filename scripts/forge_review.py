@@ -50,16 +50,25 @@ import safety
 API = "https://api.github.com"
 REVIEWS_DIR = "reviews"
 
-# The reviewers Forge reads, and how to recognise their accounts. Matched
-# loosely because the exact logins vary ("coderabbitai", "coderabbitai[bot]",
-# "sourcery-ai[bot]"). Decision 025.
+# The reviewers Forge reads, and how to recognise their accounts. Decision 025.
+#
+# **Anchored, and that is the point.** These patterns decide whose comments
+# become findings and whether a step is allowed to close. A substring match
+# meant any public account containing the word — `coderabbit-fan` — could post
+# a comment that Forge would file as a reviewer finding, and could satisfy the
+# "has this repository been reviewed?" check on its own. The repository is
+# public (decision 007), so registering such an account is trivial. Only the
+# real bot logins, with the optional suffix GitHub adds to app accounts.
 REVIEWERS: dict[str, re.Pattern[str]] = {
-    "coderabbit": re.compile(r"coderabbit", re.IGNORECASE),
-    "sourcery": re.compile(r"sourcery", re.IGNORECASE),
+    "coderabbit": re.compile(r"^coderabbitai(\[bot\])?$", re.IGNORECASE),
+    "sourcery": re.compile(r"^sourcery-ai(\[bot\])?$", re.IGNORECASE),
 }
 
-# Kept as a name so callers reading "any reviewer at all?" stay readable.
-REVIEWER_PATTERN = re.compile("|".join(p.pattern for p in REVIEWERS.values()), re.IGNORECASE)
+# Kept as a name so callers reading "any reviewer at all?" stay readable. Each
+# alternative carries its own anchors, so the union is anchored too.
+REVIEWER_PATTERN = re.compile(
+    "|".join(f"(?:{p.pattern})" for p in REVIEWERS.values()), re.IGNORECASE
+)
 
 # A reviewer marks a finding it has confirmed as fixed. Worth separating so a
 # user reading the file is not handed work that is already done.
@@ -195,6 +204,43 @@ def _get(path: str, token: str | None) -> list | dict:
         raise ReviewError(f"Could not reach GitHub: {exc.reason}") from exc
 
 
+def _get_all(path: str, token: str | None, pages: int = 10) -> list:
+    """Every page of a list endpoint, not just the first.
+
+    GitHub caps a page at 100. A phase with more than a hundred comments would
+    otherwise report a short count and could read as clean when it is not —
+    which is exactly the number decision 009 gates a step on. Pull request #4
+    reached 43 in one pass, so the cap is nearer than it looks.
+    """
+    out: list = []
+    separator = "&" if "?" in path else "?"
+    for page in range(1, pages + 1):
+        chunk = _get(f"{path}{separator}per_page=100&page={page}", token)
+        if not isinstance(chunk, list) or not chunk:
+            break
+        out.extend(chunk)
+        if len(chunk) < 100:
+            break
+    return out
+
+
+def valid_pr(pr: object) -> int:
+    """A pull request number, proven to be one.
+
+    It reaches a URL path and a filename, so a value that is not a plain
+    positive integer is both a request-forgery and a path-traversal shape.
+    The type annotation does not enforce this: the number arrives from an MCP
+    tool call, where the caller is a model.
+    """
+    try:
+        number = int(str(pr).strip())
+    except (TypeError, ValueError):
+        raise ReviewError(f"Not a pull request number: {pr!r}") from None
+    if number <= 0:
+        raise ReviewError(f"Not a pull request number: {pr!r}")
+    return number
+
+
 def detect_repo(project: Path) -> str | None:
     """The owner/repo this project pushes to, read from git."""
     try:
@@ -210,7 +256,10 @@ def detect_repo(project: Path) -> str | None:
     if result.returncode != 0:
         return None
 
-    match = re.search(r"github\.com[:/]([^/]+/[^/\s.]+)", result.stdout.strip())
+    # The trailing ".git" is stripped explicitly rather than by excluding dots
+    # from the name, which truncated any repository with a dot in it —
+    # "forge.dev" became "forge".
+    match = re.search(r"github\.com[:/]([^/\s]+/[^/\s]+?)(?:\.git)?/?$", result.stdout.strip())
     return match.group(1) if match else None
 
 
@@ -294,10 +343,10 @@ def check_setup(project: Path) -> dict[str, object]:
     for pull in pulls if isinstance(pulls, list) else []:
         for endpoint in (
             f"repos/{repo}/issues/{pull['number']}/comments",
-            f"repos/{repo}/pulls/{pull['number']}/reviews?per_page=100",
+            f"repos/{repo}/pulls/{pull['number']}/reviews",
         ):
             try:
-                entries = _get(endpoint, token)
+                entries = _get_all(endpoint, token)
             except ReviewError:
                 continue  # one unreadable pull request must not hide the rest
             for entry in entries if isinstance(entries, list) else []:
@@ -414,12 +463,13 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
     bodies as findings double-counted every Sourcery item, and a doubled count
     feeding decision 009's "is it clean" bar is worse than no count.
     """
+    pr = valid_pr(pr)
     token = token or github_token()
 
     details = _get(f"repos/{repo}/pulls/{pr}", token)
     review = Review(pr=pr, title=details.get("title", "") if isinstance(details, dict) else "")
 
-    inline = _get(f"repos/{repo}/pulls/{pr}/comments?per_page=100", token)
+    inline = _get_all(f"repos/{repo}/pulls/{pr}/comments", token)
     for comment in inline if isinstance(inline, list) else []:
         who = reviewer_of(comment.get("user", {}).get("login", ""))
         if who is None:
@@ -440,7 +490,7 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
     # The bodies — read for the high-level feedback that appears nowhere else,
     # and to know which reviewers actually looked at this pull request.
     summaries: list[str] = []
-    bodies = _get(f"repos/{repo}/pulls/{pr}/reviews?per_page=100", token)
+    bodies = _get_all(f"repos/{repo}/pulls/{pr}/reviews", token)
     for entry in bodies if isinstance(bodies, list) else []:
         who = reviewer_of(entry.get("user", {}).get("login", ""))
         if who is None:
@@ -598,6 +648,7 @@ def save(forge_dir: Path, review: Review, repo: str = "") -> Path:
 
 def fetch_and_save(project: Path, forge_dir: Path, pr: int) -> dict[str, object]:
     """The whole loop: read the review, write it down, say what is left."""
+    pr = valid_pr(pr)
     repo = detect_repo(project)
     if repo is None:
         raise ReviewError("This project has no GitHub remote.")
