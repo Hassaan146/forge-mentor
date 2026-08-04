@@ -506,6 +506,77 @@ def install_skill_library() -> dict[str, Any]:
         return {"error": str(exc)}
 
 
+# --------------------------------------------------------------------------
+# the pipeline — Phase 8, decision 030
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="next_step",
+    description=(
+        "What happens next, and who does it. Call this at the start of every "
+        "turn: it reads the project's files and returns the stage, the "
+        "subagent, the model, the skills to load, and whether the step needs "
+        "the user. **This answer is not a suggestion** — the stage is derived "
+        "from state on disk so that any session reaches the same one. Do not "
+        "substitute your own idea of what comes next. Reads only; changes "
+        "nothing."
+    ),
+)
+def next_step(project: str) -> dict[str, Any]:
+    import forge_pipeline as pp
+
+    try:
+        return pp.status(_forge_dir(project))
+    except (ValueError, pp.PipelineError) as exc:
+        return {"error": str(exc)}
+
+
+@server.tool(
+    name="set_mode",
+    description=(
+        "Change how much Forge settles on its own. `pipeline` asks about every "
+        "decision that matters and confirms each file; `accept-edits` asks the "
+        "same but writes without confirming; `auto` settles small things "
+        "itself and records them, still asking about anything other work is "
+        "built on. The rule that code cannot move past an undecided question "
+        "holds in all three. **Writes `.forge/settings.md`.**"
+    ),
+)
+def set_mode(project: str, mode: str) -> dict[str, Any]:
+    import forge_pipeline as pp
+
+    try:
+        forge = _forge_dir(project)
+        chosen = pp.set_mode(forge, mode)
+    except (ValueError, pp.PipelineError) as exc:
+        return {"error": str(exc)}
+
+    return {"mode": chosen.value, "means": chosen.explains}
+
+
+@server.tool(
+    name="explain_code",
+    description=(
+        "Write Code Explained — the document answering why the project is "
+        "built the way it is, assembled from the decision records. Call it at "
+        "the end of a phase. It is not a summary of what the code does; it "
+        "carries the options that were turned down and the user's own "
+        "reasoning, and marks anything Forge settled rather than the user. "
+        "**Writes `.forge/code-explained.md`.**"
+    ),
+)
+def explain_code(project: str, name: str = "") -> dict[str, Any]:
+    import forge_explain as fe
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    return fe.report(forge, name or Path(project).name)
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom. This sat above the review tools once, and
     # because `run()` blocks, every tool defined below it was never registered

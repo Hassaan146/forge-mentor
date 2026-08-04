@@ -288,6 +288,9 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "skills_for_stage",
         "check_skills",
         "install_skill_library",
+        "next_step",
+        "set_mode",
+        "explain_code",
     }
 
 
@@ -348,3 +351,31 @@ def test_clearing_the_override_blocks_again(project: str) -> None:
     record_override(project)
     clear_override(project)
     assert current_state(project)["writes_blocked"] is True
+
+
+def test_the_pipeline_tool_says_what_happens_next(project: str) -> None:
+    """The stage is derived from disk, so the plugin has to be able to ask."""
+    answer = call(srv.next_step)(project)
+    assert answer["stage"] == "challenge", "nothing is built before the plan is challenged"
+    assert answer["mode"] == "pipeline"
+
+
+def test_the_mode_can_be_changed_and_explains_itself(project: str) -> None:
+    result = call(srv.set_mode)(project, "auto")
+    assert result["mode"] == "auto"
+    assert "still asks about the big ones" in result["means"]
+
+
+def test_an_unknown_mode_returns_an_error_not_an_exception(project: str) -> None:
+    assert "error" in call(srv.set_mode)(project, "turbo")
+
+
+def test_code_explained_is_written_from_the_records(project: str, forge) -> None:
+    asked = ask_question(project, "which backend")
+    record_answer(project, asked["id"], "FastAPI", "small and agent-centric", ["FastAPI", "Django"])
+
+    result = call(srv.explain_code)(project)
+    assert result["decisions"] == 1
+    text = (forge / "code-explained.md").read_text(encoding="utf-8")
+    assert "Django" in text, "what was turned down is kept"
+    assert "small and agent-centric" in text, "in the user's own words"

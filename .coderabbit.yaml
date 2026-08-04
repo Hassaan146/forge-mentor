@@ -106,6 +106,24 @@ reviews:
         or where it could be made to run on untrusted input. Check the push
         retry cannot lose a concurrent reviewer's findings.
 
+    - path: "scripts/forge_pipeline.py"
+      instructions: >-
+        Decides what happens next, and in Auto decides which questions the user
+        never sees. Scrutinise LOAD_BEARING on exactly one basis: a question
+        this fails to match is one Forge answers on the user's behalf, which is
+        the failure the whole product exists to prevent. Plurals and multi-word
+        forms slipped through a first draft. The stage must stay a function of
+        files on disk — anything derived from conversation state resumes wrong
+        on another machine (decision 011).
+
+    - path: "scripts/forge_explain.py"
+      instructions: >-
+        Assembles Code Explained from the decision records. It must never lose
+        the options that were turned down, the user's own wording of their
+        reasoning, or the mark distinguishing a decision Forge settled from one
+        the user made (decision 030). Parsing has to keep working on the Phase 1
+        records, which were hand-written before the writer existed.
+
     - path: "server/forge_server.py"
       instructions: >-
         The MCP tool surface. Tool descriptions are read by a model deciding
