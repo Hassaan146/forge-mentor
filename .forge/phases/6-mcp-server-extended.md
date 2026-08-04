@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: MCP Server Extended
-status: planned
+status: complete
 effort: M
 depends_on: phase-5
 branch: phase-6-mcp-server-extended

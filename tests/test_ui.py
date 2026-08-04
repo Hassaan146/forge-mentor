@@ -125,3 +125,22 @@ def test_prompt_is_present() -> None:
 def test_colour_is_disabled_when_not_a_terminal() -> None:
     """Piped output must carry no escape codes — logs stay readable."""
     assert ANSI.search(ui.banner("x")) is None or ui._ON
+
+
+def test_output_survives_a_console_that_cannot_print_the_symbols() -> None:
+    """A Windows console is usually cp1252, where none of ⚒ ⛔ ✅ ★ exist.
+
+    Printing the banner raised UnicodeEncodeError and took the whole hook down
+    — for the governor that would mean a blocked write never explaining itself.
+    """
+    import io
+
+    raw = io.BytesIO()
+    narrow = io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
+
+    ui._make_output_utf8_safe()  # must not raise on any stream it is handed
+
+    narrow.reconfigure(errors="replace")
+    narrow.write(ui.banner("demo"))
+    narrow.flush()
+    assert raw.getvalue(), "something was written rather than an exception raised"
