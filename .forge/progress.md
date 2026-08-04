@@ -1,10 +1,10 @@
 ---
 type: progress
 project: forge
-stage: phase-6-complete
-questions_total_estimate: 27
-questions_answered: 26
-next_question: none — Phase 7 next
+stage: phase-7-complete
+questions_total_estimate: 30
+questions_answered: 29
+next_question: none — Phase 8 next
 open_question: none
 override_active: false
 updated: 2026-08-04
@@ -31,17 +31,31 @@ and 7 high-priority ones. C2 and C3 are resolved in code; **C1 is closed by deci
 
 **Phase 6 delivered:** the usage meter (decision 024), cache-stable request assembly with
 drift detection, the second reviewer (decision 025), and the workflow that keeps review notes
-current on its own (decision 026). 299 tests, 87% coverage.
+current on its own (decision 026).
 
-**Two bugs found while building it**, both invisible to the tests that existed:
+**Phase 7 delivered:** Forge's own four skills, the stage→skill table, the library install
+pinned to a reviewed commit (decision 028), and four subagents whose declared models are
+proven to agree with the server's routing (decision 029).
 
-- `server.run()` sat *above* the review tool definitions. Because it blocks, `fetch_review`
-  and `check_review_setup` were never registered in a real session — while the tests passed,
-  because a test imports the module rather than running it.
-- The usage meter counted one model reply three times. Claude Code writes a reply with
-  several tool calls as several records, each carrying an identical copy of the same usage.
+339 tests, 87% coverage.
 
-**Next:** Phase 7 — skills and subagents.
+**The review loop is running for real.** The workflow fetches both reviewers into
+`.forge/reviews/pr-<n>.md` and commits it without anyone asking — first proved on this
+repository's own pull request #4.
+
+### Bugs the tests did not catch, found this phase
+
+| Where | What |
+|---|---|
+| `forge_server.py` | `server.run()` sat *above* the review tools. It blocks, so those tools never registered in a real session — while tests passed, because a test imports the module rather than running it. |
+| `forge_meter.py` | Counted one model reply three times. Claude Code writes a reply with several tool calls as several records, each carrying an identical copy of the same usage. |
+| `safety.py` | `</UNTRUSTED>` escaped the wrapper — matched case-insensitively, neutralised case-sensitively. The one regression test covered lowercase only, so it could not fail. |
+| `safety.py` | Secret-path resolution failed *open*, reporting "could not check" as "it is fine", while the docstring directly above claimed the opposite. |
+| `forge-review.yml` | Ran the branch's own review script with a write-scoped token, and interpolated a branch name straight into a shell command. |
+| `forge_skills.py` | The structurer had no tool to record with, and no stage routed to it — an agent that could never run. |
+| `forge_ui.py` | Crashed a cp1252 Windows console. Printing the banner raised `UnicodeEncodeError`, which would have taken a hook down with it. |
+
+**Next:** Phase 8 — pipeline integration.
 
 ## Known gaps, carried deliberately
 
@@ -83,6 +97,9 @@ current on its own (decision 026). 299 tests, 87% coverage.
 | 25 | How two reviewers share one set of notes | ✅ decided | Both in one file per pull request, each finding tagged → [025](decisions/025-two-reviewers-one-file.md) |
 | 26 | Who writes the review file to GitHub | ✅ decided | A workflow in the repository, not Forge on the user's machine → [026](decisions/026-who-writes-the-review-file.md) |
 | 27 | Does the two-provider rule change the pipeline | ✅ decided | No — Anthropic only; the gap is accepted and written down → [027](decisions/027-one-ai-company.md) |
+| 28 | Where Forge's skills come from | ✅ decided | Four bundled in the plugin; the library installed whole at setup, pinned to a reviewed commit → [028](decisions/028-where-skills-come-from.md) |
+| 29 | Which model actually runs a job | ✅ decided | The subagent's own file, because Claude Code reads it at dispatch; `choose_model` advises → [029](decisions/029-which-model-runs-a-job.md) |
+| 30 | What differs between the three modes | ✅ decided | Only how much gets decided for you; the governor rule and the explain-back gate hold in all three → [030](decisions/030-the-three-modes.md) |
 
 *The number of questions can move — some answers close two at once, others open a new one.*
 
