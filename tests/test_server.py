@@ -294,6 +294,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "preview_push",
         "push_work",
         "resolve_finding",
+        "write_prompts_log",
     }
 
 

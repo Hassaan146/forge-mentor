@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: Hardening, Packaging & Release
-status: planned
+status: complete
 effort: L
 depends_on: phase-9
 branch: phase-10-hardening-release

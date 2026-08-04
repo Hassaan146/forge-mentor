@@ -638,6 +638,27 @@ def resolve_finding(thread_id: str) -> dict[str, Any]:
         return {"error": str(exc), "resolved": False}
 
 
+@server.tool(
+    name="write_prompts_log",
+    description=(
+        "Generate `prompts.md` at the top of the repository from the decision "
+        "records — every question asked, the options offered, what was chosen "
+        "and why, and which model handled which step. Assembled from records "
+        "written at the time rather than recalled afterwards. **Writes "
+        "`prompts.md`.**"
+    ),
+)
+def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
+    import forge_prompts as fpr
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    return fpr.report(Path(project), forge, name or Path(project).name)
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom. This sat above the review tools once, and
     # because `run()` blocks, every tool defined below it was never registered

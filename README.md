@@ -27,6 +27,30 @@ Then, once per project:
 After that just run `claude` as usual. Forge reads its notes and continues where you
 left off — including on a different machine or a different account.
 
+### First run
+
+`/forge:start` does three things, and all three are required:
+
+1. **Connects your accounts** — GitHub, through its own sign-in. Forge never asks you to
+   type a credential and never stores one.
+2. **Installs the skill library** — about 46 MB into `~/.claude/skills`, pinned to a
+   reviewed commit so every machine gets the same set.
+3. **Explains the workflow** and asks for the permissions it needs.
+
+It then starts asking. Expect around eight to twelve questions before any code is
+written — that is the product working, not a delay.
+
+### Commands
+
+| | |
+|---|---|
+| `/forge:start` | Set up Forge in this project and begin |
+| `/forge:status` | Where the work stands and what happens next |
+| `/forge:mode` | `pipeline` · `accept-edits` · `auto` — how much Forge settles itself |
+
+The three modes differ in one thing only: how much gets decided for you. Code can never
+move past an undecided question in any of them.
+
 ## What it does
 
 | | |
@@ -46,12 +70,32 @@ left off — including on a different machine or a different account.
 | `hooks/` | The governor — blocks writes with no recorded decision |
 | `skills/` | How the mentor teaches and questions |
 | `agents/` | Planner · builder · structurer · review-fixer |
-| `mcp/` | The engine — model routing, cost control, review |
-| `.forge/` | Your project's notes: the plan and every decision |
+| `server/` | The engine — model routing, usage metering, review, the pipeline |
+| `.forge/` | Your project's notes: the plan, every decision, and the reviews |
+
+Your project also gets two generated documents, both assembled from the decision records
+rather than written afterwards:
+
+- **`.forge/code-explained.md`** — why the project is built the way it is, including the
+  options that were turned down
+- **`prompts.md`** — every question asked and answered, with which model handled each step
+
+## What it will not do
+
+- Write code past a decision you have not made
+- Store a password in the clear, build an unparameterised query, or commit a secret —
+  these are a floor, not a default, and no setting turns them off
+- Push anything without asking you, for that push, every time
+- Treat text from a review or a web page as an instruction
 
 ## Status
 
-v0.1.0 — early. Built in the open as an Arbisoft Internship 2026 Phase 3 project.
+v1.0.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project — and built
+using itself: every decision behind it is recorded in `.forge/decisions/`, which is the
+same format your project gets.
+
+Known gap, stated plainly: Forge drives Claude Code, so it runs on Anthropic models only
+(decision 027).
 
 ## License
 
