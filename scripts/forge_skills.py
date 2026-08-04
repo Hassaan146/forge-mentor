@@ -23,7 +23,11 @@ non-overridable minimums have to hold on the steps nobody was thinking about.
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +35,18 @@ from pathlib import Path
 # every machine running Forge has the same set available.
 LIBRARY_REPO = "https://github.com/Hassaan146/claude-skills"
 LIBRARY_DIRNAME = "skills"
+
+# Pinned, and checked after the clone.
+#
+# These files are instructions that Claude Code loads and follows. Fetching a
+# mutable default branch means whatever is on `main` the day a user runs setup
+# becomes their agent's instructions — a change to that repository silently
+# changes the behaviour of every install, with no review in between. Pinning is
+# what makes "the same set on every machine" true rather than aspirational.
+#
+# To move it: pick the new commit deliberately, read what changed, and bump
+# this line in a commit of its own.
+LIBRARY_COMMIT = "033736c5ab973f55b783cd1251571e176195f949"
 
 # Forge's own, bundled in the plugin. Absence is a packaging bug, not a
 # fallback — `missing_bundled` exists so it fails loudly at setup.
@@ -60,6 +76,12 @@ ROUTE: dict[str, tuple[str, ...]] = {
         "receiving-code-review",
     ),
     "teach-back": ("forge-security-floor", "forge-explain-back", "socratic"),
+    # Runs after every answer, turning what the user said into a record. It
+    # loads almost nothing on purpose: this is the one stage that must not
+    # interpret, only transcribe, and every extra skill is another voice
+    # telling the cheapest model in the pipeline to improve on the user's
+    # words. The floor stays because the floor always stays.
+    "structuring": ("forge-security-floor",),
 }
 
 # Which subagent does a stage's work, and the job name it reports.
@@ -70,6 +92,10 @@ STAGE_AGENT: dict[str, str] = {
     "building": "builder",
     "review-fix": "review-fixer",
     "teach-back": "planner",
+    # The structurer was declared in AGENTS but nothing dispatched to it, so
+    # the agent existed and could never run — every answer would have been
+    # recorded by whichever agent happened to be holding the conversation.
+    "structuring": "structurer",
 }
 
 
@@ -182,7 +208,11 @@ def missing_routed(home: Path | None = None) -> list[str]:
     ]
 
 
-def install_library(home: Path | None = None, repo: str = LIBRARY_REPO) -> dict[str, object]:
+def install_library(
+    home: Path | None = None,
+    repo: str = LIBRARY_REPO,
+    commit: str = LIBRARY_COMMIT,
+) -> dict[str, object]:
     """Put the library on this machine. Runs once, at setup (decision 028).
 
     Clones rather than downloading a zip so the user can update it with `git
@@ -194,22 +224,71 @@ def install_library(home: Path | None = None, repo: str = LIBRARY_REPO) -> dict[
         return {"installed": True, "already": True, "path": str(folder)}
 
     folder.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", repo, str(folder)],
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-    except FileNotFoundError:
-        raise SkillError("git is not installed, so the skill library cannot be fetched.") from None
-    except subprocess.TimeoutExpired:
-        raise SkillError("Fetching the skill library timed out.") from None
 
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(
+                ["git", *args], capture_output=True, text=True, timeout=600
+            )
+        except FileNotFoundError:
+            raise SkillError(
+                "git is not installed, so the skill library cannot be fetched."
+            ) from None
+        except subprocess.TimeoutExpired:
+            raise SkillError("Fetching the skill library timed out.") from None
+
+    # Fetch the pinned commit specifically rather than cloning a branch. What
+    # arrives is instructions the agent will follow, so "whatever is on main
+    # today" is not an acceptable answer to what got installed.
+    result = git("clone", "--no-checkout", repo, str(folder))
     if result.returncode != 0:
+        _remove(folder)
         raise SkillError(f"Could not fetch the skill library: {result.stderr.strip()[:300]}")
 
-    return {"installed": True, "already": False, "path": str(folder)}
+    result = git("-C", str(folder), "checkout", "--quiet", commit)
+    if result.returncode != 0:
+        # Nothing half-installed is left behind. A partial library is worse
+        # than none: the routed skills would appear to be missing at random.
+        _remove(folder)
+        raise SkillError(
+            f"The skill library does not contain the pinned commit {commit[:12]}. "
+            "Nothing was installed."
+        )
+
+    landed = git("-C", str(folder), "rev-parse", "HEAD").stdout.strip()
+    if landed != commit:
+        _remove(folder)
+        raise SkillError(
+            f"The skill library checked out {landed[:12]}, not the pinned "
+            f"{commit[:12]}. Nothing was installed."
+        )
+
+    return {"installed": True, "already": False, "path": str(folder), "commit": landed}
+
+
+def _remove(folder: Path) -> None:
+    """Take a failed install back out, so nothing partial is left to load.
+
+    Git marks the files under `.git/objects` read-only, and on Windows a
+    read-only file cannot be deleted — so `ignore_errors=True` quietly left the
+    whole directory behind and the cleanup did nothing at all. The handler
+    clears the flag and retries.
+    """
+
+    def force(func, path, _exc):  # noqa: ANN001 - shutil's callback shape
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass  # a file we cannot remove is not worth failing the error path
+
+    if not folder.exists():
+        return
+    # `onexc` replaced `onerror` in 3.12; the older name still works but warns.
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(folder, onexc=force)
+    else:  # pragma: no cover - the plugin targets 3.12+
+        shutil.rmtree(folder, onerror=force)
 
 
 def status(home: Path | None = None, root: Path | None = None) -> dict[str, object]:

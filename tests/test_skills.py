@@ -15,6 +15,7 @@ another did the work. These tests are what stop that.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -208,16 +209,62 @@ def test_installing_over_an_existing_library_does_nothing(tmp_path: Path) -> Non
     assert result["already"] is True
 
 
-def test_a_failed_clone_says_so_rather_than_half_installing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    class Failed:
-        returncode = 1
-        stderr = "repository not found"
+def test_a_failed_clone_leaves_nothing_behind(tmp_path: Path) -> None:
+    """Against a real git, not a mock that never touches the filesystem.
 
-    monkeypatch.setattr(sk.subprocess, "run", lambda *a, **k: Failed())
-    with pytest.raises(sk.SkillError, match="repository not found"):
-        sk.install_library(tmp_path)
+    The mock version could only prove that a non-zero exit became a SkillError
+    — not the behaviour the name claims, which is that nothing partial is left
+    to load. A half-installed library is worse than none: the routed skills go
+    missing at random and Forge looks broken rather than uninstalled.
+    """
+    with pytest.raises(sk.SkillError):
+        sk.install_library(tmp_path, repo=str(tmp_path / "not-a-repository"))
+
+    assert not sk.library_dir(tmp_path).exists(), "no partial clone survives"
+    assert sk.library_installed(tmp_path) is False
+
+
+def test_a_library_without_the_pinned_commit_is_refused(tmp_path: Path) -> None:
+    """A real repository, but not the one that was pinned.
+
+    These files are instructions Claude Code will follow, so installing
+    "whatever was there" is the thing being prevented.
+    """
+    source = tmp_path / "source"
+    (source / "socratic").mkdir(parents=True)
+    (source / "socratic" / "SKILL.md").write_text("---\nname: socratic\n---\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "skills"],
+    ):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+
+    with pytest.raises(sk.SkillError, match="pinned"):
+        sk.install_library(tmp_path, repo=str(source), commit="0" * 40)
+
+    assert not sk.library_dir(tmp_path).exists(), "a wrong commit installs nothing"
+
+
+def test_the_pinned_commit_installs_and_is_verified(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "socratic").mkdir(parents=True)
+    (source / "socratic" / "SKILL.md").write_text("---\nname: socratic\n---\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "skills"],
+    ):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+    sha = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    result = sk.install_library(tmp_path, repo=str(source), commit=sha)
+
+    assert result["commit"] == sha, "what landed is checked, not assumed"
+    assert sk.library_installed(tmp_path) is True
 
 
 def test_a_machine_without_git_is_told_what_is_wrong(
@@ -239,3 +286,34 @@ def test_status_separates_a_packaging_fault_from_a_library_gap(tmp_path: Path) -
     assert report["ready"] is True, "bundled skills are all present"
     assert report["missing_bundled"] == []
     assert report["missing_routed"], "the fake library has only one of them"
+
+
+def test_the_structurer_can_actually_record_an_answer() -> None:
+    """It had Read alone, so the one job it exists for was impossible.
+
+    The user would have answered, the record would never have been written,
+    and they would have stayed blocked behind a question already answered.
+    """
+    text = (ROOT / "agents" / "structurer.md").read_text(encoding="utf-8")
+    assert "mcp__plugin_forge_forge__record_answer" in text
+
+
+def test_every_declared_subagent_is_reachable_from_some_stage() -> None:
+    """An agent nothing dispatches to is an agent that never runs.
+
+    `structurer` was declared and unrouted, so every answer would have been
+    recorded by whichever agent happened to be holding the conversation.
+    """
+    routed = set(sk.STAGE_AGENT.values())
+    assert {a.name for a in sk.AGENTS} == routed
+
+
+def test_structuring_runs_on_the_cheapest_model() -> None:
+    """Decision 002: it runs after every answer, so it is where cost is won."""
+    assert sk.agent_for("structuring").model == "claude-haiku-4-5"
+
+
+def test_structuring_loads_almost_nothing() -> None:
+    """It must transcribe, not interpret. Every extra skill is another voice
+    telling the cheapest model to improve on the user's own words."""
+    assert sk.skills_for("structuring") == ("forge-security-floor",)

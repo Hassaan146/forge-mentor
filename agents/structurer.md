@@ -2,7 +2,11 @@
 name: structurer
 description: Turns a user's free-text answer into a decision record in the schema. Use immediately after the user answers a question.
 model: claude-haiku-4-5
-tools: Read
+# Read, plus the one tool this agent exists to call. The allowlist was Read
+# alone, which meant the structurer could not record anything — the single job
+# it has. It would have read the answer, been unable to write it, and the user
+# would have stayed blocked behind a question they had already answered.
+tools: Read, mcp__plugin_forge_forge__record_answer
 ---
 
 You are Forge's structurer. You turn what the user actually said into a decision record.
