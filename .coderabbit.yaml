@@ -1,0 +1,129 @@
+# CodeRabbit configuration — Forge Mentor
+#
+# Decision 005 makes review part of the loop: every step is pushed, reviewed,
+# and fixed before it counts as done. This file tells the reviewer where the
+# risk actually lives in this codebase, so its attention lands on the ~400
+# lines that matter rather than being spread evenly over 2,000.
+
+language: en-US
+
+reviews:
+  # Direct rather than gentle. Decision 009 says a step is not finished until
+  # the review is clean, so a review that softens its findings makes that bar
+  # meaningless.
+  profile: assertive
+
+  high_level_summary: true
+  review_status: true
+  poem: false
+
+  # Findings are advice to weigh, not a gate that blocks the branch. The gate
+  # in this project is the phase gate (decision 009), enforced in code.
+  request_changes_workflow: false
+
+  auto_review:
+    enabled: true
+    drafts: false          # phase branches sit as drafts until their work lands
+    base_branches:
+      - main
+      - "phase-.*"         # the PR chain: each phase targets the one before it
+
+  path_filters:
+    - "!**/*.pdf"
+    - "!**/*.html"
+    - "!.forge/**"         # decision records are prose, not code
+
+  path_instructions:
+    - path: "scripts/governor.py"
+      instructions: >-
+        This file is the product's entire guarantee: no code may be written
+        before the current decision is recorded. Treat any path where a write
+        could slip through un-denied as critical. It must always exit 0 — a
+        crash here would wedge the user's session. Reads must never be blocked.
+        Check especially that Forge can always write its own .forge/ notes,
+        including via relative paths; that bug existed once already.
+
+    - path: "scripts/forge_integrity.py"
+      instructions: >-
+        Tamper-evidence for decision records (decisions 020, 021). The
+        fingerprint must cover everything that carries meaning — the question,
+        the outcome, the reasoning. If a field is excluded from the hash but
+        still changes meaning, someone can edit an approval without detection.
+        Scrutinise SIGNED_FIELDS and EXCLUDED_FROM_HASH on exactly that basis.
+        This is deliberately not authentication; do not suggest adding a secret
+        key, since a secret cannot travel across machines (decision 011).
+
+    - path: "scripts/forge_repair.py"
+      instructions: >-
+        The only code in this project that overwrites or moves the user's
+        files. Everything else is read-only or additive. Any path where work
+        could be lost, overwritten without a committed backup, or where a
+        quarantined file could be silently replaced, is a serious finding.
+        Nothing may ever be deleted — quarantine preserves the evidence.
+
+    - path: "scripts/safety.py"
+      instructions: >-
+        Two rules that must hold whatever the conversation says: secret files
+        are never read, and text from outside is data rather than instructions.
+        Look hard for credential filenames that is_secret_file would miss, and
+        for ways to read a secret through the shell that the command check does
+        not catch. Note the deliberate choice that this hook fails OPEN — flag
+        it if you disagree, with reasoning.
+
+    - path: "scripts/gates.py"
+      instructions: >-
+        Runs the project's test suite before a commit (decision 009). Watch for
+        anything that could hang, run unbounded, or block a commit in a project
+        that legitimately has no tests yet. This file has the lowest coverage in
+        the codebase; missing test cases are worth raising.
+
+    - path: "scripts/forge_meter.py"
+      instructions: >-
+        Reads Claude Code's own session logs, a format nobody promised to keep
+        stable (decision 024). Every way of failing to read it must be
+        survivable, because the meter is a display and nothing waits on it —
+        flag any path that could raise instead of reporting unavailable. The
+        load-bearing detail is deduplication by `message.id`: one reply with
+        several tool calls is written as several records carrying identical
+        usage, and summing records over-counted threefold. Flag anything that
+        reintroduces that. This file must never invent a number, including a
+        price, to fill a gap.
+
+    - path: "scripts/forge_assemble.py"
+      instructions: >-
+        Orders a request so the unchanging part can be cached. The failure mode
+        is silent — a value that moves between calls slips into a frozen block,
+        the cache stops hitting, and nothing reports it. Scrutinise
+        `_CACHE_KILLERS` for things that change per call and are not caught,
+        and check that sorting stays stable within a tier, since a reorder
+        breaks the prefix without changing a byte of content.
+
+    - path: ".github/workflows/**"
+      instructions: >-
+        This workflow holds a token with write access to the repository
+        (decision 026). Treat as critical any path where a pull request from a
+        fork could reach it, where it could commit outside `.forge/reviews/`,
+        or where it could be made to run on untrusted input. Check the push
+        retry cannot lose a concurrent reviewer's findings.
+
+    - path: "server/forge_server.py"
+      instructions: >-
+        The MCP tool surface. Tool descriptions are read by a model deciding
+        when to call them, so a vague description is a real defect, not a
+        nitpick. Check that every tool that changes state on disk says so.
+
+    - path: "tests/**"
+      instructions: >-
+        Core logic is tested with no model calls, which is what makes the
+        program's 70% coverage target reachable. Flag any test that cannot
+        fail — a trailing `or True` slipped through once. Flag mocks used where
+        a real filesystem or a real git repository would prove more.
+
+    - path: "scripts/forge_ui.py"
+      instructions: >-
+        Presentation only. Review lightly. The one rule that matters: colour is
+        never the only signal, because terminals without colour and colourblind
+        users must still be able to read every state.
+
+chat:
+  auto_reply: true
