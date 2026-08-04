@@ -57,6 +57,27 @@ repository's own pull request #4.
 
 **Next:** Phase 8 — pipeline integration.
 
+## Open problem — "clean" counts the wrong thing
+
+Decision 009 gates a step on the review being clean, and `is_clean` is computed from
+unresolved review comments on the pull request. Running the loop for real showed the flaw:
+**a reviewer does not retract a comment when the code beneath it changes.** Every finding on
+pull requests #4 and #5 is now either fixed in the code or declined with reasoning, and both
+still report open findings — every one of them pointing at a line that no longer says what the
+comment describes.
+
+So a phase gated on `is_clean` can never close by fixing things. Superseded comments only
+disappear when a human resolves them in the GitHub interface.
+
+Three ways out, none chosen yet:
+
+1. Resolve threads through the API as part of the fix loop, so the count means what it says.
+2. Judge a finding against the current file and mark it superseded when the line has moved.
+3. Change the bar: count only findings raised against the current head commit.
+
+This needs a decision before any phase can be *merged*, and it is the first thing Phase 9
+should settle — it is exactly the kind of defect the dogfood run exists to find.
+
 ## Known gaps, carried deliberately
 
 - **Two-provider requirement unmet** — decision 027. Accepted with the consequence written down.
