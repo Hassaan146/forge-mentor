@@ -1,0 +1,33 @@
+# Forge decision chain — generated, do not edit
+# Each line: <id> <status> <fingerprint> <links-to>
+
+001 decided  21d34fa2c45c792b → genesis
+002 decided  eb0e0e40f193f451 → 21d34fa2c45c792b
+003 decided  e07f1663e44f41be → eb0e0e40f193f451
+004 decided  c57e3729fa768db4 → e07f1663e44f41be
+005 decided  aeb1490bf0e72bc6 → c57e3729fa768db4
+006 decided  c956524da17ce0b1 → aeb1490bf0e72bc6
+007 decided  87ab9ad681055310 → c956524da17ce0b1
+008 decided  259aec07eee04ba1 → 87ab9ad681055310
+009 decided  d4f607887290e879 → 259aec07eee04ba1
+010 decided  3dac9af995b274de → d4f607887290e879
+011 decided  ecb78913b881e15e → 3dac9af995b274de
+013 decided  580e06589ca9ed66 → ecb78913b881e15e
+014 decided  d4773a0d4e46f204 → 580e06589ca9ed66
+015 decided  5786ec0e2ca22c66 → d4773a0d4e46f204
+016 decided  93d4bddc5a5fc1d0 → 5786ec0e2ca22c66
+017 decided  ca6652fdb7c28d04 → 93d4bddc5a5fc1d0
+018 decided  f096def71c72bc69 → ca6652fdb7c28d04
+019 decided  2768fa5f37f20fba → f096def71c72bc69
+020 decided  8e990c1308e92a7f → 2768fa5f37f20fba
+021 decided  47fb32e2221e4d64 → 8e990c1308e92a7f
+022 decided  e926cb79e76d847b → 47fb32e2221e4d64
+023 decided  2d50f42b51fc3a87 → e926cb79e76d847b
+024 decided  753040cc9aa733c7 → 2d50f42b51fc3a87
+025 decided  c83bc8220a573ab1 → 753040cc9aa733c7
+026 decided  dc9aa0e0ea71f3bb → c83bc8220a573ab1
+027 decided  d0bc824dcdb33e8b → dc9aa0e0ea71f3bb
+028 decided  9fbd85798d7c7306 → d0bc824dcdb33e8b
+029 decided  20c467efbdac40da → 9fbd85798d7c7306
+030 decided  3fcca52a96aeacdf → 20c467efbdac40da
+031 decided  bfe67b74ca9d39ee → 3fcca52a96aeacdf

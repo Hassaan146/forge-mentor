@@ -577,6 +577,67 @@ def explain_code(project: str, name: str = "") -> dict[str, Any]:
     return fe.report(forge, name or Path(project).name)
 
 
+# --------------------------------------------------------------------------
+# publishing and closing findings — Phase 9, decisions 005 and 031
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="preview_push",
+    description=(
+        "What a push would publish: the branch, the remote, the files, and any "
+        "credential file that would stop it. Call this before asking the user "
+        "to confirm — they cannot consent to a set of files they have not been "
+        "shown. Reads only; publishes nothing."
+    ),
+)
+def preview_push(project: str) -> dict[str, Any]:
+    import forge_push as fp
+
+    try:
+        return fp.preview(Path(project)).as_dict()
+    except fp.PushError as exc:
+        return {"error": str(exc)}
+
+
+@server.tool(
+    name="push_work",
+    description=(
+        "Publish this branch. **`confirmed` must come from the user, for this "
+        "push.** Never infer it from the mode, from a previous push, or from "
+        "the repository having been connected at setup. Called without it, "
+        "this returns the plan and the question to ask instead of pushing. A "
+        "credential file stops the push whatever `confirmed` says."
+    ),
+)
+def push_work(project: str, confirmed: bool = False) -> dict[str, Any]:
+    import forge_push as fp
+
+    try:
+        return fp.push(Path(project), confirmed=confirmed)
+    except fp.PushError as exc:
+        return {"error": str(exc), "pushed": False}
+
+
+@server.tool(
+    name="resolve_finding",
+    description=(
+        "Close a review thread on GitHub, once the finding has been fixed or "
+        "declined with a reason. **Only then** — a thread closed without "
+        "either is a finding silently dropped, which is worse than a count "
+        "that reads too high (decision 031). Pass the `thread_id` from the "
+        "review file. Writes to the pull request conversation."
+    ),
+)
+def resolve_finding(thread_id: str) -> dict[str, Any]:
+    import forge_review as rv
+
+    try:
+        return {"resolved": rv.resolve_thread(thread_id)}
+    except rv.ReviewError as exc:
+        return {"error": str(exc), "resolved": False}
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom. This sat above the review tools once, and
     # because `run()` blocks, every tool defined below it was never registered

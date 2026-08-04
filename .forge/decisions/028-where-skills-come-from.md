@@ -5,8 +5,9 @@ status: decided
 date: 2026-08-04
 decided_by: user
 affects: [phase-7]
+content_sha: 9fbd85798d7c73068b4b0913f05701b6340bfb3862d4948f3850a480645b1db1
+prev_sha: d0bc824dcdb33e8be204284fdd04380fa16b03dfc1c0a4c1c6a2e7323e2cdf96
 ---
-
 # The whole library is installed at setup; Forge ships only its own four
 
 **Options considered**

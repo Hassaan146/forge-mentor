@@ -6,8 +6,9 @@ date: 2026-08-03
 decided_by: user
 strengthens: 021
 affects: [phase-4]
+content_sha: e926cb79e76d847bf233fefafec3e40f3a4123642fb3c87678e5e60a717a9227
+prev_sha: 47fb32e2221e4d6465224a67cc48a679645eb069c531b6b5f9a0ac49acb4ef23
 ---
-
 # Warn, stop, and restore the record from its committed version
 
 **User's answer:** Forge should warn, stop, and rewrite the hand-written content with

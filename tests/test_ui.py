@@ -127,7 +127,9 @@ def test_colour_is_disabled_when_not_a_terminal() -> None:
     assert ANSI.search(ui.banner("x")) is None or ui._ON
 
 
-def test_output_survives_a_console_that_cannot_print_the_symbols() -> None:
+def test_output_survives_a_console_that_cannot_print_the_symbols(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A Windows console is usually cp1252, where none of ⚒ ⛔ ✅ ★ exist.
 
     Printing the banner raised UnicodeEncodeError and took the whole hook down
@@ -138,9 +140,22 @@ def test_output_survives_a_console_that_cannot_print_the_symbols() -> None:
     raw = io.BytesIO()
     narrow = io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
 
-    ui._make_output_utf8_safe()  # must not raise on any stream it is handed
+    # The stream has to actually reach the helper. The first version of this
+    # test reconfigured `narrow` itself and never handed it over, so it passed
+    # whether or not the helper did anything at all — a test that could not
+    # fail, which is the one thing the coding standards call out by name.
+    monkeypatch.setattr(ui.sys, "stdout", narrow)
+    monkeypatch.setattr(ui.sys, "stderr", narrow)
 
-    narrow.reconfigure(errors="replace")
+    ui._make_output_utf8_safe()
+
+    assert narrow.encoding.lower().replace("-", "") == "utf8", "the helper changed it"
+    assert narrow.errors == "replace"
+
     narrow.write(ui.banner("demo"))
+    narrow.write(ui.question_box("How should people log in?", "", 7))
     narrow.flush()
-    assert raw.getvalue(), "something was written rather than an exception raised"
+
+    written = raw.getvalue()
+    for symbol in (ui.RECORDED, ui.MARK):
+        assert symbol.encode() in written, f"{symbol} reached the stream intact"

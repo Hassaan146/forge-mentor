@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-10]
+content_sha: 87ab9ad681055310ee60d8b166359e3a833344238389f191cf84be88ec0d9210
+prev_sha: c956524da17ce0b1511e53719ce1b7b3ad2af6e9906d09e9ff348a849da5efae
 ---
-
 # Public from the first commit
 
 **Options considered**

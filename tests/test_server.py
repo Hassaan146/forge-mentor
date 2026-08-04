@@ -291,6 +291,9 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "next_step",
         "set_mode",
         "explain_code",
+        "preview_push",
+        "push_work",
+        "resolve_finding",
     }
 
 
@@ -316,7 +319,10 @@ def test_the_server_starts_only_after_every_tool_is_registered() -> None:
     only bites when Claude Code runs the file for real.
     """
     source = Path(srv.__file__).read_text(encoding="utf-8")
-    assert source.index("server.run()") > source.rindex("@server.tool("), (
+    # rindex on both. `index` found the first occurrence, which is inside the
+    # comment above the call explaining this very bug — so any future comment
+    # writing the literal would fail the test while the code was correct.
+    assert source.rindex("server.run()") > source.rindex("@server.tool("), (
         "server.run() must stay at the very bottom of the module"
     )
 

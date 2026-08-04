@@ -6,8 +6,9 @@ date: 2026-08-03
 decided_by: user
 implements: 020
 affects: [phase-4]
+content_sha: 47fb32e2221e4d6465224a67cc48a679645eb069c531b6b5f9a0ac49acb4ef23
+prev_sha: 8e990c1308e92a7f04eb53eb3eaf8058ae41601c95623c0237af992dd466fe7d
 ---
-
 # Fingerprint and chain — no secret, works everywhere
 
 **Options considered**

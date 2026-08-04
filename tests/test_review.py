@@ -114,8 +114,99 @@ def test_a_finding_cannot_close_the_wrapper_it_sits_in() -> None:
 
 def test_a_clean_review_says_the_bar_is_met() -> None:
     text = rv.to_markdown(rv.Review(pr=4, title="Phase 4"))
-    assert "No open findings" in text
+    assert "No findings that still apply" in text
+    assert "the review bar for this step is met" in text
     assert "clean: true" in text
+
+
+# --------------------------------------------------------------------------
+# findings about code that has since changed — decision 031
+# --------------------------------------------------------------------------
+
+
+def test_a_stale_finding_does_not_keep_a_step_open() -> None:
+    """The bug decision 031 was written for.
+
+    Counting these made "clean" a state that fixing things could never reach:
+    every finding on this project's own pull requests was fixed or declined,
+    and both still reported open findings.
+    """
+    review = rv.Review(pr=1, findings=[rv.Finding("a.py", 1, "x", stale=True)])
+    assert review.is_clean is True
+    assert review.stale_findings and not review.open_findings
+
+
+def test_a_stale_finding_is_never_called_resolved() -> None:
+    """It means "nobody can tell from the pull request", not "it went away"."""
+    text = rv.to_markdown(rv.Review(pr=1, findings=[rv.Finding("a.py", 1, "x", stale=True)]))
+
+    assert "does not mean they are fixed" in text
+    assert "stale: 1" in text
+    assert "## Already addressed" not in text
+
+
+def test_a_clean_review_with_stale_findings_still_says_read_them() -> None:
+    """Otherwise "clean" reads as "nothing left to do", which it is not."""
+    text = rv.to_markdown(rv.Review(pr=1, findings=[rv.Finding("a.py", 1, "x", stale=True)]))
+    assert "before calling this step done" in text
+    assert "the review bar for this step is met" not in text
+
+
+def test_a_finding_on_an_untouched_file_still_applies() -> None:
+    """Age alone is not staleness. Most real bugs here were reported earlier."""
+    review = rv.Review(pr=1, findings=[rv.Finding("a.py", 1, "x", stale=False)])
+    assert review.open_findings and review.is_clean is False
+
+
+def test_an_unknown_comparison_leaves_a_finding_applying(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If GitHub cannot be compared, nothing is stale.
+
+    The safe direction: an unknown answer must never read as "the finding went
+    away", because that is the one error that loses a real defect silently.
+    """
+    _stub_github(
+        monkeypatch,
+        {
+            "/pulls/1/comments": [inline("coderabbitai[bot]", "a.py", "**issue:** x")],
+            "/pulls/1/reviews": [],
+            "/pulls/1": {"title": "t", "head": {"sha": "newsha"}},
+        },
+    )
+    monkeypatch.setattr(rv, "review_threads", lambda *a, **k: {})
+    monkeypatch.setattr(rv, "changed_files", lambda *a, **k: None)
+
+    review = rv.fetch("o/r", 1)
+    assert review.stale_findings == []
+    assert len(review.open_findings) == 1
+
+
+def test_a_finding_on_a_file_that_moved_is_marked_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_github(
+        monkeypatch,
+        {
+            "/pulls/1/comments": [
+                inline("coderabbitai[bot]", "moved.py", "**issue:** x"),
+                inline("coderabbitai[bot]", "untouched.py", "**issue:** y"),
+            ],
+            "/pulls/1/reviews": [],
+            "/pulls/1": {"title": "t", "head": {"sha": "newsha"}},
+        },
+    )
+    monkeypatch.setattr(rv, "review_threads", lambda *a, **k: {})
+    monkeypatch.setattr(rv, "changed_files", lambda *a, **k: {"moved.py"})
+
+    review = rv.fetch("o/r", 1)
+    assert [f.path for f in review.stale_findings] == ["moved.py"]
+    assert [f.path for f in review.open_findings] == ["untouched.py"]
+
+
+def test_resolving_needs_a_thread_and_never_guesses() -> None:
+    """A thread closed without a fix or a decline is a finding silently dropped."""
+    assert rv.resolve_thread("") is False
 
 
 def test_open_and_resolved_are_separated(forge: Path) -> None:
@@ -341,6 +432,7 @@ def _stub_github(monkeypatch: pytest.MonkeyPatch, routes: dict[str, object]) -> 
 
 def inline(login: str, path: str, body: str, line: int = 1) -> dict:
     return {"user": {"login": login}, "path": path, "line": line, "body": body,
+            "id": abs(hash(path)) % 100000, "original_commit_id": "oldsha",
             "html_url": f"https://github.com/o/r/pull/1#{path}"}
 
 

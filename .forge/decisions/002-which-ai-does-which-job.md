@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-1, phase-5, phase-7]
+content_sha: eb0e0e40f193f451c5c0ba978c978054c2c681eb53dec861a4760aa8c3c3a7f8
+prev_sha: 21d34fa2c45c792b363a0f767fdb5e4eea9ef1fe3c4bc2133917a7db1fbe5f85
 ---
-
 # Best-fit AI per job, with a fallback
 
 **Options considered**

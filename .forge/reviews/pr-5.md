@@ -2,21 +2,24 @@
 type: review
 pr: 5
 reviewers: [coderabbit, sourcery]
-open: 1
+open: 0
+stale: 1
 resolved: 6
-clean: false
-fetched: 2026-08-04T12:02:51
+clean: true
+fetched: 2026-08-04T17:25:50
 ---
 
 # Review — pull request #5
 
 **Phase 7 — Skills & Subagents**
 
-**1 open** (1 sourcery) · 6 already addressed
+No findings that still apply as written.
 
-Decision 009: a step is not finished until the review is clean.
+1 sit against code that has changed since — read them below before calling this step done (decision 031).
 
-## Open
+## Raised against code that has since changed
+
+1 finding(s) point at files edited after they were written. **That does not mean they are fixed** — it means nobody can tell from the pull request alone, so each needs reading against the file as it is now (decision 031). Most of this project's real bugs were reported against an earlier commit and were entirely valid.
 
 ### `scripts/forge_skills.py:305` — bug_risk _(sourcery)_
 

@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-5]
+content_sha: 2768fa5f37f20fbadd9644695053d8b707d2b44b65988de99104b97d790c6726
+prev_sha: f096def71c72bc694716395747279c11556f219d0c67acecb823b324caf4009f
 ---
-
 # Local files, one writer, re-read every session
 
 **The mental model:** state was never in the Claude account. It lives in the project

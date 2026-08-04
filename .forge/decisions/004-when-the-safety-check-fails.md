@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-4, phase-8]
+content_sha: c57e3729fa768db4d7489c123a92d4f9998cdbb42b5eeae503fb37459213c386
+prev_sha: e07f1663e44f41beff712ba54690ab1911160e5cb68e00c71c522c595f185f8f
 ---
-
 # Blocked by default; an explicit command plus confirmation is the only way through
 
 **Options considered**

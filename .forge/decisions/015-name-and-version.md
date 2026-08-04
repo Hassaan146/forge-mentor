@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-10]
+content_sha: 5786ec0e2ca22c667fe1f8b99526494d0b1e556cf22e0e6a9e9097a244f176fa
+prev_sha: d4773a0d4e46f20455d81e068c657a16dc61c59cb04174d691f7bfbf10138bf9
 ---
-
 # Forge Mentor, starting at v0.1.0
 
 **Name:** Forge Mentor

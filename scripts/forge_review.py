@@ -105,6 +105,9 @@ class Finding:
     resolved: bool = False
     url: str = ""
     reviewer: str = "coderabbit"
+    raised_against: str = ""  # the commit this was written about
+    thread_id: str = ""  # for resolving it on GitHub once it is handled
+    stale: bool = False  # the file has moved since; needs a look, not dismissal
 
     @property
     def title(self) -> str:
@@ -134,7 +137,24 @@ class Review:
 
     @property
     def open_findings(self) -> list[Finding]:
-        return [f for f in self.findings if not f.resolved]
+        """Findings raised against code that has not moved since.
+
+        These apply exactly as written — nothing about them is in doubt.
+        Decision 031 keeps them apart from the stale ones so that "is this
+        step clean?" stays answerable.
+        """
+        return [f for f in self.findings if not f.resolved and not f.stale]
+
+    @property
+    def stale_findings(self) -> list[Finding]:
+        """Findings whose file changed underneath them.
+
+        **Stale means "needs a look", never "resolved".** A changed file does
+        not say the finding was addressed; it says nobody can tell from
+        metadata alone. Most of this project's real bugs were reported against
+        an earlier commit and were entirely valid.
+        """
+        return [f for f in self.findings if not f.resolved and f.stale]
 
     def open_by_reviewer(self, name: str) -> list[Finding]:
         return [f for f in self.open_findings if f.reviewer == name]
@@ -145,7 +165,12 @@ class Review:
 
     @property
     def is_clean(self) -> bool:
-        """Decision 009: a step is not finished until the review is clean."""
+        """Decision 009: a step is not finished until the review is clean.
+
+        Only the findings that certainly still apply. A stale one is reported
+        separately and judged, because counting it here made "clean" a state
+        that fixing things could never reach (decision 031).
+        """
         return not self.open_findings
 
 
@@ -234,6 +259,117 @@ def _get_all(path: str, token: str | None, pages: int = 10) -> list:
         f"More than {pages * 100} entries on {path}. Forge stopped rather than "
         "write a review it knows is incomplete. Raise the page limit and re-run."
     )
+
+
+def _post_graphql(query: str, variables: dict, token: str | None) -> dict:
+    """GraphQL, needed for the two things REST cannot do here.
+
+    REST exposes review *comments* but not the review *threads* they belong to,
+    and resolving is a thread-level act. So thread ids and the resolve mutation
+    both come from here.
+    """
+    payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.github.com/graphql",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "forge-mentor",
+            **({"Authorization": f"Bearer {token}"} if token else {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ReviewError(f"GitHub returned {exc.code} for a GraphQL request.") from exc
+    except urllib.error.URLError as exc:
+        raise ReviewError(f"Could not reach GitHub: {exc.reason}") from exc
+
+    if body.get("errors"):
+        raise ReviewError(str(body["errors"])[:300])
+    return body.get("data") or {}
+
+
+_THREADS_QUERY = """
+query($owner:String!, $name:String!, $pr:Int!) {
+  repository(owner:$owner, name:$name) {
+    pullRequest(number:$pr) {
+      reviewThreads(first:100) {
+        nodes { id isResolved comments(first:1) { nodes { databaseId } } }
+      }
+    }
+  }
+}
+"""
+
+
+def review_threads(repo: str, pr: int, token: str | None = None) -> dict[int, str]:
+    """Map each finding's comment id to the thread it lives in.
+
+    Only unresolved threads. A resolved one needs no id, because nothing is
+    going to be done to it.
+    """
+    owner, _, name = repo.partition("/")
+    try:
+        data = _post_graphql(
+            _THREADS_QUERY, {"owner": owner, "name": name, "pr": pr}, token or github_token()
+        )
+    except ReviewError:
+        return {}  # thread ids are a convenience; losing them must not lose the review
+
+    out: dict[int, str] = {}
+    threads = (
+        data.get("repository", {}).get("pullRequest", {}).get("reviewThreads", {}).get("nodes")
+        or []
+    )
+    for thread in threads:
+        if thread.get("isResolved"):
+            continue
+        for comment in thread.get("comments", {}).get("nodes") or []:
+            if comment.get("databaseId"):
+                out[int(comment["databaseId"])] = thread["id"]
+    return out
+
+
+_RESOLVE = """
+mutation($id:ID!) {
+  resolveReviewThread(input:{threadId:$id}) { thread { isResolved } }
+}
+"""
+
+
+def resolve_thread(thread_id: str, token: str | None = None) -> bool:
+    """Close a review thread, the same act a reviewer performs by hand.
+
+    Decision 031: only ever called once a finding has been fixed or declined
+    with a reason. A thread closed without either is a finding silently
+    dropped, which is worse than a count that reads too high.
+    """
+    if not thread_id:
+        return False
+    data = _post_graphql(_RESOLVE, {"id": thread_id}, token or github_token())
+    return bool(
+        data.get("resolveReviewThread", {}).get("thread", {}).get("isResolved")
+    )
+
+
+def changed_files(repo: str, base: str, head: str, token: str | None = None) -> set[str] | None:
+    """Which files differ between two commits.
+
+    Returns None when the comparison cannot be made, and the caller then treats
+    nothing as stale — an unknown answer must never be read as "the finding
+    went away".
+    """
+    if not base or not head or base == head:
+        return set()
+    try:
+        data = _get(f"repos/{repo}/compare/{base}...{head}", token)
+    except ReviewError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {entry.get("filename", "") for entry in data.get("files") or []}
 
 
 def valid_pr(pr: object) -> int:
@@ -479,7 +615,15 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
     token = token or github_token()
 
     details = _get(f"repos/{repo}/pulls/{pr}", token)
-    review = Review(pr=pr, title=details.get("title", "") if isinstance(details, dict) else "")
+    details = details if isinstance(details, dict) else {}
+    review = Review(pr=pr, title=details.get("title", ""))
+    head = (details.get("head") or {}).get("sha", "")
+
+    threads = review_threads(repo, pr, token)
+    # One comparison per commit findings were raised against, not one per
+    # finding — a busy pull request has dozens of comments across two or three
+    # commits, and the answer is the same for all of them.
+    since: dict[str, set[str] | None] = {}
 
     inline = _get_all(f"repos/{repo}/pulls/{pr}/comments", token)
     for comment in inline if isinstance(inline, list) else []:
@@ -487,15 +631,28 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
         if who is None:
             continue
         body = comment.get("body", "")
+        path = comment.get("path", "?")
+        raised = comment.get("original_commit_id") or comment.get("commit_id") or ""
+
+        if raised and raised not in since:
+            since[raised] = changed_files(repo, raised, head, token)
+        moved = since.get(raised)
+
         review.findings.append(
             Finding(
-                path=comment.get("path", "?"),
+                path=path,
                 line=comment.get("line") or comment.get("original_line") or "?",
                 body=body,
                 severity=classify(body, who),
                 resolved=bool(RESOLVED_MARKER.search(body)),
                 url=comment.get("html_url", ""),
                 reviewer=who,
+                raised_against=raised,
+                thread_id=threads.get(comment.get("id", 0), ""),
+                # Only when the comparison actually succeeded. An unknown
+                # answer stays "still applies" — the safe direction, because
+                # stale findings are the ones a person has to re-read.
+                stale=bool(moved) and path in moved,
             )
         )
 
@@ -549,6 +706,7 @@ def to_markdown(review: Review, repo: str = "") -> str:
         f"pr: {review.pr}",
         f"reviewers: [{', '.join(reviewers)}]",
         f"open: {len(review.open_findings)}",
+        f"stale: {len(review.stale_findings)}",
         f"resolved: {len(review.resolved_findings)}",
         f"clean: {'true' if review.is_clean else 'false'}",
         f"fetched: {datetime.now().isoformat(timespec='seconds')}",
@@ -562,9 +720,17 @@ def to_markdown(review: Review, repo: str = "") -> str:
 
     if review.is_clean:
         lines += [
-            "No open findings. By decision 009, the review bar for this step is met.",
+            "No findings that still apply as written.",
             "",
         ]
+        if review.stale_findings:
+            lines += [
+                f"{len(review.stale_findings)} sit against code that has changed since — "
+                "read them below before calling this step done (decision 031).",
+                "",
+            ]
+        else:
+            lines += ["By decision 009, the review bar for this step is met.", ""]
     else:
         split = " · ".join(
             f"{len(review.open_by_reviewer(name))} {name}"
@@ -590,6 +756,20 @@ def to_markdown(review: Review, repo: str = "") -> str:
     if review.open_findings:
         lines += ["## Open", ""]
         for finding in review.open_findings:
+            lines += _finding_block(finding)
+
+    if review.stale_findings:
+        lines += [
+            "## Raised against code that has since changed",
+            "",
+            f"{len(review.stale_findings)} finding(s) point at files edited after they were "
+            "written. **That does not mean they are fixed** — it means nobody can tell from "
+            "the pull request alone, so each needs reading against the file as it is now "
+            "(decision 031). Most of this project's real bugs were reported against an "
+            "earlier commit and were entirely valid.",
+            "",
+        ]
+        for finding in review.stale_findings:
             lines += _finding_block(finding)
 
     if review.resolved_findings:
@@ -671,6 +851,7 @@ def fetch_and_save(project: Path, forge_dir: Path, pr: int) -> dict[str, object]
         "pr": pr,
         "file": str(path),
         "open": len(review.open_findings),
+        "stale": len(review.stale_findings),
         "resolved": len(review.resolved_findings),
         "clean": review.is_clean,
         "reviewers": review.reviewers,
@@ -711,7 +892,10 @@ def _main(argv: list[str]) -> int:  # pragma: no cover - CLI surface
     split = ", ".join(
         f"{count} {name}" for name, count in result["open_by_reviewer"].items()
     )
-    print(f"{result['file']}: {result['open']} open ({split or 'none'})")
+    print(
+        f"{result['file']}: {result['open']} open ({split or 'none'}), "
+        f"{result['stale']} against changed code"
+    )
     return 0
 
 

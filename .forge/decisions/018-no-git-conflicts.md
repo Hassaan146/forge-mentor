@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-4]
+content_sha: f096def71c72bc694716395747279c11556f219d0c67acecb823b324caf4009f
+prev_sha: ca6652fdb7c28d04fa5475ef61b8fa1f7ae43c45af20fbe72a671f28116b9d89
 ---
-
 # Questions become files when asked, not when answered
 
 **Problem.** `progress.md` was rewritten on every step, so two branches always

@@ -5,8 +5,9 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-4, phase-5]
+content_sha: 21d34fa2c45c792b363a0f767fdb5e4eea9ef1fe3c4bc2133917a7db1fbe5f85
+prev_sha: genesis
 ---
-
 # Both notes readable by people and by Claude
 
 **Options considered**

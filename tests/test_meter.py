@@ -327,7 +327,15 @@ def test_the_report_never_invents_a_money_figure(logs: Path, tmp_path: Path) -> 
     report = fm.report(project, None)
 
     assert "total" in report and "cache_saving" in report
-    assert not any("cost" in key or "usd" in key for key in report)
+
+    # An allowed set rather than a denied substring. Rejecting "cost" and "usd"
+    # let "price", "dollars" and "spend_estimate" straight through, so the rule
+    # this guards — the meter never invents a price — was barely guarded.
+    assert set(report) <= {
+        "available", "turns", "fresh_input", "cache_read", "cache_write",
+        "output", "total", "cache_saving", "by_model", "subagent_turns",
+        "reason", "budget", "threshold",
+    }, "a new key has to be considered before it is allowed"
 
 
 def test_the_report_carries_the_budget_when_one_is_set(forge: Path, logs: Path) -> None:

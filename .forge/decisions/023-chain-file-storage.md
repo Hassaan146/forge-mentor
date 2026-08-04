@@ -5,8 +5,9 @@ status: decided
 date: 2026-08-03
 decided_by: user
 affects: [phase-4]
+content_sha: 2d50f42b51fc3a874a7f55fc6daf0a1d914ea672cea949a3f9012acea4172295
+prev_sha: e926cb79e76d847bf233fefafec3e40f3a4123642fb3c87678e5e60a717a9227
 ---
-
 # A chain file, marked read-only where possible — never relied upon
 
 **Decided:** the chain is written to `.forge/chain.log` and marked read-only on disk

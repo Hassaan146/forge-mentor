@@ -6,8 +6,9 @@ date: 2026-08-04
 decided_by: user
 supersedes_open_half_of: 010
 affects: [phase-6, phase-10]
+content_sha: d0bc824dcdb33e8be204284fdd04380fa16b03dfc1c0a4c1c6a2e7323e2cdf96
+prev_sha: dc9aa0e0ea71f3bb54799e2f02280977a03f1ab39e6d5d437c419681063d15d1
 ---
-
 # No. Forge is a Claude Code plugin, and it stays one
 
 **Options considered**

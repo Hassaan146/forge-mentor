@@ -7,8 +7,9 @@ decided_by: user
 implements: 002
 closes_open_half_of: 003
 affects: [phase-7]
+content_sha: 20c467efbdac40dadf2db7d24b224a933cfbd053c3d1114f07f08b7b4f3a57b6
+prev_sha: 9fbd85798d7c73068b4b0913f05701b6340bfb3862d4948f3850a480645b1db1
 ---
-
 # The subagent declares it; the server answers what it should be
 
 **Options considered**

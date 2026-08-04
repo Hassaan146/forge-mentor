@@ -5,8 +5,9 @@ status: decided
 date: 2026-08-04
 decided_by: user
 affects: [phase-8]
+content_sha: 3fcca52a96aeacdf1d4e030de3871539fcbce32ec437b7628a9919ec7e3b1e95
+prev_sha: 20c467efbdac40dadf2db7d24b224a933cfbd053c3d1114f07f08b7b4f3a57b6
 ---
-
 # How much gets decided for you — and nothing else
 
 **Options considered**

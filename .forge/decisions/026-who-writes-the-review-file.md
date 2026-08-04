@@ -6,8 +6,9 @@ date: 2026-08-04
 decided_by: user
 implements: 005
 affects: [phase-6]
+content_sha: dc9aa0e0ea71f3bb54799e2f02280977a03f1ab39e6d5d437c419681063d15d1
+prev_sha: c83bc8220a573ab101aeeed56b7319b051d7a67b0928e6cb2ab09fda89b22f4f
 ---
-
 # A workflow in the repository writes it, not Forge on the user's machine
 
 **Options considered**

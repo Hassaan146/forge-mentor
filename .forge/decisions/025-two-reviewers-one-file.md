@@ -6,8 +6,9 @@ date: 2026-08-04
 decided_by: user
 implements: 005
 affects: [phase-6]
+content_sha: c83bc8220a573ab101aeeed56b7319b051d7a67b0928e6cb2ab09fda89b22f4f
+prev_sha: 753040cc9aa733c71bf8ea420cd80a20eedaa4a052b25fc5d7a8d95171d122ef
 ---
-
 # Both reviewers, one file per pull request
 
 **Options considered**
