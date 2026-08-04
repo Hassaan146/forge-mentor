@@ -11,10 +11,15 @@
 name: forge review notes
 
 on:
+  # A submitted review is one event carrying all of its inline comments, so it
+  # is the right thing to wake on. `pull_request_review_comment` fires once per
+  # comment — on the first live run CodeRabbit's pass triggered six jobs and
+  # committed the same file six times. It stays as a backstop for a comment
+  # added on its own later, and the concurrency rule below collapses bursts.
   pull_request_review:
-    types: [submitted, edited]
+    types: [submitted]
   pull_request_review_comment:
-    types: [created, edited]
+    types: [created]
 
 # Only what the job needs: write the notes file, read the review.
 permissions:
@@ -22,11 +27,16 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Two reviewers finishing seconds apart would otherwise race each other and
-  # one of the two commits would be rejected. Queue instead of cancelling, so
-  # the later reviewer's findings are never the ones dropped.
   group: forge-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  # Cancel, do not queue. This said `false` on the reasoning that queueing
+  # protected a second reviewer's findings from being dropped — which was
+  # wrong, and the first live run showed it: six queued jobs wrote the same
+  # file six times.
+  #
+  # Every run re-reads the whole review from GitHub and regenerates the file,
+  # so a run that is cancelled contributes nothing the survivor will not read
+  # for itself. The last job to run sees the most complete state by definition.
+  cancel-in-progress: true
 
 jobs:
   notes:
