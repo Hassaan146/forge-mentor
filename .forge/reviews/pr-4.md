@@ -5,7 +5,7 @@ reviewers: [coderabbit, sourcery]
 open: 37
 resolved: 6
 clean: false
-fetched: 2026-08-04T07:57:08
+fetched: 2026-08-04T07:57:24
 ---
 
 # Review — pull request #4
