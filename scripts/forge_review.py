@@ -217,11 +217,19 @@ def _get_all(path: str, token: str | None, pages: int = 10) -> list:
     for page in range(1, pages + 1):
         chunk = _get(f"{path}{separator}per_page=100&page={page}", token)
         if not isinstance(chunk, list) or not chunk:
-            break
+            return out
         out.extend(chunk)
         if len(chunk) < 100:
-            break
-    return out
+            return out
+
+    # Every page was full, so there is probably another one. Stopping quietly
+    # here would write `clean: true` from findings that were never read, and a
+    # step would close on a review nobody finished — the one failure this file
+    # exists to prevent. Refuse instead.
+    raise ReviewError(
+        f"More than {pages * 100} entries on {path}. Forge stopped rather than "
+        "write a review it knows is incomplete. Raise the page limit and re-run."
+    )
 
 
 def valid_pr(pr: object) -> int:

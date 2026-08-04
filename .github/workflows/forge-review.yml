@@ -53,13 +53,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Two checkouts, and the split is the whole security design.
+      #
+      # This job holds a token that can write to the repository. The review
+      # script is *code in the repository*, so a pull request can change it —
+      # and a same-repo pull request runs here with that token. Running the
+      # branch's own copy would hand any contributor arbitrary use of it.
+      #
+      # So: the tooling is taken from the base commit, which is already merged
+      # and reviewed, and the branch under review is only ever written into.
+      - name: Check out trusted tooling from the base commit
+        # Pinned to a commit, not a tag. A mutable tag is another way for
+        # someone else to decide what runs with this token.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: _tools
+          persist-credentials: false
+
       - name: Check out the branch under review
-        # Pinned to a commit, not a tag. This job holds a token that can write
-        # to the repository, and a mutable tag is a way for someone else to
-        # decide what runs with it.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          path: _branch
           # The push below authenticates explicitly, so the checkout does not
           # need to leave a credential behind in the git config.
           persist-credentials: false
@@ -80,12 +96,24 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The base commit may predate this script — the earliest phase
+          # branches target a main that never had it. Nothing to do then.
+          if [ ! -f _tools/scripts/forge_review.py ]; then
+            echo "The base commit has no review script yet. Nothing to do."
+            exit 0
+          fi
+
+          cd _branch
           git config user.name  "forge-mentor[bot]"
           git config user.email "forge-mentor@users.noreply.github.com"
           remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
 
           for attempt in 1 2 3; do
-            python scripts/forge_review.py "${PR_NUMBER}"
+            # Trusted code, writing into the untrusted worktree. The script
+            # takes the project directory as its second argument, so the notes
+            # land in the branch while the code that writes them does not come
+            # from it.
+            python ../_tools/scripts/forge_review.py "${PR_NUMBER}" .
 
             # Exactly one path is ever staged, so this job cannot commit
             # anything but the notes.
