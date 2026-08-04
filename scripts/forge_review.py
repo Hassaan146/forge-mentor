@@ -3,19 +3,33 @@
 Decision 005 puts review in the loop: every step is pushed, reviewed, and
 fixed before it counts as done. This module is the "read the review" half.
 
-**Why there is no second login.** CodeRabbit posts its findings to GitHub.
-Forge already holds GitHub access from `/forge:start` (decision 014). So the
-findings are fetched with the credentials Forge already has — the user is never
-asked to sign in to a review service, now or later. One login covers both.
+**Two reviewers, because they do not find the same things** (decision 025).
+CodeRabbit pulls on security, bug risk and data integrity; Sourcery was built
+as a Python refactoring engine and pulls on complexity, duplication and test
+quality. On pull request #1 Sourcery was the one that caught the governor
+comparing path substrings — a bug in the product's core guarantee. Both are
+read into one file, each finding tagged with who raised it, so "is this step
+clean?" stays a single question with a single answer (decision 009).
+
+**Both halves of a review are read, not just the inline comments.** A reviewer
+posts findings in two places: pinned to a line, and in the body of the review
+itself. Sourcery puts most of its work in the body. Reading only inline
+comments returned an almost empty file and looked like approval.
+
+**Why there is no second login.** Both reviewers post to GitHub, and Forge
+already holds GitHub access from `/forge:start` (decision 014). So findings are
+fetched with the credentials Forge already has — the user is never asked to
+sign in to a review service, now or later. One login covers all of it.
 
 The one thing that cannot be automated is the initial app install: GitHub
-requires a human to authorise it. So Forge *detects* whether it is installed
-and *guides* the user through it once, rather than asking repeatedly.
+requires a human to authorise it. So Forge *detects* which reviewers are
+installed and *guides* the user through the missing ones once.
 
 **Findings land in a file, not an inbox.** Reviews are written to
 `.forge/reviews/pr-<n>.md` — committed with the code, readable months later,
 and available to a session on another machine (decision 011). An email would
-be none of those things.
+be none of those things. A workflow in the repository keeps that file current
+without anyone having to ask (decision 026).
 """
 
 from __future__ import annotations
@@ -30,18 +44,34 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import forge_state as fs
 import safety
 
 API = "https://api.github.com"
 REVIEWS_DIR = "reviews"
 
-# CodeRabbit's bot account. Matched loosely because the exact login has varied
-# ("coderabbitai", "coderabbitai[bot]").
-REVIEWER_PATTERN = re.compile(r"coderabbit", re.IGNORECASE)
+# The reviewers Forge reads, and how to recognise their accounts. Matched
+# loosely because the exact logins vary ("coderabbitai", "coderabbitai[bot]",
+# "sourcery-ai[bot]"). Decision 025.
+REVIEWERS: dict[str, re.Pattern[str]] = {
+    "coderabbit": re.compile(r"coderabbit", re.IGNORECASE),
+    "sourcery": re.compile(r"sourcery", re.IGNORECASE),
+}
 
-# CodeRabbit marks a finding it has confirmed as fixed. Worth separating so a
+# Kept as a name so callers reading "any reviewer at all?" stay readable.
+REVIEWER_PATTERN = re.compile("|".join(p.pattern for p in REVIEWERS.values()), re.IGNORECASE)
+
+# A reviewer marks a finding it has confirmed as fixed. Worth separating so a
 # user reading the file is not handed work that is already done.
-RESOLVED_MARKER = re.compile(r"✅\s*Addressed in", re.IGNORECASE)
+RESOLVED_MARKER = re.compile(r"(✅\s*Addressed in|marked as resolved|已解决)", re.IGNORECASE)
+
+
+def reviewer_of(login: str) -> str | None:
+    """Which reviewer this GitHub account is, if it is one of ours."""
+    for name, pattern in REVIEWERS.items():
+        if pattern.search(login or ""):
+            return name
+    return None
 
 SEVERITY_ORDER = ("critical", "security", "bug_risk", "issue", "suggestion", "nitpick")
 
@@ -65,6 +95,7 @@ class Finding:
     severity: str = "suggestion"
     resolved: bool = False
     url: str = ""
+    reviewer: str = "coderabbit"
 
     @property
     def title(self) -> str:
@@ -90,10 +121,14 @@ class Review:
     title: str = ""
     findings: list[Finding] = field(default_factory=list)
     summary: str = ""
+    reviewers: list[str] = field(default_factory=list)
 
     @property
     def open_findings(self) -> list[Finding]:
         return [f for f in self.findings if not f.resolved]
+
+    def open_by_reviewer(self, name: str) -> list[Finding]:
+        return [f for f in self.open_findings if f.reviewer == name]
 
     @property
     def resolved_findings(self) -> list[Finding]:
@@ -183,30 +218,55 @@ def detect_repo(project: Path) -> str | None:
 # is the reviewer set up? — detect and guide, never nag
 # --------------------------------------------------------------------------
 
+# Where each reviewer is installed from, and how to make it look at work that
+# is already open. Both are free on public repositories (decision 007).
+INSTALL: dict[str, tuple[str, str]] = {
+    "coderabbit": ("https://github.com/apps/coderabbitai", "@coderabbitai full review"),
+    "sourcery": ("https://github.com/apps/sourcery-ai", "@sourcery-ai review"),
+}
+
 SETUP_GUIDE = """\
-The review step needs CodeRabbit, and it is not on this repository yet.
+The review step needs {names}, and {verb} not on this repository yet.
 
-  1. Open  https://github.com/apps/coderabbitai
-  2. Choose "Only select repositories" and pick {repo}
-  3. Authorise
+{steps}
+Both are free on public repositories.
 
-It is free on public repositories.
-
-You will not be asked to sign in to it again — Forge reads the findings
-through the GitHub access it already has.
+You will not be asked to sign in again — Forge reads the findings through the
+GitHub access it already has.
 
 To review the pull requests that are already open, comment on each one:
 
-  @coderabbitai full review
+{commands}
 """
 
 
-def check_setup(project: Path) -> dict[str, object]:
-    """Has the reviewer ever spoken on this repository?
+def _setup_guide(missing: list[str], repo: str) -> str:
+    steps = []
+    commands = []
+    for index, name in enumerate(missing, start=1):
+        url, command = INSTALL[name]
+        steps.append(
+            f"  {index}. Open  {url}\n"
+            f'     Choose "Only select repositories", pick {repo}, and authorise.\n'
+        )
+        commands.append(f"  {command}")
+    return SETUP_GUIDE.format(
+        names=" and ".join(missing),
+        verb="is" if len(missing) == 1 else "are",
+        steps="\n".join(steps),
+        commands="\n".join(commands),
+    )
 
-    Asked by looking for its comments rather than by querying the app
+
+def check_setup(project: Path) -> dict[str, object]:
+    """Which reviewers have ever spoken on this repository?
+
+    Asked by looking for their comments rather than by querying the app
     installation, because that endpoint needs app-level credentials a user
     token does not have.
+
+    Ready means *both* reviewers have been seen (decision 025). One reviewer
+    working is not the bar, because the two look at different things.
     """
     repo = detect_repo(project)
     if repo is None:
@@ -230,19 +290,37 @@ def check_setup(project: Path) -> dict[str, object]:
     except ReviewError as exc:
         return {"ready": False, "repo": repo, "reason": str(exc), "guide": str(exc)}
 
+    seen: set[str] = set()
     for pull in pulls if isinstance(pulls, list) else []:
-        comments = _get(f"repos/{repo}/issues/{pull['number']}/comments", token)
-        if any(
-            REVIEWER_PATTERN.search(c.get("user", {}).get("login", ""))
-            for c in (comments if isinstance(comments, list) else [])
+        for endpoint in (
+            f"repos/{repo}/issues/{pull['number']}/comments",
+            f"repos/{repo}/pulls/{pull['number']}/reviews?per_page=100",
         ):
-            return {"ready": True, "repo": repo}
+            try:
+                entries = _get(endpoint, token)
+            except ReviewError:
+                continue  # one unreadable pull request must not hide the rest
+            for entry in entries if isinstance(entries, list) else []:
+                who = reviewer_of(entry.get("user", {}).get("login", ""))
+                if who:
+                    seen.add(who)
+        if seen >= set(REVIEWERS):
+            break
+
+    missing = sorted(set(REVIEWERS) - seen)
+    if not missing:
+        return {"ready": True, "repo": repo, "reviewers": sorted(seen)}
 
     return {
         "ready": False,
         "repo": repo,
-        "reason": "CodeRabbit has not reviewed anything on this repository.",
-        "guide": SETUP_GUIDE.format(repo=repo),
+        "reviewers": sorted(seen),
+        "missing": missing,
+        "reason": (
+            f"{' and '.join(missing)} "
+            f"{'has' if len(missing) == 1 else 'have'} not reviewed anything here."
+        ),
+        "guide": _setup_guide(missing, repo),
     }
 
 
@@ -251,15 +329,47 @@ def check_setup(project: Path) -> dict[str, object]:
 # --------------------------------------------------------------------------
 
 
-def classify(body: str) -> str:
-    """How serious the finding is, read from the reviewer's own badge.
+# Sourcery opens a comment with its own label, as seen on pull request #1:
+# "**issue (bug_risk):**", "**suggestion (testing):**", "**nitpick (typo):**".
+# The leading asterisks are markdown bold and are part of the literal text, so
+# they have to be allowed for. Note the ordering is the reverse of CodeRabbit's
+# badge: here the severity comes first and the category sits in brackets.
+_SOURCERY_PREFIX = re.compile(
+    r"^[\s*_]*(issue|suggestion|nitpick)\s*\(([a-z0-9_ -]+)\)\s*:",
+    re.IGNORECASE | re.MULTILINE,
+)
 
-    The badge carries two different things — a category ("Security & Privacy")
-    and a severity ("Critical", "Major"). Only the severity says how urgent this
-    is. Reading the category as the severity marked every security-flavoured
-    note critical, which would bury the ones that really are.
+
+def classify(body: str, reviewer: str = "coderabbit") -> str:
+    """How serious the finding is, read from the reviewer's own labelling.
+
+    The two reviewers label differently, so the reviewer has to be known. Both
+    carry a category and a severity, and confusing the two is the trap: reading
+    the category as the severity marked every security-flavoured note critical,
+    which buries the ones that really are.
+
+    Most Sourcery labels come out the same under the generic rules below, but
+    only by coincidence — its severity words happen to be in `SEVERITY_ORDER`,
+    so a substring check lands on the right answer for the wrong reason. Parsed
+    properly here so that a category Sourcery has not used yet does not quietly
+    fall through to "suggestion". The one case where the two readings differ
+    today is a `(security)` category, which outranks whatever word precedes it.
     """
     head = body.lower()[:400]
+
+    if reviewer == "sourcery":
+        match = _SOURCERY_PREFIX.search(body)
+        if match:
+            kind, category = match.group(1).lower(), match.group(2).lower()
+            if "security" in category:
+                return "critical"
+            if kind == "nitpick":
+                return "nitpick"
+            if kind == "issue":
+                # Sourcery reserves "issue" for something it believes is wrong,
+                # as against a style preference.
+                return "bug_risk" if ("bug" in category or "risk" in category) else "issue"
+            return "suggestion"
 
     for word, level in (
         ("critical", "critical"),
@@ -277,8 +387,33 @@ def classify(body: str) -> str:
     return "suggestion"
 
 
+# Sourcery's review body opens with high-level feedback and then repeats every
+# inline comment under this heading. Everything from here down is a duplicate.
+_INDIVIDUAL_COMMENTS = re.compile(r"^#+\s*Individual Comments", re.IGNORECASE | re.MULTILINE)
+
+
+def overall_feedback(body: str) -> str:
+    """The part of a review body that is not a copy of the inline comments.
+
+    Sourcery's body duplicates all of its inline findings; only the text above
+    the "Individual Comments" heading is unique to it. Keeping the whole body
+    would show every Sourcery finding twice — once as a finding to fix and once
+    buried in a wall of quoted text.
+    """
+    text = clean_body(body)
+    split = _INDIVIDUAL_COMMENTS.split(text, maxsplit=1)
+    return split[0].strip()
+
+
 def fetch(repo: str, pr: int, token: str | None = None) -> Review:
-    """Every review comment on one pull request."""
+    """Every finding on one pull request, from every reviewer Forge reads.
+
+    **Findings come from inline comments only** (decision 025). Review bodies
+    are kept as summaries: CodeRabbit's is a walkthrough with no findings in it,
+    and Sourcery's repeats each of its inline comments verbatim. Counting the
+    bodies as findings double-counted every Sourcery item, and a doubled count
+    feeding decision 009's "is it clean" bar is worse than no count.
+    """
     token = token or github_token()
 
     details = _get(f"repos/{repo}/pulls/{pr}", token)
@@ -286,7 +421,8 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
 
     inline = _get(f"repos/{repo}/pulls/{pr}/comments?per_page=100", token)
     for comment in inline if isinstance(inline, list) else []:
-        if not REVIEWER_PATTERN.search(comment.get("user", {}).get("login", "")):
+        who = reviewer_of(comment.get("user", {}).get("login", ""))
+        if who is None:
             continue
         body = comment.get("body", "")
         review.findings.append(
@@ -294,17 +430,40 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
                 path=comment.get("path", "?"),
                 line=comment.get("line") or comment.get("original_line") or "?",
                 body=body,
-                severity=classify(body),
+                severity=classify(body, who),
                 resolved=bool(RESOLVED_MARKER.search(body)),
                 url=comment.get("html_url", ""),
+                reviewer=who,
             )
         )
+
+    # The bodies — read for the high-level feedback that appears nowhere else,
+    # and to know which reviewers actually looked at this pull request.
+    summaries: list[str] = []
+    bodies = _get(f"repos/{repo}/pulls/{pr}/reviews?per_page=100", token)
+    for entry in bodies if isinstance(bodies, list) else []:
+        who = reviewer_of(entry.get("user", {}).get("login", ""))
+        if who is None:
+            continue
+        if who not in review.reviewers:
+            review.reviewers.append(who)
+        overall = overall_feedback(entry.get("body", ""))
+        if overall:
+            summaries.append(f"**{who}** — {overall}")
+
+    for finding in review.findings:
+        if finding.reviewer not in review.reviewers:
+            review.reviewers.append(finding.reviewer)
+
+    review.reviewers.sort()
+    review.summary = "\n\n".join(summaries)
 
     review.findings.sort(
         key=lambda f: (
             f.resolved,
             SEVERITY_ORDER.index(f.severity) if f.severity in SEVERITY_ORDER else 99,
             f.path,
+            f.reviewer,
         )
     )
     return review
@@ -321,11 +480,12 @@ def to_markdown(review: Review, repo: str = "") -> str:
     Committed with the code so it can be read months later, and by a session on
     another machine (decision 011).
     """
+    reviewers = review.reviewers or sorted({f.reviewer for f in review.findings})
     lines = [
         "---",
         "type: review",
         f"pr: {review.pr}",
-        f"reviewer: coderabbit",
+        f"reviewers: [{', '.join(reviewers)}]",
         f"open: {len(review.open_findings)}",
         f"resolved: {len(review.resolved_findings)}",
         f"clean: {'true' if review.is_clean else 'false'}",
@@ -344,10 +504,24 @@ def to_markdown(review: Review, repo: str = "") -> str:
             "",
         ]
     else:
+        split = " · ".join(
+            f"{len(review.open_by_reviewer(name))} {name}"
+            for name in reviewers
+            if review.open_by_reviewer(name)
+        )
         lines += [
-            f"**{len(review.open_findings)} open** · {len(review.resolved_findings)} already addressed",
+            f"**{len(review.open_findings)} open** ({split}) "
+            f"· {len(review.resolved_findings)} already addressed",
             "",
             "Decision 009: a step is not finished until the review is clean.",
+            "",
+        ]
+
+    if len(reviewers) < len(REVIEWERS):
+        missing = sorted(set(REVIEWERS) - set(reviewers))
+        lines += [
+            f"> Not reviewed by: {', '.join(missing)}. "
+            "This pull request has only been seen by some of the reviewers.",
             "",
         ]
 
@@ -360,8 +534,17 @@ def to_markdown(review: Review, repo: str = "") -> str:
         lines += ["## Already addressed", ""]
         for finding in review.resolved_findings:
             lines.append(
-                f"- `{finding.path}:{finding.line}` — {finding.title}"
+                f"- `{finding.path}:{finding.line}` — {finding.title} _({finding.reviewer})_"
             )
+        lines.append("")
+
+    if review.summary:
+        # Kept apart from the findings on purpose: this is the reviewer's
+        # high-level read, not a list of things to tick off.
+        lines += ["## High-level feedback", ""]
+        lines.append(
+            safety.wrap_untrusted(f"review:summary:pr-{review.pr}", review.summary)
+        )
         lines.append("")
 
     if repo:
@@ -392,9 +575,11 @@ def _finding_block(finding: Finding) -> list[str]:
     # Wrapped as untrusted: this text comes from outside, the repository is
     # public (decision 007), and it is read by the model that applies the fix.
     # Challenge finding C3 — data, never instructions.
-    body = safety.wrap_untrusted(f"review:pr-comment:{finding.path}", clean_body(finding.body))
+    body = safety.wrap_untrusted(
+        f"review:{finding.reviewer}:{finding.path}", clean_body(finding.body)
+    )
     return [
-        f"### `{finding.path}:{finding.line}` — {finding.severity}",
+        f"### `{finding.path}:{finding.line}` — {finding.severity} _({finding.reviewer})_",
         "",
         body,
         "",
@@ -425,5 +610,49 @@ def fetch_and_save(project: Path, forge_dir: Path, pr: int) -> dict[str, object]
         "open": len(review.open_findings),
         "resolved": len(review.resolved_findings),
         "clean": review.is_clean,
-        "titles": [f.title for f in review.open_findings],
+        "reviewers": review.reviewers,
+        "open_by_reviewer": {
+            name: len(review.open_by_reviewer(name)) for name in review.reviewers
+        },
+        "titles": [f"{f.title} ({f.reviewer})" for f in review.open_findings],
     }
+
+
+def _main(argv: list[str]) -> int:  # pragma: no cover - CLI surface
+    """Fetch one pull request's review into the project's notes.
+
+    Used by the workflow in decision 026, which runs this on GitHub's side when
+    a review is posted, so the file stays current without anyone asking.
+
+        python scripts/forge_review.py <pr> [project-root]
+    """
+    if not argv:
+        print("usage: forge_review.py <pr-number> [project-root]")
+        return 2
+
+    try:
+        pr = int(argv[0])
+    except ValueError:
+        print(f"Not a pull request number: {argv[0]!r}")
+        return 2
+
+    project = Path(argv[1]).resolve() if len(argv) > 1 else Path.cwd()
+    forge_dir = project / fs.FORGE_DIR
+
+    try:
+        result = fetch_and_save(project, forge_dir, pr)
+    except ReviewError as exc:
+        print(f"Could not read the review: {exc}")
+        return 1
+
+    split = ", ".join(
+        f"{count} {name}" for name, count in result["open_by_reviewer"].items()
+    )
+    print(f"{result['file']}: {result['open']} open ({split or 'none'})")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI surface
+    import sys
+
+    raise SystemExit(_main(sys.argv[1:]))

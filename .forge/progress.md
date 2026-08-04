@@ -1,28 +1,54 @@
 ---
 type: progress
 project: forge
-stage: phase-2-complete
-questions_total_estimate: 12
-questions_answered: 16
-next_question: none — Phase 3 next
+stage: phase-6-complete
+questions_total_estimate: 27
+questions_answered: 26
+next_question: none — Phase 7 next
 open_question: none
 override_active: false
-updated: 2026-07-31
+updated: 2026-08-04
 ---
 
 # Where we are
 
 **Stage:** Foundation interrogation **complete** — all 9 questions decided (Phase 1, dogfood stage 1).
-No code written yet, by design.
 
 **Challenge stage: complete** — see [challenge-001.md](challenge-001.md). Premortem + redteam
 found **3 critical** issues (C1 second provider, C2 state-file trust, C3 review injection)
-and 7 high-priority ones. C1 and C2 must be resolved before Phase 2 begins.
+and 7 high-priority ones. C2 and C3 are resolved in code; **C1 is closed by decision
+[027](decisions/027-one-ai-company.md) — accepted, not solved.**
 
-**Phase 2: complete.** Plugin scaffolded, validated against the official spec, published,
-and installed from GitHub end to end. The governor is proven to block writes (7/7 tests).
+| Phase | State |
+|---|---|
+| 2 — Plugin foundation | complete, **merged to `main`** |
+| 3 — State layer | code complete · [PR #1](https://github.com/Hassaan146/forge-mentor/pull/1) open |
+| 4 — Hooks & enforcement | code complete · [PR #2](https://github.com/Hassaan146/forge-mentor/pull/2) open |
+| 5 — MCP server core | code complete · [PR #3](https://github.com/Hassaan146/forge-mentor/pull/3) open |
+| 6 — MCP server extended | code complete · [PR #4](https://github.com/Hassaan146/forge-mentor/pull/4) open |
+| 7–10 | branches and draft pull requests opened; no code yet |
 
-**Next:** Phase 3 — the state layer.
+**Phase 6 delivered:** the usage meter (decision 024), cache-stable request assembly with
+drift detection, the second reviewer (decision 025), and the workflow that keeps review notes
+current on its own (decision 026). 299 tests, 87% coverage.
+
+**Two bugs found while building it**, both invisible to the tests that existed:
+
+- `server.run()` sat *above* the review tool definitions. Because it blocks, `fetch_review`
+  and `check_review_setup` were never registered in a real session — while the tests passed,
+  because a test imports the module rather than running it.
+- The usage meter counted one model reply three times. Claude Code writes a reply with
+  several tool calls as several records, each carrying an identical copy of the same usage.
+
+**Next:** Phase 7 — skills and subagents.
+
+## Known gaps, carried deliberately
+
+- **Two-provider requirement unmet** — decision 027. Accepted with the consequence written down.
+- **Forge's own decision records are unsigned.** Phase 4 built the fingerprint-and-chain
+  machinery but it was never applied to the 22 records written before it existed, and
+  `.forge/chain.log` does not exist here. Bulk-signing belongs in Phase 9, where Forge is
+  turned on itself.
 
 ## Questions
 
@@ -40,12 +66,22 @@ and installed from GitHub end to end. The governor is proven to block writes (7/
 
 | 10 | Does Forge need a second AI company | ✅ decided | Anthropic-only pipeline — user override of challenge C1; two-provider requirement **still unmet**, revisit before submission → [010](decisions/010-single-provider.md) |
 | 11 | Continuing on another account | ✅ decided | Repository is the memory; progress file must hold in-flight state → [011](decisions/011-continuing-on-another-account.md) |
-| 12 | How signed decision records work (challenge C2) | ⏳ open | deferred to Phase 4 (governor) — not needed for Phase 2 |
+| 12 | How signed decision records work (challenge C2) | ✅ decided | Fingerprint + chain, no secret — answered in Phase 4 by [021](decisions/021-tamper-evident-records.md), [022](decisions/022-chain-enforcement-and-repair.md), [023](decisions/023-chain-file-storage.md) |
 | 13 | What "live session" means in practice | ✅ decided | One answer → one continuous streamed sequence; never split a moment across turns → [013](decisions/013-live-session-not-turn-based.md) |
 | 14 | What `/forge:start` does | ✅ decided | Connect accounts (delegated sign-in, never typed credentials), explain workflow, request permissions — **all mandatory** → [014](decisions/014-setup-flow.md) |
 | 15 | Name and version | ✅ decided | **Forge Mentor**, v0.1.0 → [015](decisions/015-name-and-version.md) |
 | 16 | Is `.forge/` committed | ✅ decided | Committed in the project repo and pushed to GitHub → [016](decisions/016-forge-folder-committed.md) |
 | 17 | Does Forge work without all permissions | ✅ decided | No — all mandatory; 006 amended; public/private cost fork shown at setup → [017](decisions/017-all-permissions-mandatory.md) |
+| 18 | Duplicate decision ids across branches | ✅ decided | Accepted; ordering stays deterministic → [018](decisions/018-no-git-conflicts.md) |
+| 19 | What must survive an account switch | ✅ decided | State re-read from disk every time; nothing cached → [019](decisions/019-state-survives-account-switch.md) |
+| 20 | Can a record be trusted | ✅ decided | Records must be tamper-evident → [020](decisions/020-record-authenticity.md) |
+| 21 | Tamper-evident, or true signing | ✅ decided | Fingerprint + chain, no secret — a secret cannot travel between machines → [021](decisions/021-tamper-evident-records.md) |
+| 22 | What happens when the chain breaks | ✅ decided | Warn, stop, and repair from the committed version; never delete → [022](decisions/022-chain-enforcement-and-repair.md) |
+| 23 | Where the chain is stored | ✅ decided | `.forge/chain.log`, read-only where the filesystem allows → [023](decisions/023-chain-file-storage.md) |
+| 24 | Where usage numbers come from | ✅ decided | Claude Code's own session logs — measured, never estimated → [024](decisions/024-where-usage-numbers-come-from.md) |
+| 25 | How two reviewers share one set of notes | ✅ decided | Both in one file per pull request, each finding tagged → [025](decisions/025-two-reviewers-one-file.md) |
+| 26 | Who writes the review file to GitHub | ✅ decided | A workflow in the repository, not Forge on the user's machine → [026](decisions/026-who-writes-the-review-file.md) |
+| 27 | Does the two-provider rule change the pipeline | ✅ decided | No — Anthropic only; the gap is accepted and written down → [027](decisions/027-one-ai-company.md) |
 
 *The number of questions can move — some answers close two at once, others open a new one.*
 

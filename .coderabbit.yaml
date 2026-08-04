@@ -77,6 +77,35 @@ reviews:
         that legitimately has no tests yet. This file has the lowest coverage in
         the codebase; missing test cases are worth raising.
 
+    - path: "scripts/forge_meter.py"
+      instructions: >-
+        Reads Claude Code's own session logs, a format nobody promised to keep
+        stable (decision 024). Every way of failing to read it must be
+        survivable, because the meter is a display and nothing waits on it —
+        flag any path that could raise instead of reporting unavailable. The
+        load-bearing detail is deduplication by `message.id`: one reply with
+        several tool calls is written as several records carrying identical
+        usage, and summing records over-counted threefold. Flag anything that
+        reintroduces that. This file must never invent a number, including a
+        price, to fill a gap.
+
+    - path: "scripts/forge_assemble.py"
+      instructions: >-
+        Orders a request so the unchanging part can be cached. The failure mode
+        is silent — a value that moves between calls slips into a frozen block,
+        the cache stops hitting, and nothing reports it. Scrutinise
+        `_CACHE_KILLERS` for things that change per call and are not caught,
+        and check that sorting stays stable within a tier, since a reorder
+        breaks the prefix without changing a byte of content.
+
+    - path: ".github/workflows/**"
+      instructions: >-
+        This workflow holds a token with write access to the repository
+        (decision 026). Treat as critical any path where a pull request from a
+        fork could reach it, where it could commit outside `.forge/reviews/`,
+        or where it could be made to run on untrusted input. Check the push
+        retry cannot lose a concurrent reviewer's findings.
+
     - path: "server/forge_server.py"
       instructions: >-
         The MCP tool surface. Tool descriptions are read by a model deciding

@@ -18,6 +18,40 @@ import os
 import sys
 
 # --------------------------------------------------------------------------
+# making the symbols printable at all
+# --------------------------------------------------------------------------
+
+
+def _make_output_utf8_safe() -> None:
+    """Stop a Windows console from crashing on the four symbols.
+
+    On Windows, Python writes to the console in the system code page, which is
+    usually cp1252 — and none of ⚒ ⛔ ✅ ★ exist in it. Printing a banner
+    raised UnicodeEncodeError and took the whole hook down with it, which for
+    the governor would mean a blocked write never explaining itself.
+
+    UTF-8 is asked for first. Where it cannot be had, `errors="replace"` makes
+    an unprintable symbol come out as a placeholder instead of an exception —
+    degraded, but rule R9 already requires that colour and symbols are never
+    the only signal, so the words still carry the meaning.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            try:
+                reconfigure(errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_make_output_utf8_safe()
+
+
+# --------------------------------------------------------------------------
 # colour support
 # --------------------------------------------------------------------------
 

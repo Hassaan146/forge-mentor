@@ -1,0 +1,92 @@
+# Keeps .forge/reviews/pr-<n>.md current, without anyone having to ask.
+#
+# Decision 026: the review file has to exist in the repository, not only on
+# whoever happened to be at the keyboard. Reviews arrive minutes after a push,
+# usually after the session has ended, and a plugin that has exited cannot
+# fetch anything. So the fetch runs here instead, on GitHub's side.
+#
+# Decision 005 is unchanged by this: nothing on the user's machine pushes
+# without being asked. The consent for this lives in installing the workflow.
+
+name: forge review notes
+
+on:
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+# Only what the job needs: write the notes file, read the review.
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  # Two reviewers finishing seconds apart would otherwise race each other and
+  # one of the two commits would be rejected. Queue instead of cancelling, so
+  # the later reviewer's findings are never the ones dropped.
+  group: forge-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  notes:
+    # Never on a fork. A pull request from a fork must not reach a token with
+    # write access, and this job has one (decision 026).
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        contains(github.event.review.user.login, 'coderabbit') ||
+        contains(github.event.review.user.login, 'sourcery') ||
+        contains(github.event.comment.user.login, 'coderabbit') ||
+        contains(github.event.comment.user.login, 'sourcery')
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the branch under review
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          # Needed so the commit below can be pushed back to the branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Read the review into .forge/reviews/
+        env:
+          # The same credential path the plugin uses locally, so the file this
+          # produces is identical to the one a user would fetch by hand.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/forge_review.py ${{ github.event.pull_request.number }}
+
+      - name: Commit the notes, if they changed
+        run: |
+          set -euo pipefail
+          git config user.name  "forge-mentor[bot]"
+          git config user.email "forge-mentor@users.noreply.github.com"
+
+          # Exactly one path is ever touched. Nothing else in the working tree
+          # is staged, so this job cannot commit anything but the notes.
+          git add .forge/reviews/
+
+          if git diff --cached --quiet; then
+            echo "No change to the review notes."
+            exit 0
+          fi
+
+          git commit -m "chore: review notes for pull request #${{ github.event.pull_request.number }}"
+
+          # A second reviewer may have pushed its own notes while this ran.
+          # Rebase and retry rather than forcing, so neither set is lost.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"${{ github.event.pull_request.head.ref }}"; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — rebasing onto the branch and retrying."
+            git pull --rebase origin "${{ github.event.pull_request.head.ref }}"
+          done
+
+          echo "Could not push the review notes after three attempts."
+          exit 1

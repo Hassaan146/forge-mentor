@@ -261,7 +261,14 @@ def test_the_chain_file_is_written_as_decisions_are_made(project: str, forge: Pa
 
 
 def test_every_tool_is_registered_with_the_protocol() -> None:
-    """The tests above call plain functions; this proves the MCP surface too."""
+    """The tests above call plain functions; this proves the MCP surface too.
+
+    This assertion is exact rather than a subset on purpose. `server.run()`
+    once sat above the review tools in this file, and because it blocks, every
+    tool defined below it was never registered — invisible in a real session
+    while these tests still passed, because a test imports the module instead
+    of running it. An exact set is what catches that.
+    """
     import asyncio
 
     names = {tool.name for tool in asyncio.run(srv.server.list_tools())}
@@ -272,11 +279,27 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "current_state",
         "record_override",
         "clear_override",
+        "usage_report",
+        "assemble_request",
         "check_history",
         "repair_history",
         "check_review_setup",
         "fetch_review",
     }
+
+
+def test_the_server_starts_only_after_every_tool_is_registered() -> None:
+    """`server.run()` blocks, so anything defined below it never registers.
+
+    Checked against the source rather than the imported module because the bug
+    is invisible to an import: when this file is imported, `__name__` is not
+    "__main__", the guard is skipped, and all the tools register normally. It
+    only bites when Claude Code runs the file for real.
+    """
+    source = Path(srv.__file__).read_text(encoding="utf-8")
+    assert source.index("server.run()") > source.rindex("@server.tool("), (
+        "server.run() must stay at the very bottom of the module"
+    )
 
 
 def test_every_tool_describes_itself() -> None:

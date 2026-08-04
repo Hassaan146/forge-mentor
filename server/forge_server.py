@@ -326,10 +326,6 @@ def repair_history(project: str) -> dict[str, Any]:
     return {"actions": actions, "intact_now": fr.verify_after_repair(forge)}
 
 
-if __name__ == "__main__":
-    server.run()
-
-
 # --------------------------------------------------------------------------
 # review — decision 005, with no second login
 # --------------------------------------------------------------------------
@@ -366,3 +362,72 @@ def fetch_review(project: str, pr: int) -> dict[str, Any]:
         return rv.fetch_and_save(Path(project), forge, pr)
     except rv.ReviewError as exc:
         return {"error": str(exc)}
+
+
+# --------------------------------------------------------------------------
+# cost — decision 008, measured per decision 024
+# --------------------------------------------------------------------------
+
+
+@server.tool(
+    name="usage_report",
+    description=(
+        "How many tokens this project has used, read from Claude Code's own "
+        "session logs. Reports tokens, not money: most users are on a "
+        "subscription where a dollar figure would be invented. `cache_saving` "
+        "is the share of input served from cache — the number that says "
+        "whether request assembly is working. Reads only; changes nothing. If "
+        "`available` is false the logs could not be read, which affects "
+        "nothing else."
+    ),
+)
+def usage_report(project: str) -> dict[str, Any]:
+    import forge_meter as fm
+
+    return fm.report(Path(project), _forge_dir(project))
+
+
+@server.tool(
+    name="assemble_request",
+    description=(
+        "Order the parts of a request so the unchanging part comes first and "
+        "can be cached. Pass blocks as {name, text, tier} where tier is "
+        "'frozen' (the contract and skills), 'slow' (decisions already "
+        "recorded) or 'volatile' (this step). Returns the assembled text, a "
+        "fingerprint of the cacheable prefix, and any reason the cache will "
+        "miss — a date or an id inside a frozen block will silently cost the "
+        "whole prefix. **Writes `.forge/assembly.md`** to remember the "
+        "fingerprint, so drift between calls can be reported."
+    ),
+)
+def assemble_request(project: str, blocks: list[dict[str, str]]) -> dict[str, Any]:
+    import forge_assemble as fa
+
+    try:
+        parsed = [
+            fa.Block(
+                name=str(block.get("name") or f"block-{index}"),
+                text=str(block.get("text") or ""),
+                tier=fa.Tier[str(block.get("tier") or "volatile").strip().upper()],
+            )
+            for index, block in enumerate(blocks)
+        ]
+    except KeyError as exc:
+        return {"error": f"Unknown tier {exc}. Use frozen, slow, or volatile."}
+
+    try:
+        assembly = fa.assemble(parsed)
+    except fa.AssemblyError as exc:
+        return {"error": str(exc)}
+
+    result = fa.check(_forge_dir(project), assembly)
+    result["text"] = assembly.text
+    return result
+
+
+if __name__ == "__main__":  # pragma: no cover - process entry point
+    # Must stay at the very bottom. This sat above the review tools once, and
+    # because `run()` blocks, every tool defined below it was never registered
+    # — invisible in a real session, while the tests still passed because they
+    # import this module rather than run it.
+    server.run()
