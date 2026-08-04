@@ -317,3 +317,51 @@ def test_structuring_loads_almost_nothing() -> None:
     """It must transcribe, not interpret. Every extra skill is another voice
     telling the cheapest model to improve on the user's own words."""
     assert sk.skills_for("structuring") == ("forge-security-floor",)
+
+
+def test_a_folder_with_no_skills_in_it_is_not_an_installed_library(tmp_path: Path) -> None:
+    """A stray note in the skills folder is not a library.
+
+    The docstring promised "any non-empty directory" while the code required a
+    SKILL.md. Under the docstring's rule setup would have skipped the install
+    and left nothing routable behind.
+    """
+    folder = sk.library_dir(tmp_path)
+    folder.mkdir(parents=True)
+    (folder / "notes.txt").write_text("mine", encoding="utf-8")
+
+    assert sk.library_installed(tmp_path) is False
+
+
+def test_install_refuses_to_overwrite_a_folder_it_did_not_create(tmp_path: Path) -> None:
+    """git clone rejects a non-empty destination, and its message names
+    neither the directory nor the reason a user would care about."""
+    folder = sk.library_dir(tmp_path)
+    folder.mkdir(parents=True)
+    (folder / "notes.txt").write_text("mine", encoding="utf-8")
+
+    with pytest.raises(sk.SkillError, match="will not"):
+        sk.install_library(tmp_path)
+
+    assert (folder / "notes.txt").exists(), "the user's own file is untouched"
+
+
+def test_cleanup_removes_read_only_files(tmp_path: Path) -> None:
+    """Pins the `onexc` handler, which a review claimed took one argument.
+
+    It takes three — (func, path, exc) — and this is what proves it. Without a
+    working handler the cleanup silently does nothing on Windows, because git
+    marks everything under .git/objects read-only and a read-only file cannot
+    be deleted.
+    """
+    import os
+    import stat
+
+    folder = tmp_path / "library"
+    folder.mkdir()
+    locked = folder / "locked.txt"
+    locked.write_text("x", encoding="utf-8")
+    os.chmod(locked, stat.S_IREAD)
+
+    sk._remove(folder)
+    assert not folder.exists()

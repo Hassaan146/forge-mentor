@@ -185,10 +185,16 @@ def library_dir(home: Path | None = None) -> Path:
 
 
 def library_installed(home: Path | None = None) -> bool:
-    """Is the library there at all?
+    """Is there at least one usable skill there?
 
-    True on any non-empty skills directory rather than on a count. A user may
-    curate their own; demanding an exact 438 would call a pruned library broken.
+    **At least one `SKILL.md`, not merely a non-empty directory.** The
+    docstring used to promise the second while the code did the first, and the
+    two are not the same test: a skills folder holding a stray note or an
+    editor's dotfile would have counted as an installed library and setup would
+    have skipped the install, leaving nothing routable behind.
+
+    A count is deliberately not the signal either. A user may prune the library
+    to what they use; demanding an exact 438 would call that broken.
     """
     folder = library_dir(home)
     return folder.is_dir() and any(folder.glob("*/SKILL.md"))
@@ -222,6 +228,16 @@ def install_library(
     folder = library_dir(home)
     if library_installed(home):
         return {"installed": True, "already": True, "path": str(folder)}
+
+    # There but holding no skills — a half-finished install, or a folder the
+    # user made themselves. `git clone` refuses a non-empty destination, so
+    # without this the user would get git's error about a directory that
+    # "already exists and is not empty" and no idea which directory or why.
+    if folder.exists() and any(folder.iterdir()):
+        raise SkillError(
+            f"{folder} already exists but holds no skills. Forge will not "
+            "overwrite it — move or delete it, then run setup again."
+        )
 
     folder.parent.mkdir(parents=True, exist_ok=True)
 
