@@ -184,6 +184,61 @@ def library_dir(home: Path | None = None) -> Path:
     return (home or Path.home()) / ".claude" / LIBRARY_DIRNAME
 
 
+def library_commit(home: Path | None = None) -> str:
+    """The commit the installed library is actually sitting on, if it is a clone."""
+    folder = library_dir(home)
+    if not (folder / ".git").exists():
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(folder), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30, shell=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def library_is_clean(home: Path | None = None) -> bool:
+    """Is the working tree untouched since that commit?
+
+    Matching `HEAD` is not enough on its own. A modified `SKILL.md` leaves the
+    commit id exactly where it was, so an edited instruction file passed
+    verification unchanged — which is the whole thing being verified against.
+    Untracked files count too: adding a skill is as much a change as editing
+    one. A git that cannot answer is treated as dirty.
+    """
+    folder = library_dir(home)
+    if not (folder / ".git").exists():
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(folder), "status", "--porcelain", "--untracked-files=all"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            shell=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    return result.returncode == 0 and not result.stdout.strip()
+
+
+def library_verified(home: Path | None = None, commit: str = LIBRARY_COMMIT) -> bool:
+    """Is the installed library the reviewed one, and unmodified since?
+
+    A fresh clone is checked at install time, but a directory that was already
+    there skipped both checks — and these files are instructions Claude Code
+    loads and follows. "Something is installed" was being read as "the
+    reviewed set is installed", which are different claims.
+    """
+    return (
+        library_installed(home)
+        and library_commit(home) == commit
+        and library_is_clean(home)
+    )
+
+
 def library_installed(home: Path | None = None) -> bool:
     """Is there at least one usable skill there?
 
@@ -311,8 +366,22 @@ def status(home: Path | None = None, root: Path | None = None) -> dict[str, obje
     """What is present and what is not — for setup, and for the tests."""
     bundled_gaps = missing_bundled(root)
     routed_gaps = missing_routed(home)
+    installed = library_installed(home)
+    verified = library_verified(home)
     return {
-        "library_installed": library_installed(home),
+        "library_installed": installed,
+        "library_verified": verified,
+        "library_commit": library_commit(home),
+        "library_expected_commit": LIBRARY_COMMIT,
+        "library_warning": (
+            ""
+            if verified or not installed
+            else (
+                "The skill library in ~/.claude/skills is not the reviewed commit. "
+                "These files are instructions Forge follows, so check where it came "
+                "from, or move it aside and let setup fetch the pinned one."
+            )
+        ),
         "library_path": str(library_dir(home)),
         "missing_bundled": bundled_gaps,
         "missing_routed": routed_gaps,
