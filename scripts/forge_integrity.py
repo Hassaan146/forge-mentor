@@ -49,7 +49,12 @@ PREV_SHA = "prev_sha"
 # silently outside the fingerprint — someone could then change what a record
 # says without the hash moving. `EXCLUDED_FROM_HASH` was defined and never
 # read, which is exactly the shape of a check that is not doing anything.
-EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "date", "body"})
+# `date` used to sit here too, on the grounds that re-signing rewrites it. But
+# `Decision.write` persists it, and anything excluded is a field someone can
+# change while verification still passes — the date on an approval is not
+# decoration, it is when the user agreed. Re-signing recomputes the whole chain
+# regardless, so there was never a stability problem to trade for it.
+EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "body"})
 
 # What a record carries today, kept only so the order of the hash input is
 # stable. Anything not listed and not excluded is still signed.

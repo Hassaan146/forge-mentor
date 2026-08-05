@@ -141,7 +141,9 @@ def test_one_damaged_record_does_not_hide_the_rest(forge: Path) -> None:
 
     first = forge / "decisions" / fs.list_decisions(forge)[0].filename()
     first.write_text(
-        first.read_text(encoding="utf-8").replace("decided", "tampered", 1), encoding="utf-8"
+        # Content, not status: an unrecognised status is refused by the reader
+        # now, which is a stronger check that fires before this one.
+        first.read_text(encoding="utf-8") + "\nquietly appended\n", encoding="utf-8"
     )
 
     results = fi.check_all(forge)
@@ -164,15 +166,22 @@ def test_reformatting_does_not_look_like_tampering(forge: Path) -> None:
     assert fi.verify_decision(forge, 1).integrity is fi.Integrity.VERIFIED
 
 
-def test_the_date_field_is_not_part_of_the_fingerprint(forge: Path) -> None:
-    """Forge maintains the date itself; hashing it would make records unstable."""
+def test_moving_the_date_on_an_approval_is_detected(forge: Path) -> None:
+    """This asserted the opposite, and the reasoning behind it was wrong.
+
+    The date was excluded because re-signing rewrites it — but `Decision.write`
+    persists it, so it was a field someone could change while verification kept
+    passing. The date on an approval is not decoration; it is when the user
+    agreed to the thing. Re-signing recomputes the whole chain anyway, so there
+    was never a stability problem being bought.
+    """
     settle(forge, "which backend")
     path = forge / "decisions" / fs.list_decisions(forge)[0].filename()
     path.write_text(
         path.read_text(encoding="utf-8").replace("date: ", "date: 1999-01-01 #"),
         encoding="utf-8",
     )
-    assert fi.verify_decision(forge, 1).integrity is fi.Integrity.VERIFIED
+    assert fi.verify_decision(forge, 1).integrity is fi.Integrity.MODIFIED
 
 
 # --------------------------------------------------------------------------
