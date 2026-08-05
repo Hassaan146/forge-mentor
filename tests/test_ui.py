@@ -7,6 +7,7 @@ alone. These tests hold that promise to account.
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -123,11 +124,30 @@ def test_prompt_is_present() -> None:
 
 
 def test_colour_is_disabled_when_not_a_terminal() -> None:
-    """Piped output must carry no escape codes — logs stay readable."""
-    assert ANSI.search(ui.banner("x")) is None or ui._ON
+    """Piped output must carry no escape codes — logs stay readable.
+
+    Run in a subprocess with stdout captured, which is what "not a terminal"
+    actually means. The previous version ended in `or ui._ON`, so on a real
+    terminal it passed without checking anything — a test that could not fail,
+    which is the failure the coding standards name.
+    """
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, r'%s'); import forge_ui; print(forge_ui.banner('x'))"
+         % str(Path(__file__).resolve().parents[1] / "scripts")],
+        capture_output=True, text=True, check=True,
+        env={**os.environ, "FORCE_COLOR": "", "NO_COLOR": ""},
+    )
+    assert ANSI.search(result.stdout) is None, "piped output carried escape codes"
+    assert "decide-then-code" in result.stdout, "the banner still rendered"
 
 
-def test_output_survives_a_console_that_cannot_print_the_symbols() -> None:
+def test_output_survives_a_console_that_cannot_print_the_symbols(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A Windows console is usually cp1252, where none of ⚒ ⛔ ✅ ★ exist.
 
     Printing the banner raised UnicodeEncodeError and took the whole hook down
@@ -138,9 +158,22 @@ def test_output_survives_a_console_that_cannot_print_the_symbols() -> None:
     raw = io.BytesIO()
     narrow = io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
 
-    ui._make_output_utf8_safe()  # must not raise on any stream it is handed
+    # The stream has to actually reach the helper. The first version of this
+    # test reconfigured `narrow` itself and never handed it over, so it passed
+    # whether or not the helper did anything at all — a test that could not
+    # fail, which is the one thing the coding standards call out by name.
+    monkeypatch.setattr(ui.sys, "stdout", narrow)
+    monkeypatch.setattr(ui.sys, "stderr", narrow)
 
-    narrow.reconfigure(errors="replace")
+    ui._make_output_utf8_safe()
+
+    assert narrow.encoding.lower().replace("-", "") == "utf8", "the helper changed it"
+    assert narrow.errors == "replace"
+
     narrow.write(ui.banner("demo"))
+    narrow.write(ui.question_box("How should people log in?", "", 7))
     narrow.flush()
-    assert raw.getvalue(), "something was written rather than an exception raised"
+
+    written = raw.getvalue()
+    for symbol in (ui.RECORDED, ui.MARK):
+        assert symbol.encode() in written, f"{symbol} reached the stream intact"
