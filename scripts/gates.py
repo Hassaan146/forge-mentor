@@ -46,6 +46,12 @@ COMMIT_PATTERN = re.compile(r"\bgit\s+(commit|push)\b")
 # The subcommands that make work permanent.
 GATED_SUBCOMMANDS = frozenset({"commit", "push"})
 
+# Below the hook's own timeout, deliberately. The hook allows 300 seconds; if
+# the test run were allowed the same, the hook could be killed before this
+# script returned its "the tests timed out" denial — and a gate that dies is a
+# gate that lets the commit through. The gap is the time to write the answer.
+TEST_TIMEOUT = 240
+
 # Where a test suite lives, across the layouts people actually use. The check
 # was `tests/` or a root-level `test_*.py`, so a project using `test/`, nested
 # suites, or `*_test.py` was reported as having no tests — and the gate then
@@ -157,12 +163,12 @@ def run_tests(project: Path) -> tuple[bool, str]:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=300,
+            timeout=TEST_TIMEOUT,
         )
     except FileNotFoundError:
         return True, "pytest is not installed — gate skipped"
     except subprocess.TimeoutExpired:
-        return False, "the tests took longer than five minutes and were stopped"
+        return False, f"the tests ran past {TEST_TIMEOUT // 60} minutes and were stopped"
 
     tail = "\n".join((result.stdout or result.stderr).strip().splitlines()[-12:])
     return result.returncode == 0, tail
