@@ -199,7 +199,10 @@ def test_no_git_means_quarantine_rather_than_restore(tmp_path: Path) -> None:
     fs.answer(forge, fs.ask(forge, "a question").id, "decided")
 
     path = record_path(forge)
-    path.write_text(path.read_text(encoding="utf-8").replace("decided", "changed", 1), encoding="utf-8")
+    # Content, not status — an unrecognised status is refused on read now.
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\nedited after the fact\n", encoding="utf-8"
+    )
 
     problems = fr.diagnose(forge)
     assert problems[0].remedy is fr.Remedy.QUARANTINE
