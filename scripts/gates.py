@@ -112,7 +112,15 @@ def bump_attempts(forge_dir: Path) -> int:
     try:
         progress = fs.Progress.read(forge_dir)
     except fs.StateError:
-        return 0
+        # An unreadable progress file must not silently disable the escalation.
+        # Returning 0 here meant failures never accumulated after a crash or a
+        # damaged file, so the third-strike message never fired — decision 009
+        # would have been quietly switched off at exactly the moment a user was
+        # most likely to be stuck. Start a fresh count instead.
+        progress = fs.Progress(gate_attempts=1)
+        progress.write(forge_dir)
+        return progress.gate_attempts
+
     progress.gate_attempts += 1
     progress.write(forge_dir)
     return progress.gate_attempts
