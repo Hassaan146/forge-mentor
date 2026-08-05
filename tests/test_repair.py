@@ -221,3 +221,36 @@ def test_committed_version_of_an_uncommitted_file_is_none(repo: Path) -> None:
 def test_every_remedy_explains_itself(forge: Path) -> None:
     for remedy in fr.Remedy:
         assert remedy.description
+
+
+def test_restoring_keeps_what_it_overwrites(tmp_path: Path) -> None:
+    """This module's promise is that nothing is destroyed.
+
+    `quarantine` honoured it; `restore` wrote the committed text straight over
+    whatever was there. What it overwrote is exactly what is worth keeping —
+    either evidence of tampering or an uncommitted edit — and neither is
+    recoverable once gone.
+    """
+    import forge_repair as fr
+
+    forge = fs.init(tmp_path)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, capture_output=True)
+    for args in (["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    asked = fs.ask(forge, "how passwords are stored")
+    fs.answer(forge, asked.id, "# Hashed\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-qm", "record"], check=True, capture_output=True
+    )
+
+    path = forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()
+    path.write_text(path.read_text(encoding="utf-8").replace("Hashed", "Plain text"), encoding="utf-8")
+
+    fr.repair(forge)
+
+    assert "Hashed" in path.read_text(encoding="utf-8"), "the committed version is back"
+    kept = list((forge / "quarantine").glob("*.md"))
+    assert kept, "the altered version was not thrown away"
+    assert any("Plain text" in q.read_text(encoding="utf-8") for q in kept)

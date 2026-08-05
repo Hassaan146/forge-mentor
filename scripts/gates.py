@@ -29,7 +29,7 @@ import re
 import shlex
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -42,6 +42,45 @@ MAX_ATTEMPTS = 3  # decision 009 — escalate rather than loop forever
 # Commands that make work permanent. Only these are gated; ordinary git use
 # (status, diff, log, add) is never interrupted.
 COMMIT_PATTERN = re.compile(r"\bgit\s+(commit|push)\b")
+
+# The subcommands that make work permanent.
+GATED_SUBCOMMANDS = frozenset({"commit", "push"})
+
+# Where a test suite lives, across the layouts people actually use. The check
+# was `tests/` or a root-level `test_*.py`, so a project using `test/`, nested
+# suites, or `*_test.py` was reported as having no tests — and the gate then
+# returned success without running the tests sitting right there.
+TEST_GLOBS = (
+    "tests/**/test_*.py",
+    "tests/**/*_test.py",
+    "test/**/test_*.py",
+    "test/**/*_test.py",
+    "test_*.py",
+    "*_test.py",
+    "**/tests/**/test_*.py",
+)
+
+_SKIP_DIRS = {".venv", "venv", "node_modules", ".git", "site-packages"}
+
+
+def _has_tests(project: Path) -> bool:
+    """Does this project have a suite pytest would find?"""
+    for pattern in TEST_GLOBS:
+        for found in project.glob(pattern):
+            if not _SKIP_DIRS & set(found.parts):
+                return True
+
+    # A configured testpaths entry counts even when the directory is unusual.
+    for config in ("pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"):
+        path = project / config
+        if not path.is_file():
+            continue
+        try:
+            if "testpaths" in path.read_text(encoding="utf-8", errors="replace"):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def allow() -> None:
@@ -67,11 +106,38 @@ def deny(reason: str) -> None:
 def is_commit_command(command: str) -> bool:
     """True for a command that makes work permanent.
 
-    Matched on the text rather than a parsed argv because the Bash tool passes
-    a shell string, which may chain commands with && or ;. Anything containing
-    a commit or push is gated.
+    Each chained segment is examined on its own, and git's global options are
+    stepped over before the subcommand is read. The plain text search missed
+    `git -C /repo commit` and `git --no-pager push` — letting work past the
+    gate entirely — while stopping `echo "git commit"`, which does nothing at
+    all. Both errors came from treating a shell line as one string.
     """
-    return bool(COMMIT_PATTERN.search(command or ""))
+    for segment in re.split(r"&&|\|\||;|\||\n", command or ""):
+        words = segment.strip().split()
+        if not words:
+            continue
+
+        # Step over env assignments and a leading path to git.
+        index = 0
+        while index < len(words) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[index]):
+            index += 1
+        if index >= len(words) or PurePosixPath(words[index].replace("\\", "/")).name not in {
+            "git",
+            "git.exe",
+        }:
+            continue
+
+        # Step over git's own options, including the ones that take a value.
+        index += 1
+        while index < len(words) and words[index].startswith("-"):
+            if words[index] in {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}:
+                index += 1
+            index += 1
+
+        if index < len(words) and words[index] in GATED_SUBCOMMANDS:
+            return True
+
+    return False
 
 
 def run_tests(project: Path) -> tuple[bool, str]:
@@ -80,7 +146,7 @@ def run_tests(project: Path) -> tuple[bool, str]:
     A project with no test suite is not failed — Forge teaches, it does not
     refuse to work with a project that has not got there yet.
     """
-    if not (project / "tests").is_dir() and not list(project.glob("test_*.py")):
+    if not _has_tests(project):
         return True, "no test suite in this project yet"
 
     try:
