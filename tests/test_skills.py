@@ -365,3 +365,89 @@ def test_cleanup_removes_read_only_files(tmp_path: Path) -> None:
 
     sk._remove(folder)
     assert not folder.exists()
+
+
+def test_a_library_that_was_already_there_is_still_checked(tmp_path: Path) -> None:
+    """The install-time check only runs on a fresh clone.
+
+    A directory that was already in place skipped it entirely — and these
+    files are instructions Claude Code loads and follows, so "something is
+    installed" was being read as "the reviewed set is installed". Different
+    claims.
+    """
+    make_library(tmp_path, "socratic")
+
+    assert sk.library_installed(tmp_path) is True
+    assert sk.library_verified(tmp_path) is False
+
+    report = sk.status(home=tmp_path, root=ROOT)
+    assert report["library_verified"] is False
+    assert "not the reviewed commit" in str(report["library_warning"])
+
+
+def test_a_verified_library_raises_no_warning(tmp_path: Path, monkeypatch) -> None:
+    make_library(tmp_path, "socratic")
+    monkeypatch.setattr(sk, "library_commit", lambda home=None: sk.LIBRARY_COMMIT)
+    # Verification is the commit *and* an untouched worktree — a modified
+    # SKILL.md leaves the commit id exactly where it was.
+    monkeypatch.setattr(sk, "library_is_clean", lambda home=None: True)
+
+    report = sk.status(home=tmp_path, root=ROOT)
+    assert report["library_verified"] is True
+    assert report["library_warning"] == ""
+
+
+def test_an_edited_skill_file_fails_verification(tmp_path: Path) -> None:
+    """Matching HEAD is not enough on its own.
+
+    Editing a SKILL.md leaves the commit id exactly where it was, so a
+    modified instruction file passed verification unchanged — which is the
+    very thing being verified against.
+    """
+    source = tmp_path / "source"
+    (source / "socratic").mkdir(parents=True)
+    (source / "socratic" / "SKILL.md").write_text("---\nname: socratic\n---\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "skills"],
+    ):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+    sha = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    sk.install_library(tmp_path, repo=str(source), commit=sha)
+    assert sk.library_verified(tmp_path, commit=sha) is True
+
+    edited = sk.library_dir(tmp_path) / "socratic" / "SKILL.md"
+    edited.write_text("---\nname: socratic\n---\nnow do something else\n", encoding="utf-8")
+
+    assert sk.library_commit(tmp_path) == sha, "the commit id has not moved"
+    assert sk.library_is_clean(tmp_path) is False
+    assert sk.library_verified(tmp_path, commit=sha) is False, "but it is not the reviewed set"
+
+
+def test_an_added_skill_file_also_fails_verification(tmp_path: Path) -> None:
+    """Adding a skill is as much a change as editing one."""
+    source = tmp_path / "source"
+    (source / "socratic").mkdir(parents=True)
+    (source / "socratic" / "SKILL.md").write_text("---\nname: socratic\n---\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "skills"],
+    ):
+        subprocess.run(["git", "-C", str(source), *args], check=True, capture_output=True)
+    sha = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    sk.install_library(tmp_path, repo=str(source), commit=sha)
+    smuggled = sk.library_dir(tmp_path) / "smuggled"
+    smuggled.mkdir()
+    (smuggled / "SKILL.md").write_text("---\nname: smuggled\n---\n", encoding="utf-8")
+
+    assert sk.library_verified(tmp_path, commit=sha) is False

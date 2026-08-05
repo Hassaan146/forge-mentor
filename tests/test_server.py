@@ -237,9 +237,30 @@ def test_repair_reports_what_it_did(project: str, forge: Path) -> None:
         encoding="utf-8",
     )
 
-    result = repair_history(project)
+    # Asked first. This is the only code that overwrites the user's files, and
+    # it used to repair on the first call while its description claimed to
+    # want confirmation — a rule nothing checked.
+    asked_first = repair_history(project)
+    assert asked_first["needs_confirmation"] is True
+    assert asked_first["repaired"] is False
+    assert any("099" in line for line in asked_first["would_change"])
+    assert "quarantine" in asked_first["ask"], "the user is told nothing is deleted"
+
+    assert (forge / fs.DECISIONS / "099-added-later.md").exists(), "untouched so far"
+
+    result = repair_history(project, confirmed=True)
     assert result["intact_now"] is True
     assert any("099" in action for action in result["actions"])
+
+
+def test_nothing_to_repair_is_not_a_confirmation_prompt(project: str) -> None:
+    """Asking about damage that does not exist trains the user to click yes."""
+    asked = ask_question(project, "which backend")
+    record_answer(project, asked["id"], "FastAPI", "because")
+
+    result = repair_history(project)
+    assert result["nothing_to_do"] is True
+    assert result["intact_now"] is True
 
 
 # ==========================================================================
