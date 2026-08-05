@@ -3,11 +3,10 @@ id: 031
 question: What does "clean" mean when a finding is about code that has changed?
 status: decided
 date: 2026-08-04
-decided_by: forge
+decided_by: user
 implements: 009
 affects: [phase-9]
-needs_user_confirmation: true
-content_sha: bfe67b74ca9d39ee66e1e3306334feb9a9c8412adfc5d5f947c566e24146b336
+content_sha: 9f5f3cb094c7f28c09d0f608ef295aca4b92bd05fbc27bffbbef72f6449516c5
 prev_sha: 3fcca52a96aeacdf1d4e030de3871539fcbce32ec437b7628a9919ec7e3b1e95
 ---
 # Separate what is stale from what is open, and close threads deliberately
@@ -20,10 +19,9 @@ prev_sha: 3fcca52a96aeacdf1d4e030de3871539fcbce32ec437b7628a9919ec7e3b1e95
 
 **Recommended:** A and B together · **Decided:** A and B together
 
-> **This one was settled by Forge, not by the user, and is marked for confirmation.**
-> It changes what decision 009 gates on, which is load-bearing. It is recorded here rather
-> than left open because the phase could not proceed without an answer, and a wrong answer
-> written down is easier to overturn than an unwritten assumption.
+> Drafted by Forge because Phase 9 could not proceed without an answer, then **put to the
+> user and confirmed** — it changes what decision 009 gates on, which is load-bearing and
+> not Forge's to settle alone.
 
 ## The problem, found by running the loop rather than by thinking about it
 
