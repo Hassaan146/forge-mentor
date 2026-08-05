@@ -626,16 +626,96 @@ def push_work(project: str, confirmed: bool = False) -> dict[str, Any]:
         "declined with a reason. **Only then** — a thread closed without "
         "either is a finding silently dropped, which is worse than a count "
         "that reads too high (decision 031). Pass the `thread_id` from the "
-        "review file. Writes to the pull request conversation."
+        "review file, together with the project and the pull request number — "
+        "the id is checked against the findings Forge recorded. Writes to the "
+        "pull request conversation."
     ),
 )
-def resolve_finding(thread_id: str) -> dict[str, Any]:
+def resolve_finding(project: str, pr: int, thread_id: str) -> dict[str, Any]:
     import forge_review as rv
 
     try:
-        return {"resolved": rv.resolve_thread(thread_id)}
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc), "resolved": False}
+
+    try:
+        # Checked against the ids Forge itself wrote into the review notes.
+        # The tool used to accept any id, so a thread from another repository
+        # could be closed with the user's credentials and nothing would record
+        # that a finding had been handled at all.
+        allowed = rv.known_threads(forge, pr)
+        if not allowed:
+            return {
+                "error": (
+                    f"No review notes for pull request {pr}. Run fetch_review "
+                    "first — a thread is only closed against a finding Forge "
+                    "has on file."
+                ),
+                "resolved": False,
+            }
+        return {"resolved": rv.resolve_thread(thread_id, allowed=allowed)}
     except rv.ReviewError as exc:
         return {"error": str(exc), "resolved": False}
+
+
+@server.tool(
+    name="settle_small_decision",
+    description=(
+        "Record a decision Forge made itself in Auto mode. Use this **instead "
+        "of `record_answer`** whenever the user did not choose — it attributes "
+        "the record to Forge, so Code Explained and prompts.md never present a "
+        "Forge decision as the user's understanding (decision 030). Only for "
+        "furniture: call `next_step` first and use this only when it reports "
+        "`asks_user: false`. **Writes to disk.**"
+    ),
+)
+def settle_small_decision(
+    project: str,
+    decision_id: int,
+    choice: str,
+    reasoning: str,
+    options_considered: list[str] | None = None,
+) -> dict[str, Any]:
+    import forge_pipeline as pp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    pending = fs.open_question(forge)
+    if pending is None or pending.id != decision_id:
+        return {"error": "That decision is not the open question."}
+
+    # Checked here, not trusted from the caller. A model that mislabels a
+    # blast-radius question as furniture would otherwise answer it on the
+    # user's behalf and record that it was fine to do so.
+    if pp.should_ask(pending.question, pp.mode(forge)):
+        return {
+            "error": (
+                "This question is not Forge's to settle — it asks the user. "
+                "Use record_answer once they have answered."
+            ),
+            "question": pending.question,
+        }
+
+    body = [f"# {choice}", ""]
+    if options_considered:
+        body += ["**Options considered**", ""]
+        body += [f"- {option}" for option in options_considered]
+        body.append("")
+        body += [f"**Decided:** {choice}", ""]
+    body += ["## Why", "", reasoning, ""]
+
+    decision = fs.answer(forge, decision_id, "\n".join(body), decided_by="forge")
+    fr.write_chain(forge)
+    return {
+        "id": decision.id,
+        "file": decision.filename(),
+        "decided_by": "forge",
+        "writes_blocked": not fs.writes_allowed(forge)[0],
+    }
 
 
 @server.tool(
@@ -657,6 +737,10 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
         return {"error": str(exc)}
 
     return fpr.report(Path(project), forge, name or Path(project).name)
+
+if __name__ == "__main__":  # pragma: no cover - process entry point
+    # Must stay at the very bottom; see the note in test_server.py.
+    server.run()
 
 
 if __name__ == "__main__":  # pragma: no cover - process entry point

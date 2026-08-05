@@ -193,3 +193,52 @@ def test_the_report_says_who_decided_what(forge: Path) -> None:
     result = ex.report(forge)
     assert result["chosen_by_you"] == 1
     assert result["settled_by_forge"] == 1
+
+
+def test_a_hand_written_status_is_still_read(forge: Path) -> None:
+    """The Phase 1 records were written by hand.
+
+    One reading `Decided` or carrying a trailing space was skipped silently,
+    taking its choice, its rejected options and its reasoning out of the
+    document with nothing to say anything was missing.
+    """
+    folder = forge / fs.DECISIONS
+    folder.mkdir(exist_ok=True)
+    (folder / "001-by-hand.md").write_text(
+        fs.render_header(
+            {"id": "001", "question": "how notes are saved", "status": " Decided ",
+             "date": "2026-07-31", "decided_by": "user"}
+        )
+        + "# Both readable\n\n## Why\n\nA person has to read it.\n",
+        encoding="utf-8",
+    )
+
+    entries = ex.collect(forge)
+    assert len(entries) == 1
+    assert entries[0].choice == "Both readable"
+
+
+def test_two_similar_options_do_not_cancel_each_other_out(forge: Path) -> None:
+    """The case that lost a rejected option entirely.
+
+    "use hosted PostgreSQL" and "use hosted MySQL" share two words in three, so
+    a plain overlap ratio called both of them chosen — and the reader was never
+    told PostgreSQL had been considered and turned down.
+    """
+    options = ["use hosted PostgreSQL", "use hosted MySQL", "run it ourselves"]
+    rejected = ex.rejected_options(options, "use hosted MySQL")
+
+    assert "use hosted PostgreSQL" in rejected
+    assert "run it ourselves" in rejected
+    assert "use hosted MySQL" not in rejected
+
+
+def test_options_are_not_called_rejected_when_no_choice_was_parsed(forge: Path) -> None:
+    """Otherwise the document says the project turned down what it built."""
+    assert ex.rejected_options(["a", "b"], "") == []
+
+    text = ex.render([
+        ex.Explained(id=1, question="q", choice="", options=["a", "b"], why="", decided_by="user")
+    ])
+    assert "Also considered" not in text
+    assert "does not say which of these was taken" in text

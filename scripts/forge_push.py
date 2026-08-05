@@ -42,6 +42,9 @@ class Plan:
 
     branch: str = ""
     remote: str = ""
+    # The exact commit the user was shown and consented to. Approval is bound
+    # to this, not to whatever HEAD happens to be a moment later.
+    commit: str = ""
     files: list[str] = field(default_factory=list)
     secrets: list[str] = field(default_factory=list)
     ahead: int = 0
@@ -53,6 +56,7 @@ class Plan:
     def as_dict(self) -> dict[str, object]:
         return {
             "branch": self.branch,
+            "commit": self.commit,
             "remote": self.remote,
             "files": self.files,
             "commits_ahead": self.ahead,
@@ -90,13 +94,29 @@ def preview(repo: Path, branch: str = "") -> Plan:
     if _git(repo, "rev-parse", "--git-dir").returncode != 0:
         raise PushError("This is not a git repository yet.")
 
-    head = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
-    plan.branch = branch or (head.stdout.strip() if head.returncode == 0 else "")
 
     remote = _git(repo, "remote", "get-url", "origin")
     if remote.returncode != 0:
         raise PushError("There is no remote to push to. Connect one first.")
     plan.remote = remote.stdout.strip()
+
+    head = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    name = head.stdout.strip() if head.returncode == 0 else ""
+
+    # An unborn repository has no HEAD and a detached checkout reports "HEAD",
+    # so without this the refspec became `HEAD:` or `HEAD:HEAD` and pushed
+    # something nobody named.
+    if not branch and (not name or name == "HEAD"):
+        raise PushError(
+            "This checkout is not on a branch, so there is nothing to push to. "
+            "Check out a branch, or name the destination explicitly."
+        )
+    plan.branch = branch or name
+
+    commit = _git(repo, "rev-parse", "HEAD")
+    if commit.returncode != 0:
+        raise PushError("Nothing has been committed yet, so there is nothing to push.")
+    plan.commit = commit.stdout.strip()
 
     # What this branch has that the remote does not. A branch never pushed has
     # no upstream, so fall back to everything on it.
@@ -105,7 +125,11 @@ def preview(repo: Path, branch: str = "") -> Plan:
         plan.ahead = int(counted.stdout.strip())
         listed = _git(repo, "diff", "--name-only", f"origin/{plan.branch}..HEAD")
     else:
-        listed = _git(repo, "ls-files")
+        # The committed tree, not the index. `ls-files` includes staged files
+        # that a push cannot publish, so a staged `.env` blocked a push whose
+        # commit did not contain it — and conversely invited trust in a scan
+        # of files that were never going out.
+        listed = _git(repo, "ls-tree", "-r", "--name-only", plan.commit)
         plan.ahead = -1  # unknown: this branch is not on the remote yet
 
     plan.files = [line.strip() for line in listed.stdout.splitlines() if line.strip()]
@@ -150,8 +174,16 @@ def push(
             ),
         }
 
-    result = _git(repo, "push", "origin", f"HEAD:{plan.branch}", timeout=300)
+    # The reviewed commit by its id, never a symbolic HEAD. Between the
+    # preview the user approved and this line, a commit can land — and pushing
+    # HEAD would publish files that were never shown and never scanned.
+    result = _git(repo, "push", "origin", f"{plan.commit}:refs/heads/{plan.branch}", timeout=300)
     if result.returncode != 0:
         raise PushError(f"The push was refused: {result.stderr.strip()[:300]}")
 
-    return {"pushed": True, "branch": plan.branch, "remote": plan.remote}
+    return {
+        "pushed": True,
+        "branch": plan.branch,
+        "commit": plan.commit,
+        "remote": plan.remote,
+    }

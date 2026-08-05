@@ -292,11 +292,16 @@ def _post_graphql(query: str, variables: dict, token: str | None) -> dict:
 
 
 _THREADS_QUERY = """
-query($owner:String!, $name:String!, $pr:Int!) {
+query($owner:String!, $name:String!, $pr:Int!, $after:String) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$pr) {
-      reviewThreads(first:100) {
-        nodes { id isResolved comments(first:1) { nodes { databaseId } } }
+      reviewThreads(first:100, after:$after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          comments(first:100) { nodes { databaseId } }
+        }
       }
     }
   }
@@ -311,24 +316,38 @@ def review_threads(repo: str, pr: int, token: str | None = None) -> dict[int, st
     going to be done to it.
     """
     owner, _, name = repo.partition("/")
-    try:
-        data = _post_graphql(
-            _THREADS_QUERY, {"owner": owner, "name": name, "pr": pr}, token or github_token()
-        )
-    except ReviewError:
-        return {}  # thread ids are a convenience; losing them must not lose the review
-
+    token = token or github_token()
     out: dict[int, str] = {}
-    threads = (
-        data.get("repository", {}).get("pullRequest", {}).get("reviewThreads", {}).get("nodes")
-        or []
-    )
-    for thread in threads:
-        if thread.get("isResolved"):
-            continue
-        for comment in thread.get("comments", {}).get("nodes") or []:
-            if comment.get("databaseId"):
-                out[int(comment["databaseId"])] = thread["id"]
+    after = None
+
+    # Both connections are paginated. A hundred threads is not a lot on a busy
+    # pull request, and a comment past the cap simply had no thread id — so it
+    # could never be resolved, and the count it fed never came down.
+    for _ in range(20):
+        try:
+            data = _post_graphql(
+                _THREADS_QUERY,
+                {"owner": owner, "name": name, "pr": pr, "after": after},
+                token,
+            )
+        except ReviewError:
+            return out  # thread ids are a convenience; losing them must not lose the review
+
+        threads = (
+            data.get("repository", {}).get("pullRequest", {}).get("reviewThreads", {}) or {}
+        )
+        for thread in threads.get("nodes") or []:
+            if thread.get("isResolved"):
+                continue
+            for comment in thread.get("comments", {}).get("nodes") or []:
+                if comment.get("databaseId"):
+                    out[int(comment["databaseId"])] = thread["id"]
+
+        page = threads.get("pageInfo") or {}
+        if not page.get("hasNextPage"):
+            break
+        after = page.get("endCursor")
+
     return out
 
 
@@ -339,15 +358,47 @@ mutation($id:ID!) {
 """
 
 
-def resolve_thread(thread_id: str, token: str | None = None) -> bool:
+def known_threads(forge_dir: Path, pr: int) -> set[str]:
+    """The thread ids that appear in this project's own review notes.
+
+    A resolve request is only honoured for one of these. Without it the tool
+    took any id at all, so a thread id from another repository — or one simply
+    guessed — could be closed through the user's credentials, and neither the
+    server nor the notes would have any record that a finding was handled.
+    """
+    path = forge_dir / REVIEWS_DIR / f"pr-{valid_pr(pr)}.md"
+    if not path.is_file():
+        return set()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return set(re.findall(r"thread:\s*(\S+)", text))
+
+
+def resolve_thread(
+    thread_id: str,
+    token: str | None = None,
+    *,
+    allowed: set[str] | None = None,
+) -> bool:
     """Close a review thread, the same act a reviewer performs by hand.
 
     Decision 031: only ever called once a finding has been fixed or declined
     with a reason. A thread closed without either is a finding silently
     dropped, which is worse than a count that reads too high.
+
+    `allowed` is the set of threads this project actually recorded. Callers
+    that can supply it must, so the id is checked against something Forge
+    wrote rather than taken on trust from whoever asked.
     """
     if not thread_id:
         return False
+    if allowed is not None and thread_id not in allowed:
+        raise ReviewError(
+            "That thread is not one of this project's recorded findings, so "
+            "Forge will not close it."
+        )
     data = _post_graphql(_RESOLVE, {"id": thread_id}, token or github_token())
     return bool(
         data.get("resolveReviewThread", {}).get("thread", {}).get("isResolved")
@@ -369,7 +420,16 @@ def changed_files(repo: str, base: str, head: str, token: str | None = None) -> 
         return None
     if not isinstance(data, dict):
         return None
-    return {entry.get("filename", "") for entry in data.get("files") or []}
+
+    files = data.get("files") or []
+    # The compare endpoint stops at 300 files and does not paginate them. A
+    # file past that cap would come back "not changed", which reads as "the
+    # finding still applies" — the safe direction, but the count is then a
+    # guess. Report unknown instead, so nothing is marked stale on a partial
+    # answer either.
+    if data.get("total_commits") is not None and len(files) >= 300:
+        return None
+    return {entry.get("filename", "") for entry in files}
 
 
 def valid_pr(pr: object) -> int:
@@ -823,6 +883,7 @@ def _finding_block(finding: Finding) -> list[str]:
     return [
         f"### `{finding.path}:{finding.line}` — {finding.severity} _({finding.reviewer})_",
         "",
+        *([f"thread: {finding.thread_id}", ""] if finding.thread_id else []),
         body,
         "",
         *([f"[view on github]({finding.url})", ""] if finding.url else []),
