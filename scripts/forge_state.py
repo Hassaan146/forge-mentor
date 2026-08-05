@@ -211,6 +211,23 @@ class Progress:
         return path
 
 
+def _strict_int(value: str | None, path: Path) -> int:
+    """An id, or a named failure. Never a guess.
+
+    `_int` below is right for the progress summary, where a missing count is a
+    cosmetic gap. It is wrong for a decision id, which orders the chain and
+    identifies the record the governor is waiting on.
+    """
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        raise StateError(
+            f"This record's id is not a number: {value!r}. "
+            "Every decision needs an id, because the id is what orders them.",
+            path,
+        ) from None
+
+
 def _int(value: str | None) -> int:
     try:
         return int(str(value).strip())
@@ -272,7 +289,12 @@ class Decision:
             path.read_text(encoding="utf-8", errors="replace"), path
         )
         return cls(
-            id=_int(header.get("id")),
+            # Strict, unlike the other fields. A record whose id cannot be read
+            # is not a record with a missing id — it is a file nobody can place
+            # in the chain, and guessing 0 invents one that collides with the
+            # default `next_decision_id` returns. This module's whole stance is
+            # to fail loudly on a broken file rather than interpret it.
+            id=_strict_int(header.get("id"), path),
             question=header.get("question", ""),
             status=header.get("status", ""),
             decided_by=header.get("decided_by", ""),
