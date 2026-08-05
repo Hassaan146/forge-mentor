@@ -142,13 +142,18 @@ class Progress:
         """The governor's rule, in one place so it cannot be restated wrongly."""
         return self.override_active or not self.has_open_question
 
-    def resume_line(self) -> str:
+    def resume_line(self, open_question: str | None = None) -> str:
         """What a brand-new session on another account says first.
 
         Decision 011: nothing is retyped, nothing is re-explained.
+
+        The open question is passed in rather than read from this file. Since
+        decision 018 the records are the authority, and reading the summary
+        field here would show a stale question on exactly the account-switch
+        path decision 011 exists to protect.
         """
-        if self.has_open_question:
-            return f"Open question: {self.open_question}"
+        if open_question:
+            return f"Open question: {open_question}"
         if self.current_step:
             return f"In progress: {self.current_step}"
         if self.next_action:
@@ -209,6 +214,23 @@ class Progress:
         )
         path.write_text(header + "\n" + (self.body or "# Where we are\n"), encoding="utf-8")
         return path
+
+
+def _strict_int(value: str | None, path: Path) -> int:
+    """An id, or a named failure. Never a guess.
+
+    `_int` below is right for the progress summary, where a missing count is a
+    cosmetic gap. It is wrong for a decision id, which orders the chain and
+    identifies the record the governor is waiting on.
+    """
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        raise StateError(
+            f"This record's id is not a number: {value!r}. "
+            "Every decision needs an id, because the id is what orders them.",
+            path,
+        ) from None
 
 
 def _int(value: str | None) -> int:
@@ -272,7 +294,12 @@ class Decision:
             path.read_text(encoding="utf-8", errors="replace"), path
         )
         return cls(
-            id=_int(header.get("id")),
+            # Strict, unlike the other fields. A record whose id cannot be read
+            # is not a record with a missing id — it is a file nobody can place
+            # in the chain, and guessing 0 invents one that collides with the
+            # default `next_decision_id` returns. This module's whole stance is
+            # to fail loudly on a broken file rather than interpret it.
+            id=_strict_int(header.get("id"), path),
             question=header.get("question", ""),
             status=header.get("status", ""),
             decided_by=header.get("decided_by", ""),
