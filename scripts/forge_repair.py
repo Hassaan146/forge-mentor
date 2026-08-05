@@ -146,11 +146,27 @@ def warn(problems: list[Problem]) -> str:
 # --------------------------------------------------------------------------
 
 
-def restore(problem: Problem, repo: Path) -> bool:
-    """Put back the committed version of an altered record."""
+def restore(problem: Problem, repo: Path, forge_dir: Path | None = None) -> bool:
+    """Put back the committed version of an altered record.
+
+    **The current file is quarantined first.** This module's whole promise is
+    that nothing is ever destroyed, and `quarantine` honoured it while this
+    function did not — it wrote the committed text straight over whatever was
+    there. What it overwrote is exactly the thing worth keeping: either
+    evidence of tampering, or an edit the user made and had not committed yet.
+    Neither is recoverable once it is gone.
+    """
     original = committed_version(repo, problem.path)
     if original is None:
         return False
+
+    if forge_dir is not None and problem.path.is_file():
+        try:
+            quarantine(problem, forge_dir)
+        except OSError:
+            # Cannot set the evidence aside, so do not destroy it either.
+            return False
+
     _make_writable(problem.path)
     problem.path.write_text(original, encoding="utf-8")
     return True
@@ -187,8 +203,15 @@ def repair(forge_dir: Path, problems: list[Problem] | None = None) -> list[str]:
     done: list[str] = []
 
     for problem in problems:
-        if problem.remedy is Remedy.RESTORE and repo is not None and restore(problem, repo):
-            done.append(f"Decision {problem.decision_id:03d}: restored from git")
+        if (
+            problem.remedy is Remedy.RESTORE
+            and repo is not None
+            and restore(problem, repo, forge_dir)
+        ):
+            done.append(
+                f"Decision {problem.decision_id:03d}: restored from git "
+                "(the altered version was kept in quarantine)"
+            )
         else:
             moved = quarantine(problem, forge_dir)
             done.append(f"Decision {problem.decision_id:03d}: moved to {moved.name}")

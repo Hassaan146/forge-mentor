@@ -382,3 +382,62 @@ def test_a_path_that_cannot_be_resolved_is_treated_as_secret(
 
     monkeypatch.setattr(Path, "resolve", explode)
     assert safety.is_secret_file("notes.md") is True
+
+
+@pytest.mark.parametrize(
+    "command,gated",
+    [
+        ("git -C /repo commit -m x", True),
+        ("git --no-pager push", True),
+        ("git -c user.name=x commit -m y", True),
+        ("GIT_DIR=. git push", True),
+        ("/usr/bin/git push origin main", True),
+        ("git add -A && git commit -m x", True),
+        ("echo 'git commit'", False),
+        ("git status", False),
+    ],
+)
+def test_git_is_parsed_rather_than_pattern_matched(command: str, gated: bool) -> None:
+    """The text search failed in both directions at once.
+
+    `git -C /repo commit` and `git --no-pager push` slipped past the gate
+    entirely, so work was made permanent with no integrity or test check —
+    while `echo "git commit"` was blocked for doing nothing at all.
+    """
+    assert gates.is_commit_command(command) is gated
+
+
+@pytest.mark.parametrize("layout", ["test/test_thing.py", "tests/unit/test_deep.py", "thing_test.py"])
+def test_a_suite_outside_the_expected_folder_is_still_found(
+    tmp_path: Path, layout: str
+) -> None:
+    """The gate returned success without running tests that were sitting there."""
+    path = tmp_path / layout
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("def test_x():\n    assert True\n", encoding="utf-8")
+
+    assert gates._has_tests(tmp_path) is True
+
+
+def test_a_project_with_genuinely_no_tests_is_still_not_failed(tmp_path: Path) -> None:
+    """Forge teaches; it does not refuse a project that has not got there yet."""
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    assert gates._has_tests(tmp_path) is False
+
+
+@pytest.mark.parametrize(
+    "path",
+    [".docker/config.json", ".kube/config", "/home/me/.aws/credentials", ".gnupg/secring"],
+)
+def test_credential_stores_are_protected_by_folder(path: str) -> None:
+    """These carry registry logins and cluster tokens under ordinary names.
+
+    A name-based check waves them straight through — the filename is not the
+    signal here, the folder is.
+    """
+    assert safety.is_secret_file(path) is True
+
+
+@pytest.mark.parametrize("path", ["src/config.json", "docs/kube-guide.md", "app/docker.md"])
+def test_ordinary_files_with_similar_names_are_not_protected(path: str) -> None:
+    assert safety.is_secret_file(path) is False
