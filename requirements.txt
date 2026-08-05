@@ -1,4 +1,16 @@
 # Forge Mentor
-mcp>=2.0.0        # the engine speaks the Model Context Protocol
-pytest>=8.0       # core logic is tested with the model mocked
-pytest-cov>=5.0   # the program requires >=70% coverage on core logic
+#
+# Upper bounds are deliberate. A plugin is installed on someone else's machine
+# and updated on their schedule, so a dependency free to cross a major version
+# is a way for Forge to break in a session where nobody changed anything.
+mcp>=2.0.0,<3       # the engine speaks the Model Context Protocol
+pytest>=8.0,<9      # no model is ever called — see below
+pytest-cov>=5.0,<7  # the program requires >=70% coverage on core logic
+
+# On the test strategy, since the note here used to claim the model was mocked:
+# nothing is mocked, because nothing needs to be. The core logic is state
+# files, the governor, routing tables and parsing — all exercised by calling
+# the functions directly and by driving real files and real git repositories
+# in a temp directory. The MCP surface is checked once against the protocol's
+# own tool list. There is no model in the loop to mock, which is exactly what
+# makes the suite fast, free and deterministic.
