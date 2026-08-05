@@ -248,13 +248,23 @@ def test_a_new_field_is_protected_without_anyone_remembering(forge: Path) -> Non
     assert fi.fingerprint(decision) != before, "meaningful fields must move the hash"
 
 
-def test_the_excluded_fields_are_the_ones_forge_rewrites(forge: Path) -> None:
+def test_only_the_fingerprints_themselves_are_left_out(forge: Path) -> None:
+    """Everything a record persists is covered, including the date.
+
+    This used to assert `date` was excluded, on the reasoning that Forge
+    rewrites it when re-signing. But `Decision.write` persists it, so anything
+    excluded is a field someone can change while verification keeps passing —
+    and re-signing recomputes the chain anyway.
+    """
     settle(forge, "which backend")
     decision = fs.list_decisions(forge)[0]
 
     covered = fi.signed_fields(decision)
-    assert "question" in covered and "status" in covered
-    assert "date" not in covered, "Forge rewrites the date on every re-sign"
+    for field in ("question", "status", "date", "decided_by", "id", "affects"):
+        assert field in covered, f"{field} is persisted, so it must be signed"
+
+    for field in (fi.CONTENT_SHA, fi.PREV_SHA, "body"):
+        assert field not in covered, "the fingerprints cannot hash themselves"
 
 
 def test_the_body_is_always_hashed(forge: Path) -> None:
