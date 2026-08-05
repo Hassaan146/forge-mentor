@@ -216,6 +216,25 @@ class Progress:
         return path
 
 
+def _known_status(value: str, path: Path) -> str:
+    """A status Forge understands, or a named failure.
+
+    Anything else was accepted and stored as-is. Since `open_question` only
+    treats "open" as pending, a record reading `status: pending` counted as
+    settled — and the governor then allowed code past a decision nobody had
+    made. A typo in a hand-edited file was enough to switch the product's one
+    guarantee off, silently.
+    """
+    status = (value or "").strip().lower()
+    if status in {STATUS_OPEN, STATUS_DECIDED}:
+        return status
+    raise StateError(
+        f"This record's status is {value!r}, which Forge does not recognise. "
+        f"It has to be {STATUS_OPEN!r} or {STATUS_DECIDED!r}.",
+        path,
+    )
+
+
 def _strict_int(value: str | None, path: Path) -> int:
     """An id, or a named failure. Never a guess.
 
@@ -301,7 +320,7 @@ class Decision:
             # to fail loudly on a broken file rather than interpret it.
             id=_strict_int(header.get("id"), path),
             question=header.get("question", ""),
-            status=header.get("status", ""),
+            status=_known_status(header.get("status", ""), path),
             decided_by=header.get("decided_by", ""),
             date=header.get("date", ""),
             affects=header.get("affects", ""),
@@ -379,10 +398,27 @@ def ask(forge_dir: Path, question: str, body: str = "", affects: str = "") -> De
 
 
 def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user") -> Decision:
-    """Flip an open question to decided, in the same file it was asked in."""
-    for decision in list_decisions(forge_dir):
-        if decision.id != decision_id:
-            continue
+    """Flip an open question to decided, in the same file it was asked in.
+
+    Decision 018 accepts that two branches can both take the same id, so an id
+    is not a unique handle. Answering the first match meant the wrong record
+    could be filled in — and then the second one could never be answered at
+    all, because the first was no longer open. Where an id is ambiguous the
+    open one is the only sensible target; where more than one is open, Forge
+    stops rather than guessing which the user meant.
+    """
+    matches = [d for d in list_decisions(forge_dir) if d.id == decision_id]
+    still_open = [d for d in matches if d.status.strip().lower() == STATUS_OPEN]
+
+    if len(still_open) > 1:
+        raise StateError(
+            f"Two records share id {decision_id:03d} and both are open, so Forge "
+            "cannot tell which one you answered. Renumber one of them.",
+            forge_dir / DECISIONS,
+            repair="give one of the duplicate records a new id",
+        )
+
+    for decision in still_open or matches:
         if decision.status.strip().lower() != STATUS_OPEN:
             raise StateError(
                 f"Decision {decision_id:03d} is not open — it is {decision.status!r}.",
@@ -405,16 +441,27 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
 
 
 def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
-    """The governor's rule, in one place. Returns (allowed, reason_if_not)."""
+    """The governor's rule, in one place. Returns (allowed, reason_if_not).
+
+    **Unreadable state blocks.** This used to swallow the error and carry on,
+    so a damaged or missing progress file with no decision open came out as
+    "writes allowed" — Forge could not tell whether a question was open and
+    said yes anyway. Decision 004 is explicit that the safety path fails
+    closed, and this is the safety path.
+    """
     try:
         progress = Progress.read(forge_dir)
-    except StateError:
-        progress = None
+    except StateError as exc:
+        return False, f"Forge cannot read its own notes, so it will not write: {exc}"
 
-    if progress is not None and progress.override_active:
+    if progress.override_active:
         return True, ""
 
-    pending = open_question(forge_dir)
+    try:
+        pending = open_question(forge_dir)
+    except StateError as exc:
+        return False, f"Forge cannot read a decision record, so it will not write: {exc}"
+
     if pending is None:
         return True, ""
 

@@ -397,3 +397,68 @@ def test_the_resume_line_never_reads_the_stale_summary_field(project: Path) -> N
     line = fs.Progress.read(forge).resume_line(fs.open_question(forge).question)
     assert "the real open question" in line
     assert "stale" not in line
+
+
+def test_an_unrecognised_status_is_refused(project: Path) -> None:
+    """A typo in a hand-edited file switched the product's guarantee off.
+
+    `open_question` only treats "open" as pending, so `status: pending` read as
+    settled and the governor let code past a decision nobody had made.
+    """
+    forge = project / ".forge"
+    (forge / fs.DECISIONS).mkdir(exist_ok=True)
+    path = forge / fs.DECISIONS / "001-typo.md"
+    path.write_text(
+        fs.render_header({"id": "001", "question": "q", "status": "pending"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(fs.StateError, match="does not recognise"):
+        fs.Decision.read(path)
+
+
+def test_unreadable_notes_block_writes(project: Path) -> None:
+    """Decision 004: the safety path fails closed.
+
+    This swallowed the error, so a damaged progress file with no decision open
+    came out as "writes allowed" — Forge could not tell whether a question was
+    open and said yes anyway.
+    """
+    forge = project / ".forge"
+    (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
+
+    allowed, reason = fs.writes_allowed(forge)
+    assert allowed is False
+    assert "cannot read" in reason.lower()
+
+
+def test_an_unreadable_decision_record_blocks_writes(project: Path) -> None:
+    forge = project / ".forge"
+    (forge / fs.DECISIONS).mkdir(exist_ok=True)
+    (forge / fs.DECISIONS / "001-broken.md").write_text("no header\n", encoding="utf-8")
+
+    allowed, reason = fs.writes_allowed(forge)
+    assert allowed is False
+    assert "cannot read" in reason.lower()
+
+
+def test_two_open_records_sharing_an_id_stop_rather_than_guess(project: Path) -> None:
+    """Decision 018 accepts duplicate ids after a merge, so an id is not unique.
+
+    Answering the first match filled in the wrong record — and then the second
+    could never be answered at all, because the first was no longer open.
+    """
+    forge = project / ".forge"
+    first = fs.ask(forge, "the real question")
+
+    twin = forge / fs.DECISIONS / "001-from-another-branch.md"
+    twin.write_text(
+        fs.render_header(
+            {"id": f"{first.id:03d}", "question": "a question from a merge",
+             "status": "open", "date": "2026-08-01", "decided_by": "user"}
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(fs.StateError, match="share id"):
+        fs.answer(forge, first.id, "# anything\n")
