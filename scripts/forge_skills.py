@@ -199,15 +199,44 @@ def library_commit(home: Path | None = None) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def library_is_clean(home: Path | None = None) -> bool:
+    """Is the working tree untouched since that commit?
+
+    Matching `HEAD` is not enough on its own. A modified `SKILL.md` leaves the
+    commit id exactly where it was, so an edited instruction file passed
+    verification unchanged — which is the whole thing being verified against.
+    Untracked files count too: adding a skill is as much a change as editing
+    one. A git that cannot answer is treated as dirty.
+    """
+    folder = library_dir(home)
+    if not (folder / ".git").exists():
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(folder), "status", "--porcelain", "--untracked-files=all"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            shell=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+    return result.returncode == 0 and not result.stdout.strip()
+
+
 def library_verified(home: Path | None = None, commit: str = LIBRARY_COMMIT) -> bool:
-    """Is the installed library the reviewed one?
+    """Is the installed library the reviewed one, and unmodified since?
 
     A fresh clone is checked at install time, but a directory that was already
     there skipped both checks — and these files are instructions Claude Code
     loads and follows. "Something is installed" was being read as "the
     reviewed set is installed", which are different claims.
     """
-    return library_installed(home) and library_commit(home) == commit
+    return (
+        library_installed(home)
+        and library_commit(home) == commit
+        and library_is_clean(home)
+    )
 
 
 def library_installed(home: Path | None = None) -> bool:
