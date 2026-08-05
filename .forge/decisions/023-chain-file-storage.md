@@ -5,8 +5,8 @@ status: decided
 date: 2026-08-03
 decided_by: user
 affects: [phase-4]
-content_sha: 2d50f42b51fc3a874a7f55fc6daf0a1d914ea672cea949a3f9012acea4172295
-prev_sha: e926cb79e76d847bf233fefafec3e40f3a4123642fb3c87678e5e60a717a9227
+content_sha: 5f9af41beda5ca915217fdb4c886e9f6b37ecd2afe9a9e460bcc334d633425e3
+prev_sha: 1439b2cfdbbc7bc3409133cc4471e6455fa6dc663b39c40971036c55acdc6e29
 ---
 # A chain file, marked read-only where possible — never relied upon
 

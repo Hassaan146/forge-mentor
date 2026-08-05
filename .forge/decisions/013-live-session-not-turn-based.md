@@ -6,8 +6,8 @@ date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-5, phase-8]
 supersedes_detail_in: R7
-content_sha: 580e06589ca9ed66fcb1744dafa487b7628d8ff8d783d00f0b6ec5495a664ac1
-prev_sha: ecb78913b881e15eb9e6c97872131c8b34b5343030c30db71131c9af2f699626
+content_sha: 1624224175b3cee3198562b528caf0819b0f47fb1812c966b5d6781257e53d9d
+prev_sha: 9335778c21510f4a2afdf76dd8a6c0d0ac34ed27cadec83229000a33b9a810fc
 ---
 # One answer triggers a continuous stream, not a round trip
 

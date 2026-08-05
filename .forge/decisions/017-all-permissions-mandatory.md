@@ -7,8 +7,8 @@ decided_by: user
 resolves: conflict between 006 and 014
 amends: 006
 affects: [phase-2, phase-8]
-content_sha: ca6652fdb7c28d04fa5475ef61b8fa1f7ae43c45af20fbe72a671f28116b9d89
-prev_sha: 93d4bddc5a5fc1d0f1c24d85ffe0338f6092fc06a505068b9703ab0098da7c7e
+content_sha: abc2a0c4cf80bd6c4d7f89bff4f096a93db363c164529a82e46269d633aebb69
+prev_sha: fcc1c1d158f63018f0dca309a8c6c7c6dc8870523006719c9a77ba460401864e
 ---
 # All-or-nothing — decision 014 stands, 006 is amended
 

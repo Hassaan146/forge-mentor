@@ -7,8 +7,8 @@ decided_by: user
 overrides: challenge-001 finding C1
 affects: [phase-5, phase-10, submission]
 risk: open
-content_sha: 3dac9af995b274dee48c48027b41a51b7435ad2e66d40590077c07e9eb7cc6a8
-prev_sha: d4f607887290e879e1650cf079a420d11eb2d2f64ee566fa5fc5be13727d323c
+content_sha: 9ddd447bf38296e5ab7d5606fa6fa1d7b3e49eca899448279dd1ac6754722421
+prev_sha: 67115fa543fbe5575d44fcfaec361cf7728c12ffc37c55cd60758f2390e78e87
 ---
 # Anthropic-only for the pipeline — user decision, with one requirement still unmet
 

@@ -5,8 +5,8 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-8]
-content_sha: ecb78913b881e15eb9e6c97872131c8b34b5343030c30db71131c9af2f699626
-prev_sha: 3dac9af995b274dee48c48027b41a51b7435ad2e66d40590077c07e9eb7cc6a8
+content_sha: 9335778c21510f4a2afdf76dd8a6c0d0ac34ed27cadec83229000a33b9a810fc
+prev_sha: 9ddd447bf38296e5ab7d5606fa6fa1d7b3e49eca899448279dd1ac6754722421
 ---
 # The repository is the memory — the chat is not
 

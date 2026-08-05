@@ -5,8 +5,8 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-3]
-content_sha: 93d4bddc5a5fc1d0f1c24d85ffe0338f6092fc06a505068b9703ab0098da7c7e
-prev_sha: 5786ec0e2ca22c667fe1f8b99526494d0b1e556cf22e0e6a9e9097a244f176fa
+content_sha: fcc1c1d158f63018f0dca309a8c6c7c6dc8870523006719c9a77ba460401864e
+prev_sha: 5de3153bc9fc3662a766163d8f38d29e2f6c7f8df33911efdf01128ae823b410
 ---
 # Committed to the project repository and pushed to GitHub
 

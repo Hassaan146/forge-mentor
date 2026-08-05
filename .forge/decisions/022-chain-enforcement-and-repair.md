@@ -6,8 +6,8 @@ date: 2026-08-03
 decided_by: user
 strengthens: 021
 affects: [phase-4]
-content_sha: e926cb79e76d847bf233fefafec3e40f3a4123642fb3c87678e5e60a717a9227
-prev_sha: 47fb32e2221e4d6465224a67cc48a679645eb069c531b6b5f9a0ac49acb4ef23
+content_sha: 1439b2cfdbbc7bc3409133cc4471e6455fa6dc663b39c40971036c55acdc6e29
+prev_sha: 986e05c49120d48fd8ae4dc9276eea557b6fbc7aa41b0bf164176aad77bccebc
 ---
 # Warn, stop, and restore the record from its committed version
 

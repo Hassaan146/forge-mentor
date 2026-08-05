@@ -6,8 +6,8 @@ date: 2026-08-03
 decided_by: user
 resolves: challenge-001 finding C2
 affects: [phase-4]
-content_sha: 8e990c1308e92a7f04eb53eb3eaf8058ae41601c95623c0237af992dd466fe7d
-prev_sha: 2768fa5f37f20fbadd9644695053d8b707d2b44b65988de99104b97d790c6726
+content_sha: 0e03330b402f289d6962edd0571f2fa91a8f910c293d584d52e91c2a4c699918
+prev_sha: 2ae51feb453e0bfdecda5b2cd53f4ea7510a0eb3a6385da2d480a3690e9d9ec3
 ---
 # Sign what Forge writes; forged records show as unverified
 

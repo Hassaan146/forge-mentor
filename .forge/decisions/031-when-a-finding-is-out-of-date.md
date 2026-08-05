@@ -6,8 +6,8 @@ date: 2026-08-04
 decided_by: user
 implements: 009
 affects: [phase-9]
-content_sha: 9f5f3cb094c7f28c09d0f608ef295aca4b92bd05fbc27bffbbef72f6449516c5
-prev_sha: 3fcca52a96aeacdf1d4e030de3871539fcbce32ec437b7628a9919ec7e3b1e95
+content_sha: 7222fdf6183c39818931c576d517790e4253a19d6e0e653cf552bb482988d9ae
+prev_sha: ca96e31a19bc8a5f1805db0058c1f3377d4cdb7a2a239673649221049b87dde8
 ---
 # Separate what is stale from what is open, and close threads deliberately
 

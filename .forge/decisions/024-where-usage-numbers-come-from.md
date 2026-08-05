@@ -6,8 +6,8 @@ date: 2026-08-04
 decided_by: user
 implements: 008
 affects: [phase-6]
-content_sha: 753040cc9aa733c71bf8ea420cd80a20eedaa4a052b25fc5d7a8d95171d122ef
-prev_sha: 2d50f42b51fc3a874a7f55fc6daf0a1d914ea672cea949a3f9012acea4172295
+content_sha: 4f5eca37a24cf84f03db619d89359a4de35e14dae7af30859a95712e431fec0f
+prev_sha: 5f9af41beda5ca915217fdb4c886e9f6b37ecd2afe9a9e460bcc334d633425e3
 ---
 # Read Claude Code's own transcripts
 

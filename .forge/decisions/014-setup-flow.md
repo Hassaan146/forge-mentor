@@ -6,8 +6,8 @@ date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-8]
 conflicts_with: 006
-content_sha: d4773a0d4e46f20455d81e068c657a16dc61c59cb04174d691f7bfbf10138bf9
-prev_sha: 580e06589ca9ed66fcb1744dafa487b7628d8ff8d783d00f0b6ec5495a664ac1
+content_sha: c42dc9367b71e88d77cf35d3918a67c5f325774f0b3e8ad8df170140197ff38a
+prev_sha: 1624224175b3cee3198562b528caf0819b0f47fb1812c966b5d6781257e53d9d
 ---
 # Connect accounts, explain the workflow, request permissions — all mandatory
 

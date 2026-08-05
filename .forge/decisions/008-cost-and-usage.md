@@ -5,8 +5,8 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-2, phase-6]
-content_sha: 259aec07eee04ba15288d44d56e19da1fb1a9afe8d33c6c81f9e57b25e3cd5dc
-prev_sha: 87ab9ad681055310ee60d8b166359e3a833344238389f191cf84be88ec0d9210
+content_sha: 5e2b1377abbda6d7ed6f4fe14954898d1895a4f8825555244e73e75383e48e57
+prev_sha: da7ef82ff34524b5891c58d49be7bb17a81f2947008a3a6bd4ad50206fc5b189
 ---
 # Show usage and warn along the way; a spending limit comes later
 

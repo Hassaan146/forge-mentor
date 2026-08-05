@@ -5,8 +5,8 @@ status: decided
 date: 2026-07-31
 decided_by: user
 affects: [phase-3, phase-5]
-content_sha: 2768fa5f37f20fbadd9644695053d8b707d2b44b65988de99104b97d790c6726
-prev_sha: f096def71c72bc694716395747279c11556f219d0c67acecb823b324caf4009f
+content_sha: 2ae51feb453e0bfdecda5b2cd53f4ea7510a0eb3a6385da2d480a3690e9d9ec3
+prev_sha: 22be2b7ced0f1db2f1bc37a1e61b163ef082b9969964f5f87f24d272df9f0acd
 ---
 # Local files, one writer, re-read every session
 
