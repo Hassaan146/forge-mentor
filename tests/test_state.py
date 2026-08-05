@@ -181,10 +181,24 @@ def test_in_flight_work_travels_to_the_next_session(project: Path) -> None:
     progress.current_step = "rate limiting"
     progress.write(forge)
 
-    # what a fresh session on another account would read
-    assert fs.Progress.read(forge).current_step == "rate limiting"
-    assert "rate limiting" in fs.Progress.read(forge).resume_line()
-    assert fs.open_question(forge).question == "how people log in"
+    # What a fresh session on another account would read. The open question
+    # comes first, because it is the thing blocking work — and it is passed in
+    # from the records rather than read from the summary field.
+    #
+    # This assertion used to look for "rate limiting" and passed only because
+    # the summary's own `open_question` was never written by `ask()`. So the
+    # resume line named the step in progress and stayed silent about the
+    # question the user was actually stuck on — on exactly the account-switch
+    # path decision 011 exists to protect.
+    progress = fs.Progress.read(forge)
+    assert progress.current_step == "rate limiting"
+
+    pending = fs.open_question(forge)
+    assert pending.question == "how people log in"
+    assert "how people log in" in progress.resume_line(pending.question)
+
+    # With nothing open, the step in progress is what a session resumes on.
+    assert "rate limiting" in progress.resume_line(None)
 
 
 def test_resume_line_falls_back_through_what_it_knows(project: Path) -> None:
@@ -336,3 +350,50 @@ def test_notes_contain_nothing_account_specific(project: Path) -> None:
         text = path.read_text(encoding="utf-8").lower()
         for forbidden in ("account_id", "session_key", "api_key", "oauth", "@gmail", "token:"):
             assert forbidden not in text, f"{forbidden} leaked into {path.name}"
+
+
+def test_a_record_with_an_unreadable_id_is_named_not_guessed(project: Path) -> None:
+    """The id orders the chain and identifies what the governor waits on.
+
+    Guessing 0 invented a record that collides with the default
+    `next_decision_id` returns — and this module's whole stance is to fail
+    loudly on a broken file rather than interpret it.
+    """
+    forge = project / ".forge"
+    (forge / fs.DECISIONS).mkdir(exist_ok=True)
+    broken = forge / fs.DECISIONS / "0xx-bad-id.md"
+    broken.write_text(
+        fs.render_header({"id": "not-a-number", "question": "q", "status": "decided"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(fs.StateError, match="not a number"):
+        fs.Decision.read(broken)
+
+
+def test_a_missing_count_in_the_summary_is_still_forgiving(project: Path) -> None:
+    """The strictness is for ids only. A cosmetic count is not worth stopping for."""
+    forge = project / ".forge"
+    progress = fs.Progress.read(forge)
+    progress.questions_answered = 0
+    progress.write(forge)
+    assert fs.Progress.read(forge).questions_answered == 0
+
+
+def test_the_resume_line_never_reads_the_stale_summary_field(project: Path) -> None:
+    """Decision 018 makes the records authoritative.
+
+    `ask()` writes a decision file and does not touch the summary, so anything
+    reading `Progress.open_question` shows whatever was last written there —
+    which is exactly the account-switch path decision 011 protects.
+    """
+    forge = project / ".forge"
+    fs.ask(forge, "the real open question")
+
+    progress = fs.Progress.read(forge)
+    progress.open_question = "something stale from weeks ago"
+    progress.write(forge)
+
+    line = fs.Progress.read(forge).resume_line(fs.open_question(forge).question)
+    assert "the real open question" in line
+    assert "stale" not in line
