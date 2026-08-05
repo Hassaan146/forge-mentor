@@ -108,7 +108,11 @@ def collect(forge_dir: Path) -> list[Explained]:
             decision = fs.Decision.read(path)
         except (fs.StateError, OSError):
             continue
-        if decision.status != fs.STATUS_DECIDED:
+        # Compared loosely on purpose. The Phase 1 records were hand-written,
+        # and one reading "Decided" or carrying a trailing space would have
+        # been skipped silently — taking its choice, its rejected options and
+        # its reasoning out of the document with no sign anything was missing.
+        if decision.status.strip().lower() != fs.STATUS_DECIDED:
             continue  # an open question is not yet part of the account
         out.append(read(decision))
     return sorted(out, key=lambda entry: entry.id)
@@ -164,13 +168,21 @@ def render(entries: list[Explained], project: str = "") -> str:
             mark = "" if not entry.was_automatic else "  *(settled by Forge)*"
             lines += [f"**{entry.choice}**{mark}", ""]
 
-        if entry.options:
-            rejected = [o for o in entry.options if not _is_chosen(o, entry.choice)]
+        if entry.options and entry.choice:
+            # Only when the choice was actually identified. With no choice to
+            # compare against, `_is_chosen` matches nothing and every option
+            # would be listed as rejected — telling the reader the project
+            # turned down the thing it actually built.
+            rejected = rejected_options(entry.options, entry.choice)
             if rejected:
-                lines += [
-                    "Also considered: " + "; ".join(rejected),
-                    "",
-                ]
+                lines += ["Also considered: " + "; ".join(rejected), ""]
+        elif entry.options:
+            lines += [
+                "Options put forward: " + "; ".join(entry.options),
+                "",
+                "_The record does not say which of these was taken._",
+                "",
+            ]
 
         if entry.why:
             lines += [entry.why.strip(), ""]
@@ -183,20 +195,48 @@ def render(entries: list[Explained], project: str = "") -> str:
     return "\n".join(lines)
 
 
-def _is_chosen(option: str, choice: str) -> bool:
-    """Is this option the one that was taken?
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"\w+", text.lower()))
 
-    Compared loosely because the recorded choice is the user's own words, which
-    rarely match the option text exactly — the point of accepting free text.
+
+def rejected_options(options: list[str], choice: str) -> list[str]:
+    """The options that were not taken.
+
+    Matching is done across the whole set rather than one option at a time,
+    because what identifies a choice is the word that tells the options apart
+    — not how much of it the choice happens to repeat. "use hosted PostgreSQL"
+    and "use hosted MySQL" share two words in three, so a plain overlap ratio
+    called both of them chosen and dropped the rejected one from the document
+    entirely.
+
+    The comparison stays loose because the user answers in their own words,
+    which is the point of asking that way.
     """
-    if not choice:
-        return False
-    option_words = set(re.findall(r"\w+", option.lower()))
-    choice_words = set(re.findall(r"\w+", choice.lower()))
-    if not option_words:
-        return False
-    return len(option_words & choice_words) / len(option_words) > 0.6
+    if not choice or not options:
+        return []
 
+    shared: set[str] = set()
+    for index, option in enumerate(options):
+        for other in options[index + 1 :]:
+            shared |= _words(option) & _words(other)
+
+    chosen_words = _words(choice)
+    out: list[str] = []
+    for option in options:
+        distinguishing = _words(option) - shared
+        if distinguishing:
+            taken = bool(distinguishing & chosen_words)
+        else:
+            overlap = _words(option) & chosen_words
+            taken = bool(_words(option)) and len(overlap) / len(_words(option)) > 0.6
+        if not taken:
+            out.append(option)
+    return out
+
+
+def _is_chosen(option: str, choice: str) -> bool:
+    """Was this single option the one taken? Kept for callers with no set."""
+    return bool(choice) and option not in rejected_options([option], choice)
 
 def write(forge_dir: Path, project: str = "") -> Path:
     """Assemble the document and put it where it is committed with the code."""

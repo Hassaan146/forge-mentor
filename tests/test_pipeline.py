@@ -30,7 +30,19 @@ def forge(tmp_path: Path) -> Path:
     return fs.init(tmp_path)
 
 
+def started(forge: Path) -> None:
+    """At least one decision recorded — a project that has actually begun.
+
+    A fresh directory now reports INTERROGATION rather than CHALLENGE: there is
+    no plan to challenge before anything has been decided. So every test past
+    the first question has to have started.
+    """
+    asked = fs.ask(forge, "which backend")
+    fs.answer(forge, asked.id, "# FastAPI\n\n## Why\n\nsmall\n")
+
+
 def challenge(forge: Path) -> None:
+    started(forge)
     (forge / pl.CHALLENGED_MARKER).write_text("# challenged\n", encoding="utf-8")
 
 
@@ -132,9 +144,16 @@ def test_the_other_modes_ask_about_everything(mode: pl.Mode) -> None:
 
 
 def test_an_empty_question_is_not_treated_as_furniture() -> None:
-    """Better one needless question than a silent decision."""
-    assert pl.should_ask("", pl.Mode.AUTO) is False
-    assert pl.is_load_bearing("") is False
+    """Better one needless question than a silent decision.
+
+    This asserted the opposite of its own name — `should_ask("") is False`,
+    which is Auto settling a question it could not read. There is nothing in a
+    blank question to classify, and "I cannot tell" must not resolve to "Forge
+    decides".
+    """
+    assert pl.should_ask("", pl.Mode.AUTO) is True
+    assert pl.should_ask("   ", pl.Mode.AUTO) is True
+    assert pl.is_load_bearing("") is False, "blank is not load-bearing, it is unreadable"
 
 
 # --------------------------------------------------------------------------
@@ -171,8 +190,21 @@ def test_in_auto_a_big_question_is_still_asked(forge: Path) -> None:
     assert pl.next_step(forge).asks_user is True
 
 
+def test_a_project_that_has_not_started_is_asked_the_first_question(forge: Path) -> None:
+    """There is no plan to challenge before anything has been decided.
+
+    A fresh directory used to fall straight through to CHALLENGE, and
+    INTERROGATION was only reachable once a question was already open — so the
+    stage that opens the first question could never be the one suggested.
+    """
+    step = pl.next_step(forge)
+    assert step.stage is pl.Stage.INTERROGATION
+    assert step.asks_user is True
+
+
 def test_the_challenge_comes_before_any_code(forge: Path) -> None:
     """Premortem and redteam found three criticals on this project's own plan."""
+    started(forge)
     assert pl.next_step(forge).stage is pl.Stage.CHALLENGE
 
 
@@ -278,3 +310,54 @@ def test_status_reports_damage_rather_than_raising(forge: Path) -> None:
 
     report = pl.status(forge)
     assert report["needs_repair"] is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Should we use OAuth or our own accounts?",
+        "How does sign-in work?",
+        "What is the signing-in flow?",
+        "Do we need SSO?",
+        "Should sign-up be open to anyone?",
+        "Is SAML worth supporting?",
+    ],
+)
+def test_authentication_in_every_spelling_is_load_bearing(question: str) -> None:
+    """These forms slipped past the first pattern list.
+
+    `OAuth`, `sign-in` and `signing in` matched nothing, so in Auto mode Forge
+    would have settled an authentication architecture decision on its own —
+    the exact class the list exists to protect.
+    """
+    assert pl.is_load_bearing(question) is True
+    assert pl.should_ask(question, pl.Mode.AUTO) is True
+
+
+def test_a_damaged_settings_file_is_never_overwritten(forge: Path) -> None:
+    """A mode change must not destroy unrelated settings to record itself."""
+    path = forge / fs.SETTINGS
+    path.write_text("this file is damaged but it is the user's\n", encoding="utf-8")
+
+    with pytest.raises(pl.PipelineError, match="will not"):
+        pl.set_mode(forge, "auto")
+
+    assert "the user's" in path.read_text(encoding="utf-8"), "left exactly as found"
+
+
+def test_a_finished_step_goes_to_the_teaching_gate(forge: Path) -> None:
+    """Decision 009: built and green is not finished until it is said back.
+
+    The loop returned to BUILDING instead, so the gate carrying the product's
+    entire teaching claim was never reached by the state machine.
+    """
+    ready_to_build(forge)
+    progress = fs.Progress.read(forge)
+    progress.current_step = "the login form"
+    progress.next_action = ""
+    progress.write(forge)
+
+    step = pl.next_step(forge)
+    assert step.stage is pl.Stage.TEACH_BACK
+    assert step.asks_user is True
+    assert "forge-explain-back" in step.skills

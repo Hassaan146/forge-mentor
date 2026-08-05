@@ -88,7 +88,8 @@ class PipelineError(Exception):
 LOAD_BEARING = (
     r"\b(stack|framework|language|runtime)\w*",
     r"\b(database|schema|migration|storage|persistence|persist)\w*",
-    r"\b(log\s?in|logging\s?in|sign\s?in|auth|authentication|authoris|authoriz"
+    r"\b(log[\s-]?in|logging[\s-]?in|sign[\s-]?in|signing[\s-]?in|sign[\s-]?up"
+    r"|oauth|openid|saml|sso|auth|authentication|authoris|authoriz"
     r"|password|session|token|credential|permission|access control)\w*",
     r"\b(api|endpoint|contract|protocol|interface)\w*",
     r"\b(deploy|hosting|infrastructure|environment)\w*",
@@ -114,9 +115,16 @@ def is_load_bearing(question: str) -> bool:
 
 
 def should_ask(question: str, mode: Mode) -> bool:
-    """Does this question go to the user, or does Forge answer it?"""
+    """Does this question go to the user, or does Forge answer it?
+
+    A blank question always goes to the user. There is nothing in it to
+    classify, and "I cannot tell" must never resolve to "Forge decides" — that
+    is the one direction where being wrong costs a decision the user never
+    made. The first version returned False, and the test asserting it was
+    named for the safe behaviour while asserting the unsafe one.
+    """
     if mode is Mode.AUTO:
-        return is_load_bearing(question)
+        return not question.strip() or is_load_bearing(question)
     return True  # pipeline and accept-edits ask about everything that is asked
 
 
@@ -160,8 +168,14 @@ def set_mode(forge_dir: Path, wanted: str | Mode) -> Mode:
     if path.is_file():
         try:
             header, body = fs.parse_header(path.read_text(encoding="utf-8"), path)
-        except (fs.StateError, OSError):
-            header, body = {}, ""
+        except (fs.StateError, OSError) as exc:
+            # Report the damage; never write over it. Discarding a header that
+            # failed to parse and rewriting the same file would destroy every
+            # unrelated setting in it just to record a mode change.
+            raise PipelineError(
+                "The settings file could not be read, so Forge will not "
+                f"overwrite it: {exc}"
+            ) from None
 
     header["type"] = "settings"
     header["mode"] = chosen.value
@@ -253,6 +267,18 @@ def next_step(forge_dir: Path) -> Step:
             question=pending.question,
         )
 
+    # A project with no decisions at all has not started, so the first step is
+    # to ask — not to challenge a plan that does not exist yet. The first
+    # version fell straight to CHALLENGE on a fresh directory and INTERROGATION
+    # was only ever reached once a question was already open, which meant the
+    # stage that opens the first question could never be the one suggested.
+    if not fs.list_decisions(forge_dir):
+        return _step(
+            Stage.INTERROGATION,
+            why="nothing is decided yet — begin the foundation questions",
+            asks_user=True,
+        )
+
     if not challenge_done(forge_dir):
         return _step(
             Stage.CHALLENGE,
@@ -277,6 +303,17 @@ def next_step(forge_dir: Path) -> Step:
             Stage.REVIEW_FIX,
             why=f"the gate has failed {progress.gate_attempts} time(s) — fix before building on",
             asks_user=False,
+        )
+
+    # A step whose code is written and whose gate has passed is not finished:
+    # decision 009 needs the user to say it back. Without this the loop
+    # returned to BUILDING and the teaching gate — the product's whole claim —
+    # was never reached by the state machine at all.
+    if progress.current_step and not progress.next_action:
+        return _step(
+            Stage.TEACH_BACK,
+            why=f"{progress.current_step} is built and green — say it back before it closes",
+            asks_user=True,
         )
 
     return _step(

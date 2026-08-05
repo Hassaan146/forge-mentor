@@ -291,6 +291,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "next_step",
         "set_mode",
         "explain_code",
+        "settle_small_decision",
     }
 
 
@@ -356,8 +357,14 @@ def test_clearing_the_override_blocks_again(project: str) -> None:
 def test_the_pipeline_tool_says_what_happens_next(project: str) -> None:
     """The stage is derived from disk, so the plugin has to be able to ask."""
     answer = call(srv.next_step)(project)
-    assert answer["stage"] == "challenge", "nothing is built before the plan is challenged"
+    assert answer["stage"] == "interrogation", "a fresh project starts by asking"
+    assert answer["asks_user"] is True
     assert answer["mode"] == "pipeline"
+
+    # Once something is decided, the plan gets challenged before any code.
+    asked = ask_question(project, "which backend")
+    record_answer(project, asked["id"], "FastAPI", "small")
+    assert call(srv.next_step)(project)["stage"] == "challenge"
 
 
 def test_the_mode_can_be_changed_and_explains_itself(project: str) -> None:
