@@ -365,3 +365,30 @@ def test_cleanup_removes_read_only_files(tmp_path: Path) -> None:
 
     sk._remove(folder)
     assert not folder.exists()
+
+
+def test_a_library_that_was_already_there_is_still_checked(tmp_path: Path) -> None:
+    """The install-time check only runs on a fresh clone.
+
+    A directory that was already in place skipped it entirely — and these
+    files are instructions Claude Code loads and follows, so "something is
+    installed" was being read as "the reviewed set is installed". Different
+    claims.
+    """
+    make_library(tmp_path, "socratic")
+
+    assert sk.library_installed(tmp_path) is True
+    assert sk.library_verified(tmp_path) is False
+
+    report = sk.status(home=tmp_path, root=ROOT)
+    assert report["library_verified"] is False
+    assert "not the reviewed commit" in str(report["library_warning"])
+
+
+def test_a_verified_library_raises_no_warning(tmp_path: Path, monkeypatch) -> None:
+    make_library(tmp_path, "socratic")
+    monkeypatch.setattr(sk, "library_commit", lambda home=None: sk.LIBRARY_COMMIT)
+
+    report = sk.status(home=tmp_path, root=ROOT)
+    assert report["library_verified"] is True
+    assert report["library_warning"] == ""

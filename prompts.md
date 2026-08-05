@@ -2,12 +2,14 @@
 type: prompts
 project: Forge Mentor
 entries: 30
-generated: 2026-08-04
+generated: 2026-08-05
 ---
 
 # Prompts — Forge Mentor
 
 Generated from the decision records, not written afterwards. Each entry is what Forge actually asked and what was actually answered, recorded at the time.
+
+Anything credential-shaped is blanked before it is written here — this file sits in the project root and the repository may be public. The full text is always in `.forge/decisions/`.
 
 ## Which model did what
 
@@ -492,6 +494,6 @@ live pace (R7) and warn-don't-block (decision 004).
 - **B** — judge each finding against the current file and mark superseded ones
 - **C** — count only findings raised against the current head commit
 
-**Answered by Forge (recorded, not chosen by the user):** A and B together
+**Answered by the user:** A and B together
 
 ---

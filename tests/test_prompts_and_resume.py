@@ -188,3 +188,65 @@ def test_the_gate_count_survives_a_restart(project: Path, forge: Path) -> None:
 
     importlib.reload(fs)
     assert fs.Progress.read(forge).gate_attempts == 2
+
+
+# --------------------------------------------------------------------------
+# credentials never reach the project root — PR #8
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "postgres://admin:hunter2@db.example.com/app",
+        "we used sk-abcdefghij0123456789XYZ for it",
+        "API_KEY=supersecretvalue",
+        "AKIA1234567890ABCDEF",
+        "password: correcthorsebattery",
+    ],
+)
+def test_credential_shaped_text_never_reaches_prompts_md(text: str) -> None:
+    """The reasoning is free text typed into a terminal, and people paste keys.
+
+    prompts.md lands in the project root of a repository that may be public,
+    so it is the last place that should carry one through verbatim.
+    """
+    out, hits = fp.redact(text)
+    assert hits >= 1
+    assert fp.REDACTED in out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "because it is small and agent-centric, like FastAPI",
+        "I don't want to be responsible for keeping passwords safe",
+        "https://example.com/docs",
+    ],
+)
+def test_ordinary_reasoning_is_left_alone(text: str) -> None:
+    """Over-redacting is preferred, but not to the point of erasing the reason."""
+    out, hits = fp.redact(text)
+    assert hits == 0
+    assert out == text
+
+
+def test_the_patterns_are_real_escapes_not_control_bytes() -> None:
+    """A regression guard for a bug that was invisible in every view of the file.
+
+    `\b` was written as an actual backspace byte, so every pattern silently
+    required a backspace to match and the redaction did nothing at all. The
+    file looked correct in editors, in diffs and in review.
+    """
+    for pattern in fp._SECRET_SHAPES:
+        assert "\x08" not in pattern.pattern, "a literal backspace is never intended"
+
+
+def test_a_redacted_log_says_so(project: Path, forge: Path) -> None:
+    """Silent redaction would leave the reader trusting a doctored record."""
+    decide(forge, "which database", "hosted Postgres", "connect via postgres://u:p@h/db")
+    text = fp.render(__import__("forge_explain").collect(forge))
+
+    assert fp.REDACTED in text
+    assert "were blanked" in text
+    assert "in its decision record" in text, "the reader is told where the original is"
