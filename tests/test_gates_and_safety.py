@@ -441,3 +441,28 @@ def test_credential_stores_are_protected_by_folder(path: str) -> None:
 @pytest.mark.parametrize("path", ["src/config.json", "docs/kube-guide.md", "app/docker.md"])
 def test_ordinary_files_with_similar_names_are_not_protected(path: str) -> None:
     assert safety.is_secret_file(path) is False
+
+
+def test_the_test_timeout_leaves_the_hook_room_to_answer() -> None:
+    """A gate that dies mid-answer lets the commit through.
+
+    The hook allows 300 seconds. If the test run were given the same, the hook
+    could be killed before this script returned its "the tests timed out"
+    denial — which reads to Claude Code as no objection at all.
+    """
+    import json
+    from pathlib import Path
+
+    config = json.loads(
+        (Path(__file__).resolve().parents[1] / "hooks" / "hooks.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    hook_timeouts = [
+        h["timeout"]
+        for group in config["hooks"]["PreToolUse"]
+        for h in group["hooks"]
+        if "gates.py" in h.get("command", "")
+    ]
+    assert hook_timeouts, "the gate hook must declare a timeout"
+    assert all(t > gates.TEST_TIMEOUT for t in hook_timeouts)
