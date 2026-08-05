@@ -60,6 +60,14 @@ SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".ppk"}
 # `.env.example` and friends exist to be read — they hold names, not values.
 SAFE_SUFFIXES = (".example", ".sample", ".template", ".dist")
 
+# Directories whose contents are credentials whatever the file is called.
+# `.docker/config.json` and `.kube/config` carry registry logins and cluster
+# tokens under names that look entirely ordinary, so a name-based check waves
+# them straight through — the filename is not the signal here, the folder is.
+SECRET_DIRS = frozenset(
+    {".aws", ".docker", ".kube", ".ssh", ".gnupg", ".config/gcloud", ".azure"}
+)
+
 # Phrases that try to reissue instructions to the model. Text arriving from a
 # review comment or a fetched page has no business containing any of them.
 INJECTION_PATTERNS = (
@@ -147,7 +155,20 @@ def is_secret_file(path: str, cwd: str | Path | None = None) -> bool:
         return True
 
     # A link may sit inside a directory of credentials rather than be one.
-    return any(_name_is_secret(part) for part in resolved.parts[-2:])
+    if any(_name_is_secret(part) for part in resolved.parts[-2:]):
+        return True
+
+    return _in_secret_dir(candidate) or _in_secret_dir(resolved)
+
+
+def _in_secret_dir(path: Path) -> bool:
+    """Is this file inside a folder that holds credentials by definition?"""
+    parts = [part.lower() for part in path.parts]
+    if any(part in SECRET_DIRS for part in parts):
+        return True
+    # Two-part names such as `.config/gcloud`.
+    joined = {f"{a}/{b}" for a, b in zip(parts, parts[1:])}
+    return bool(joined & SECRET_DIRS)
 
 
 def secret_in_command(command: str, cwd: str | None = None) -> str | None:
