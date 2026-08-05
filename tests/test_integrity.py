@@ -275,3 +275,23 @@ def test_the_body_is_always_hashed(forge: Path) -> None:
     before = fi.fingerprint(decision)
     decision.body = "# Something else entirely\n"
     assert fi.fingerprint(decision) != before
+
+def test_a_header_forge_does_not_model_is_still_signed(forge: Path) -> None:
+    """`Decision.read` used to discard anything it did not recognise.
+
+    A header added later would then carry meaning from outside the fingerprint
+    — changeable without the hash moving, which is the whole thing this file
+    exists to prevent.
+    """
+    settle(forge, "which backend")
+    path = forge / "decisions" / fs.list_decisions(forge)[0].filename()
+
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("status:", "approved_by: the-cto\nstatus:", 1), encoding="utf-8")
+
+    decision = fs.Decision.read(path)
+    assert decision.extra.get("approved_by") == "the-cto", "the header is kept, not dropped"
+
+    # And it is inside the fingerprint: changing it changes the hash, so the
+    # record no longer verifies against the one stored when it was written.
+    assert fi.verify_decision(forge, 1).integrity is fi.Integrity.MODIFIED
