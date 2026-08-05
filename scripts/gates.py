@@ -119,7 +119,16 @@ def is_commit_command(command: str) -> bool:
     all. Both errors came from treating a shell line as one string.
     """
     for segment in re.split(r"&&|\|\||;|\||\n", command or ""):
-        words = segment.strip().split()
+        # shlex, not split(). `git -C "/repo with spaces" commit` broke into
+        # the wrong words, the subcommand was never found, and the commit went
+        # through with no integrity or test check at all. posix=True so `-c user.name="A B"` stays one word. It also eats
+        # backslashes, which would mangle a Windows path — but only ever
+        # inside an option *value*, and those are stepped over rather than
+        # read. An unbalanced quote falls back to a plain split.
+        try:
+            words = shlex.split(segment.strip(), posix=True)
+        except ValueError:
+            words = segment.strip().split()
         if not words:
             continue
 
