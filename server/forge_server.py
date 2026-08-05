@@ -316,14 +316,45 @@ def check_history(project: str) -> dict[str, Any]:
     description=(
         "Repair the decision history: restore altered records from their "
         "committed version, and move aside any record that was never "
-        "committed. Only call this after the user has confirmed — it "
-        "overwrites files."
+        "committed. **Call it once without `confirmed` first** — that returns "
+        "what would change and the question to put to the user. It only "
+        "repairs when `confirmed` comes back true, and `confirmed` must come "
+        "from the user, never from your own reading of the situation. "
+        "**Overwrites files.**"
     ),
 )
-def repair_history(project: str) -> dict[str, Any]:
+def repair_history(project: str, confirmed: bool = False) -> dict[str, Any]:
     forge = _forge_dir(project)
-    actions = fr.repair(forge)
-    return {"actions": actions, "intact_now": fr.verify_after_repair(forge)}
+    problems = fr.diagnose(forge)
+
+    if not problems:
+        return {"actions": [], "intact_now": True, "nothing_to_do": True}
+
+    if not confirmed:
+        # The only code in this project that overwrites the user's files, and
+        # it had no gate on it — the description asked for confirmation and
+        # nothing checked. Same rule as publishing (decision 005): the user is
+        # shown what would change, then asked, per repair.
+        return {
+            "repaired": False,
+            "needs_confirmation": True,
+            "warning": fr.warn(problems),
+            "would_change": [
+                f"decision {p.decision_id:03d}: {p.remedy.value}" for p in problems
+            ],
+            "ask": (
+                f"Repair {len(problems)} damaged record(s)? Altered records are "
+                "restored from git and the current version is kept in "
+                ".forge/quarantine — nothing is deleted."
+            ),
+        }
+
+    actions = fr.repair(forge, problems)
+    return {
+        "repaired": True,
+        "actions": actions,
+        "intact_now": fr.verify_after_repair(forge),
+    }
 
 
 if __name__ == "__main__":
