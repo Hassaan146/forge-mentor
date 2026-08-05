@@ -75,6 +75,16 @@ REVIEWER_PATTERN = re.compile(
 RESOLVED_MARKER = re.compile(r"(✅\s*Addressed in|marked as resolved|已解决)", re.IGNORECASE)
 
 
+def _count(number: int, noun: str) -> str:
+    """`1 finding` / `3 findings`.
+
+    A small thing, but this text is the first line a user reads about their own
+    work, and "1 finding(s) point at" reads as machine output rather than as
+    something written for them (rule R1).
+    """
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
 def reviewer_of(login: str) -> str | None:
     """Which reviewer this GitHub account is, if it is one of ours."""
     for name, pattern in REVIEWERS.items():
@@ -785,7 +795,9 @@ def to_markdown(review: Review, repo: str = "") -> str:
         ]
         if review.stale_findings:
             lines += [
-                f"{len(review.stale_findings)} sit against code that has changed since — "
+                f"{_count(len(review.stale_findings), 'finding')} "
+                f"{'sits' if len(review.stale_findings) == 1 else 'sit'} against code "
+                "that has changed since — "
                 "read them below before calling this step done (decision 031).",
                 "",
             ]
@@ -822,7 +834,9 @@ def to_markdown(review: Review, repo: str = "") -> str:
         lines += [
             "## Raised against code that has since changed",
             "",
-            f"{len(review.stale_findings)} finding(s) point at files edited after they were "
+            f"{_count(len(review.stale_findings), 'finding')} "
+            f"{'points' if len(review.stale_findings) == 1 else 'point'} at files "
+            "edited after they were "
             "written. **That does not mean they are fixed** — it means nobody can tell from "
             "the pull request alone, so each needs reading against the file as it is now "
             "(decision 031). Most of this project's real bugs were reported against an "
