@@ -44,8 +44,16 @@ PREV_SHA = "prev_sha"
 # The fingerprint covers the question, the outcome, and the prose — everything
 # that carries meaning. Fields Forge maintains itself (the fingerprints, and
 # the date it was written) are excluded, or the hash could never be stable.
+# Fail closed: everything is signed unless it is named here. The first version
+# was an allowlist, so a header field added later would carry meaning and sit
+# silently outside the fingerprint — someone could then change what a record
+# says without the hash moving. `EXCLUDED_FROM_HASH` was defined and never
+# read, which is exactly the shape of a check that is not doing anything.
+EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "date", "body"})
+
+# What a record carries today, kept only so the order of the hash input is
+# stable. Anything not listed and not excluded is still signed.
 SIGNED_FIELDS = ("id", "question", "status", "decided_by", "affects")
-EXCLUDED_FROM_HASH = {CONTENT_SHA, PREV_SHA, "date"}
 
 GENESIS = "genesis"  # what the first record points back to
 
@@ -90,8 +98,17 @@ def fingerprint(decision: fs.Decision) -> str:
     a reformat — line endings, trailing whitespace, key order — does not look
     like tampering. Meaning is what is protected, not byte layout.
     """
+    # Named fields first, in a fixed order, then anything else the record
+    # carries — so a field added tomorrow is inside the fingerprint without
+    # anyone having to remember to add it.
+    extra = sorted(
+        name
+        for name in vars(decision)
+        if name not in SIGNED_FIELDS and name not in EXCLUDED_FROM_HASH
+    )
     parts = [
-        f"{field}={_normalise(getattr(decision, field, ''))}" for field in SIGNED_FIELDS
+        f"{field}={_normalise(getattr(decision, field, ''))}"
+        for field in (*SIGNED_FIELDS, *extra)
     ]
     parts.append(f"body={_normalise(decision.body)}")
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
