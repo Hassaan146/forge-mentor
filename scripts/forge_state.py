@@ -38,6 +38,26 @@ REQUIRED_PROGRESS_FIELDS = ("stage", "open_question", "override_active")
 _TRUE = {"true", "yes", "1", "on"}
 _NONE = {"", "none", "null", "-"}
 
+# Header keys `Decision` models as its own attributes. Anything else a record
+# carries is kept in `extra` rather than discarded, so the fingerprint covers
+# it — a header added later would otherwise carry meaning from outside the
+# hash and be changeable without detection.
+#
+# The two fingerprint fields are listed here too. They are not modelled either,
+# but they are the hash — a fingerprint that covered itself could never verify.
+_MODELLED_HEADER_KEYS = frozenset(
+    {
+        "id",
+        "question",
+        "status",
+        "decided_by",
+        "date",
+        "affects",
+        "content_sha",
+        "prev_sha",
+    }
+)
+
 
 class StateError(Exception):
     """A state file could not be trusted.
@@ -270,6 +290,11 @@ class Decision:
     date: str = field(default_factory=lambda: date.today().isoformat())
     affects: str = ""
     body: str = ""
+    # Header keys this class does not model. Kept so the fingerprint can cover
+    # them: `Decision.read` used to discard anything unrecognised, so a header
+    # someone added later carried meaning and sat outside the hash entirely —
+    # changeable without the fingerprint moving.
+    extra: dict[str, str] = field(default_factory=dict)
 
     _SLUG = re.compile(r"[^a-z0-9]+")
 
@@ -320,6 +345,11 @@ class Decision:
             date=header.get("date", ""),
             affects=header.get("affects", ""),
             body=body,
+            extra={
+                key: value
+                for key, value in header.items()
+                if key not in _MODELLED_HEADER_KEYS
+            },
         )
 
 
