@@ -466,3 +466,21 @@ def test_the_test_timeout_leaves_the_hook_room_to_answer() -> None:
     ]
     assert hook_timeouts, "the gate hook must declare a timeout"
     assert all(t > gates.TEST_TIMEOUT for t in hook_timeouts)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'git -C "/repo with spaces" commit -m x',
+        'git -c user.name="A B" push',
+        r"git -C C:\repo commit -m x",
+    ],
+)
+def test_a_quoted_git_option_does_not_hide_the_subcommand(command: str) -> None:
+    """`split()` broke on a quoted path.
+
+    The subcommand was never found, so the commit went through with no
+    integrity check and no test run — a bypass that needed only a directory
+    name with a space in it.
+    """
+    assert gates.is_commit_command(command) is True
