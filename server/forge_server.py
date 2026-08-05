@@ -626,14 +626,35 @@ def push_work(project: str, confirmed: bool = False) -> dict[str, Any]:
         "declined with a reason. **Only then** — a thread closed without "
         "either is a finding silently dropped, which is worse than a count "
         "that reads too high (decision 031). Pass the `thread_id` from the "
-        "review file. Writes to the pull request conversation."
+        "review file, together with the project and the pull request number — "
+        "the id is checked against the findings Forge recorded. Writes to the "
+        "pull request conversation."
     ),
 )
-def resolve_finding(thread_id: str) -> dict[str, Any]:
+def resolve_finding(project: str, pr: int, thread_id: str) -> dict[str, Any]:
     import forge_review as rv
 
     try:
-        return {"resolved": rv.resolve_thread(thread_id)}
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc), "resolved": False}
+
+    try:
+        # Checked against the ids Forge itself wrote into the review notes.
+        # The tool used to accept any id, so a thread from another repository
+        # could be closed with the user's credentials and nothing would record
+        # that a finding had been handled at all.
+        allowed = rv.known_threads(forge, pr)
+        if not allowed:
+            return {
+                "error": (
+                    f"No review notes for pull request {pr}. Run fetch_review "
+                    "first — a thread is only closed against a finding Forge "
+                    "has on file."
+                ),
+                "resolved": False,
+            }
+        return {"resolved": rv.resolve_thread(thread_id, allowed=allowed)}
     except rv.ReviewError as exc:
         return {"error": str(exc), "resolved": False}
 

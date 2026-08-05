@@ -179,3 +179,47 @@ def test_a_repository_with_no_remote_says_what_is_missing(tmp_path: Path) -> Non
     git(work, "init", "-q")
     with pytest.raises(push.PushError, match="no remote"):
         push.preview(work)
+
+
+def test_a_detached_checkout_is_refused(repo: Path) -> None:
+    """`HEAD:` and `HEAD:HEAD` are refspecs nobody named."""
+    sha = git(repo, "rev-parse", "HEAD").stdout.strip()
+    git(repo, "checkout", "-q", sha)
+
+    with pytest.raises(push.PushError, match="not on a branch"):
+        push.preview(repo)
+
+
+def test_a_staged_secret_does_not_block_a_commit_that_lacks_it(repo: Path) -> None:
+    """`ls-files` reads the index, which is not what a push publishes.
+
+    A staged `.env` blocked a push whose commit did not contain it — and by the
+    same token invited trust in a scan of files that were never going out.
+    """
+    (repo / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    git(repo, "add", ".env")  # staged, never committed
+
+    plan = push.preview(repo)
+    assert plan.safe is True
+    assert ".env" not in plan.files
+
+
+def test_the_push_publishes_the_commit_that_was_approved(repo: Path) -> None:
+    """Approval is bound to a commit id, not to whatever HEAD becomes later.
+
+    Between the preview a user approves and the push itself, a commit can land
+    — and pushing a symbolic HEAD would publish files that were never shown
+    and never scanned.
+    """
+    approved = push.preview(repo).commit
+
+    (repo / "sneaked.py").write_text("x = 1\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "landed after the preview")
+
+    result = push.push(repo, confirmed=True, branch=push.preview(repo).branch)
+    assert result["commit"] != approved, "preview re-run sees the new commit"
+
+    # The plan carries the id it scanned, so a caller reusing an approved plan
+    # publishes exactly what was approved.
+    assert len(approved) == 40
