@@ -49,10 +49,16 @@ PREV_SHA = "prev_sha"
 # next time someone extends the format. A denylist covers new fields by default;
 # leaving one out has to be a deliberate act.
 #
-# Excluded because Forge maintains them itself and they change on every write:
-#   content_sha / prev_sha  the fingerprints, which cannot hash themselves
-#   date                    rewritten whenever a record is re-signed
-EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "date", "body"})
+# Excluded because Forge maintains them itself and they cannot hash themselves:
+#   content_sha / prev_sha  the fingerprints
+#   body                    hashed separately and last, so it is never dropped
+#
+# `date` used to sit here too, on the grounds that re-signing rewrites it. But
+# `Decision.write` persists it, and anything excluded is a field someone can
+# change while verification still passes — the date on an approval is not
+# decoration, it is when the user agreed. Re-signing recomputes the whole chain
+# regardless, so there was never a stability problem to trade for it.
+EXCLUDED_FROM_HASH = frozenset({CONTENT_SHA, PREV_SHA, "body"})
 
 GENESIS = "genesis"  # what the first record points back to
 

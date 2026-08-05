@@ -4,7 +4,7 @@
 # and updated on their schedule, so a dependency free to cross a major version
 # is a way for Forge to break in a session where nobody changed anything.
 mcp>=2.0.0,<3       # the engine speaks the Model Context Protocol
-pytest>=8.0,<9      # no model is ever called — see below
+pytest>=9.0.3,<10   # 9.0.3 is the first release without GHSA-6w46-j5rx-g56g
 pytest-cov>=5.0,<7  # the program requires >=70% coverage on core logic
 
 # On the test strategy, since the note here used to claim the model was mocked:
