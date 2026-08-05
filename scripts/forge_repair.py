@@ -146,7 +146,7 @@ def warn(problems: list[Problem]) -> str:
 # --------------------------------------------------------------------------
 
 
-def restore(problem: Problem, repo: Path, forge_dir: Path | None = None) -> bool:
+def restore(problem: Problem, repo: Path, forge_dir: Path) -> bool:
     """Put back the committed version of an altered record.
 
     **The current file is quarantined first.** This module's whole promise is
@@ -160,7 +160,11 @@ def restore(problem: Problem, repo: Path, forge_dir: Path | None = None) -> bool
     if original is None:
         return False
 
-    if forge_dir is not None and problem.path.is_file():
+    # No default on `forge_dir`, deliberately. It was optional, and a caller
+    # that omitted it skipped the quarantine and overwrote the file anyway —
+    # an opt-in safeguard on the one function in this project that destroys
+    # data. Now it cannot be called without somewhere to put the evidence.
+    if problem.path.is_file():
         try:
             quarantine(problem, forge_dir)
         except OSError:
