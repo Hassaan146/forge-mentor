@@ -25,6 +25,15 @@ for you:
 
 `gh auth login` is optional; it is only needed to read review findings.
 
+**Terminal, desktop app, or IDE — same plugin.** Forge is a Claude Code plugin, so it runs
+wherever Claude Code does. One thing differs outside a terminal: the hooks invoke a bare
+`python`, and an app launched from a dock or Start menu does not always inherit the PATH your
+shell has. The readiness check tests that exact command rather than the interpreter you happen
+to have typed with, because those two can disagree and only the first one matters.
+
+Colour switches itself off when the output is not a terminal. Nothing is lost — no state is
+ever signalled by colour alone.
+
 `/forge:start` checks all of this first and prints the exact command for anything missing. You
 can also run the check yourself at any time:
 

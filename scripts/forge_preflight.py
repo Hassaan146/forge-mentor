@@ -55,6 +55,42 @@ def _gh_signed_in() -> bool:
     return done.returncode == 0
 
 
+def _plugin_python_works() -> tuple[bool, str]:
+    """Can the literal command the plugin uses actually run Python?
+
+    `hooks.json` and `.mcp.json` both invoke a bare `python`, so what matters is
+    not whether *this* interpreter exists but whether that word resolves to a
+    working one in the environment Claude Code launches from.
+
+    That is a different question outside a terminal. An app started from a dock
+    or a Start menu does not always inherit the PATH a shell has, and on Windows
+    a bare `python` may resolve to the Microsoft Store stub — which exits
+    without running anything, so the hook silently does nothing at all.
+    """
+    found = shutil.which("python")
+    if found is None:
+        return False, "the command `python` is not on PATH for this process"
+
+    try:
+        done = subprocess.run(
+            ["python", "-c", "import sys; print(sys.version_info[0])"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            shell=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"`python` is on PATH but would not run ({exc})"
+
+    if done.returncode != 0 or done.stdout.strip() != "3":
+        # The Store stub exits 0 with no output, which is exactly this.
+        return False, (
+            f"`python` resolves to {found}, which is not a working Python 3 "
+            "(on Windows this is usually the Microsoft Store placeholder)"
+        )
+    return True, f"`python` resolves to {found}"
+
+
 def run() -> list[Check]:
     """Everything Forge needs, and what to do about anything missing."""
     checks: list[Check] = []
@@ -78,6 +114,25 @@ def run() -> list[Check]:
             has_mcp,
             "the engine cannot start without it — every Forge tool would be missing",
             fix=f'"{sys.executable}" -m pip install "mcp>=2.0.0,<3"',
+            fatal=True,
+        )
+    )
+
+    # Asked separately from the version above, because they can disagree. The
+    # interpreter running this check is whichever one you typed; the hooks get
+    # whatever `python` means to Claude Code, and outside a terminal those are
+    # often not the same thing.
+    plugin_python_ok, plugin_python_detail = _plugin_python_works()
+    checks.append(
+        Check(
+            "the `python` command Forge's hooks use",
+            plugin_python_ok,
+            plugin_python_detail,
+            fix=(
+                "put a working Python 3 on PATH for the app you launch Claude Code "
+                "from, then restart it. On Windows, Settings > Manage app execution "
+                "aliases > turn off the python.exe alias if it points at the Store."
+            ),
             fatal=True,
         )
     )

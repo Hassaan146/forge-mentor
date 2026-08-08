@@ -74,3 +74,48 @@ def test_only_an_optional_gap_still_counts_as_ready() -> None:
     text = pf.report(checks)
     assert "only affects reading reviews" in text
     assert "cannot run yet" not in text
+
+
+# --------------------------------------------------------------------------
+# running outside a terminal — the desktop app, an IDE panel
+# --------------------------------------------------------------------------
+
+
+def test_the_hooks_own_python_is_checked_separately(monkeypatch) -> None:
+    """The interpreter you typed and the one the hooks get are different things.
+
+    `hooks.json` invokes a bare `python`. Outside a terminal that word resolves
+    against whatever PATH the app was launched with, which is often not the
+    shell's — so "Python is installed" and "Forge's hooks can run Python" can
+    disagree, and only the second one matters.
+    """
+    import shutil
+
+    real = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda n: None if n == "python" else real(n))
+
+    checks = {c.name: c for c in pf.run()}
+    hooks_python = checks["the `python` command Forge's hooks use"]
+
+    assert hooks_python.ok is False
+    assert hooks_python.fatal is True
+    assert "not on PATH" in hooks_python.detail
+
+
+def test_the_store_stub_is_not_mistaken_for_python(monkeypatch) -> None:
+    """On Windows a bare `python` can be the Microsoft Store placeholder.
+
+    It exits without running anything, so the hook does nothing at all and says
+    nothing about it — the quietest possible failure.
+    """
+    class Stub:
+        returncode = 0
+        stdout = ""      # the placeholder prints nothing
+        stderr = ""
+
+    monkeypatch.setattr(pf.shutil, "which", lambda n: r"C:\...\WindowsApps\python.exe")
+    monkeypatch.setattr(pf.subprocess, "run", lambda *a, **k: Stub())
+
+    ok, detail = pf._plugin_python_works()
+    assert ok is False
+    assert "Microsoft Store" in detail
