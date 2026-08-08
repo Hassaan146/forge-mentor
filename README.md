@@ -11,6 +11,27 @@ recommendation, waits for your call, records it, and only then writes the code.
 A rule enforced in code — not a prompt — stops any write from moving past a decision
 you have not made.
 
+## Requirements
+
+Nothing to deploy — Forge is a plugin, with no server and no hosted anything. But it does need
+three things on each machine, and Claude Code does not install a plugin's Python dependencies
+for you:
+
+| | |
+|---|---|
+| **Python 3.12+** | the hooks and the engine are Python |
+| **the `mcp` package** | `pip install "mcp>=2.0.0,<3"` — without it the engine cannot start |
+| **git** | the decision history lives in your repository |
+
+`gh auth login` is optional; it is only needed to read review findings.
+
+`/forge:start` checks all of this first and prints the exact command for anything missing. You
+can also run the check yourself at any time:
+
+```
+python "$CLAUDE_PLUGIN_ROOT/scripts/forge_preflight.py"
+```
+
 ## Install
 
 ```

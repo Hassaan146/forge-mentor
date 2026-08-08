@@ -88,3 +88,21 @@ Follow these rules for every question:
 Set `open_question:` in `progress.md` whenever a question is asked, and clear it
 to `none` once the answer is recorded. That field is what the governor reads to
 decide whether code may be written.
+
+
+## Before anything else
+
+Run the readiness check and show its output:
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_preflight.py"
+```
+
+If anything is marked MISSING, stop and show the user the fix line for it. Do not begin the
+interrogation — Forge's hooks would block writes while the engine could not record a decision,
+so it would stop a write and then be unable to record the decision that unblocks it. That is
+the worst state the product has, and it is worth one command to avoid.
+
+If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
+`gh auth login` later.
+

@@ -25,7 +25,27 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
+try:
+    from mcp.server.mcpserver import MCPServer
+except ModuleNotFoundError:  # pragma: no cover - the message is the behaviour
+    # Claude Code does not install a plugin's Python dependencies, so on a new
+    # machine this is the first thing that fails — and it used to fail as a raw
+    # traceback, which rule R1 says a user may not be able to read.
+    #
+    # It matters more than a missing package usually would. The hooks are
+    # stdlib-only and keep working, so Forge still blocks writes while every
+    # tool that records a decision is gone: it would stop a write and then be
+    # unable to record the decision that unblocks it.
+    sys.stderr.write(
+        "\n  Forge cannot start: the `mcp` package is not installed.\n\n"
+        "  Forge's hooks will still block writes, but nothing can record a\n"
+        "  decision — so Forge would stop a write and then be unable to record\n"
+        "  the decision that unblocks it.\n\n"
+        "  Fix it with:\n\n"
+        f'    "{sys.executable}" -m pip install "mcp>=2.0.0,<3"\n\n'
+        "  Then restart Claude Code.\n\n"
+    )
+    raise SystemExit(1) from None
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
