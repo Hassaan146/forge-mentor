@@ -3,7 +3,7 @@
 Two properties carry most of the weight here.
 
 **The stage is read, not decided.** It comes from what is on disk, so two
-sessions looking at the same `.forge/` reach the same answer and a session
+sessions looking at the same notes reach the same answer and a session
 resuming on another machine lands where the last one stopped. A stage that
 depended on conversation history would resume wrong, silently.
 

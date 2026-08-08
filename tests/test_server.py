@@ -42,7 +42,7 @@ def project(tmp_path: Path) -> str:
 
 @pytest.fixture()
 def forge(project: str) -> Path:
-    return Path(project) / ".forge"
+    return Path(project) / fs.FORGE_DIR
 
 
 # ==========================================================================

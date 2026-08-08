@@ -15,7 +15,7 @@ exists to prevent.
 oversight: the governor rule says code cannot move past an undecided question, and the cleanest
 way to guarantee it for this agent is that it cannot write at all.
 
-Read `.forge/progress.md` and `.forge/decisions/` before saying anything. A question already
+Read `.claude/forge/progress.md` and `.claude/forge/decisions/` before saying anything. A question already
 answered must never be asked twice — the user notices immediately, and it is the fastest way to
 lose their trust in the record.
 

@@ -94,7 +94,7 @@ def test_a_project_without_tests_is_not_failed(project: Path) -> None:
 
 def test_a_broken_history_blocks_the_commit(project: Path, monkeypatch, capsys) -> None:
     """Committing damage would make it permanent and push it to everyone."""
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.answer(forge, fs.ask(forge, "how passwords are stored").id, "# Hashed\n")
 
     path = forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()
@@ -117,14 +117,14 @@ def test_a_non_bash_tool_is_ignored(project: Path, monkeypatch, capsys) -> None:
 
 def test_failures_are_counted_and_survive_a_restart(project: Path) -> None:
     """Decision 011: the count is in the notes, so it survives an account switch."""
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     assert gates.bump_attempts(forge) == 1
     assert gates.bump_attempts(forge) == 2
     assert fs.Progress.read(forge).gate_attempts == 2, "written to disk, not held in memory"
 
 
 def test_passing_clears_the_count(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     gates.bump_attempts(forge)
     gates.clear_attempts(forge)
     assert fs.Progress.read(forge).gate_attempts == 0
@@ -132,7 +132,7 @@ def test_passing_clears_the_count(project: Path) -> None:
 
 def test_three_failures_escalate_instead_of_repeating(project: Path) -> None:
     """Decision 009: stop the loop rather than let a learner grind."""
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     for _ in range(gates.MAX_ATTEMPTS):
         gates.bump_attempts(forge)
     assert fs.Progress.read(forge).gate_attempts >= gates.MAX_ATTEMPTS
@@ -259,7 +259,7 @@ def test_the_counter_survives_an_unreadable_progress_file(project: Path) -> None
     so that is the worst possible moment for the three-strike rule to stop
     counting.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
 
     assert gates.bump_attempts(forge) == 1, "a broken file must not stop the count"

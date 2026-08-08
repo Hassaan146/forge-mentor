@@ -1,4 +1,4 @@
-# Keeps .forge/reviews/pr-<n>.md current, without anyone having to ask.
+# Keeps .claude/forge/reviews/pr-<n>.md current, without anyone having to ask.
 #
 # Decision 026: the review file has to exist in the repository, not only on
 # whoever happened to be at the keyboard. Reviews arrive minutes after a push,
@@ -84,7 +84,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Read the review into .forge/reviews/ and commit it
+      - name: Read the review into .claude/forge/reviews/ and commit it
         # Every value from the event goes through the environment. Interpolating
         # `${{ ... }}` straight into a run block is still parsed as shell after
         # substitution, so a branch legitimately named `x$(id)` would execute.
@@ -117,7 +117,7 @@ jobs:
 
             # Exactly one path is ever staged, so this job cannot commit
             # anything but the notes.
-            git add .forge/reviews/
+            git add .claude/forge/reviews/
 
             if git diff --cached --quiet; then
               echo "No change to the review notes."

@@ -37,7 +37,7 @@ def test_blocked_still_reads_without_colour() -> None:
 
 
 def test_recorded_still_reads_without_colour() -> None:
-    out = plain(ui.recorded("B — a login service", ".forge/decisions/007-x.md"))
+    out = plain(ui.recorded("B — a login service", ".claude/forge/decisions/007-x.md"))
     assert ui.RECORDED in out
     assert "DECIDED" in out
 

@@ -103,7 +103,7 @@ def render(entries: list[fe.Explained], project: str = "") -> str:
         "",
         "Anything credential-shaped is blanked before it is written here — this file sits "
         "in the project root and the repository may be public. The full text is always in "
-        "`.forge/decisions/`.",
+        "`.claude/forge/decisions/`.",
         "",
         "## Which model did what",
         "",
@@ -170,7 +170,7 @@ def render(entries: list[fe.Explained], project: str = "") -> str:
 def write(project_root: Path, forge_dir: Path, name: str = "") -> Path:
     """Write `prompts.md` at the top of the repository, where a marker looks.
 
-    Not inside `.forge/`. The programme asks for it as a deliverable of the
+    Not inside `.claude/forge/`. The programme asks for it as a deliverable of the
     project, so it goes where a reader expects a project file — the decision
     records it is built from stay where they are.
     """

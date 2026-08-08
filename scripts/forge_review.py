@@ -26,7 +26,7 @@ requires a human to authorise it. So Forge *detects* which reviewers are
 installed and *guides* the user through the missing ones once.
 
 **Findings land in a file, not an inbox.** Reviews are written to
-`.forge/reviews/pr-<n>.md` — committed with the code, readable months later,
+`.claude/forge/reviews/pr-<n>.md` — committed with the code, readable months later,
 and available to a session on another machine (decision 011). An email would
 be none of those things. A workflow in the repository keeps that file current
 without anyone having to ask (decision 026).

@@ -15,7 +15,7 @@ reversed into text; the commit history is the only real source, and it is
 already there.
 
 **What is never done.** Nothing is deleted. A forged record with no earlier
-version cannot be restored, so it is moved to `.forge/quarantine/` — the chain
+version cannot be restored, so it is moved to `.claude/forge/quarantine/` — the chain
 becomes whole, the evidence survives, and nothing is destroyed.
 """
 

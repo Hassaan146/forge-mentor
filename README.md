@@ -87,7 +87,7 @@ move past an undecided question in any of them.
 |---|---|
 | **Teaches first** | Concept, example, why it matters here — then the question |
 | **You decide** | Options with a project-derived recommendation; you answer freely |
-| **Records why** | Every decision becomes a file in `.forge/`, committed with the code |
+| **Records why** | Every decision becomes a file in `.claude/forge/`, committed with the code |
 | **Blocks drift** | Code cannot move past an undecided question |
 | **Reviews** | Pushes each step, takes review findings, and applies the fixes |
 | **Checks you understood** | You explain it back before the step closes |
@@ -101,12 +101,12 @@ move past an undecided question in any of them.
 | `skills/` | How the mentor teaches and questions |
 | `agents/` | Planner · builder · structurer · review-fixer |
 | `server/` | The engine — model routing, usage metering, review, the pipeline |
-| `.forge/` | Your project's notes: the plan, every decision, and the reviews |
+| `.claude/forge/` | Your project's notes: the plan, every decision, and the reviews |
 
 Your project also gets two generated documents, both assembled from the decision records
 rather than written afterwards:
 
-- **`.forge/code-explained.md`** — why the project is built the way it is, including the
+- **`.claude/forge/code-explained.md`** — why the project is built the way it is, including the
   options that were turned down
 - **`prompts.md`** — every question asked and answered, with which model handled each step
 
@@ -121,7 +121,7 @@ rather than written afterwards:
 ## Status
 
 v1.0.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project — and built
-using itself: every decision behind it is recorded in `.forge/decisions/`, which is the
+using itself: every decision behind it is recorded in `.claude/forge/decisions/`, which is the
 same format your project gets.
 
 Known gap, stated plainly: Forge drives Claude Code, so it runs on Anthropic models only

@@ -103,7 +103,7 @@ def test_init_creates_committable_notes(tmp_path: Path) -> None:
     forge = fs.init(tmp_path)
     assert (forge / "progress.md").exists()
     assert (forge / "decisions").is_dir()
-    assert forge.name == ".forge"
+    assert forge == tmp_path / fs.FORGE_DIR
 
 
 def test_init_refuses_to_overwrite(project: Path) -> None:
@@ -114,7 +114,7 @@ def test_init_refuses_to_overwrite(project: Path) -> None:
 def test_found_from_a_subdirectory(project: Path) -> None:
     deep = project / "src" / "api" / "routers"
     deep.mkdir(parents=True)
-    assert fs.find_forge_dir(deep) == project / ".forge"
+    assert fs.find_forge_dir(deep) == project / fs.FORGE_DIR
 
 
 def test_not_a_forge_project(tmp_path: Path) -> None:
@@ -127,12 +127,13 @@ def test_a_stray_home_forge_never_adopts_a_project(
 ) -> None:
     """Regression guard for a real bug.
 
-    An unbounded upward walk found `~/.forge` and switched Forge on in every
+    An unbounded upward walk found a stray notes folder in a home directory
+    and switched Forge on in every
     project on the machine — the opposite of decision 014, which says Forge
     acts only where it was invited.
     """
     home = tmp_path / "home"
-    (home / ".forge").mkdir(parents=True)
+    (home / fs.FORGE_DIR).mkdir(parents=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     project = home / "some-project"
@@ -142,9 +143,9 @@ def test_a_stray_home_forge_never_adopts_a_project(
 
 
 def test_the_search_stops_at_the_repository_root(tmp_path: Path) -> None:
-    """`.forge/` lives inside the project repo (016), so the repo bounds it."""
+    """The notes live inside the project repo (016), so the repo bounds it."""
     outer = tmp_path / "outer"
-    (outer / ".forge").mkdir(parents=True)
+    (outer / fs.FORGE_DIR).mkdir(parents=True)
 
     repo = outer / "repo"
     (repo / ".git").mkdir(parents=True)
@@ -155,7 +156,7 @@ def test_the_search_stops_at_the_repository_root(tmp_path: Path) -> None:
 
 
 def test_progress_survives_a_write_read_cycle(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     before = fs.Progress.read(forge)
     before.current_step = "rate limiting"
     before.stage = "live-loop"
@@ -167,15 +168,15 @@ def test_progress_survives_a_write_read_cycle(project: Path) -> None:
 
 
 def test_missing_progress_file_says_how_to_recover(project: Path) -> None:
-    (project / ".forge" / "progress.md").unlink()
+    (project / fs.FORGE_DIR / "progress.md").unlink()
     with pytest.raises(fs.StateError) as err:
-        fs.Progress.read(project / ".forge")
+        fs.Progress.read(project / fs.FORGE_DIR)
     assert "/forge:start" in str(err.value)
 
 
 def test_in_flight_work_travels_to_the_next_session(project: Path) -> None:
     """Decision 011: another account resumes mid-question, not at the start."""
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "how people log in")
     progress = fs.Progress.read(forge)
     progress.current_step = "rate limiting"
@@ -202,7 +203,7 @@ def test_in_flight_work_travels_to_the_next_session(project: Path) -> None:
 
 
 def test_resume_line_falls_back_through_what_it_knows(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     progress = fs.Progress.read(forge)
 
     progress.current_step = ""
@@ -215,7 +216,7 @@ def test_resume_line_falls_back_through_what_it_knows(project: Path) -> None:
 
 
 def test_missing_required_field_is_a_broken_file(project: Path) -> None:
-    progress = project / ".forge" / "progress.md"
+    progress = project / fs.FORGE_DIR / "progress.md"
     progress.write_text("---\nstage: x\n---\n\nbody\n", encoding="utf-8")
     with pytest.raises(fs.StateError) as err:
         fs.Progress.read(progress.parent)
@@ -228,7 +229,7 @@ def test_missing_required_field_is_a_broken_file(project: Path) -> None:
 
 
 def test_asking_creates_an_open_record(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     asked = fs.ask(forge, "which backend")
     assert asked.id == 1
     assert fs.open_question(forge).question == "which backend"
@@ -236,7 +237,7 @@ def test_asking_creates_an_open_record(project: Path) -> None:
 
 
 def test_answering_flips_the_same_file(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     asked = fs.ask(forge, "which backend")
     path = forge / "decisions" / asked.filename()
 
@@ -248,14 +249,14 @@ def test_answering_flips_the_same_file(project: Path) -> None:
 
 
 def test_oldest_open_question_wins(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     first = fs.ask(forge, "which backend")
     fs.ask(forge, "which database")
     assert fs.open_question(forge).id == first.id
 
 
 def test_ids_increment_across_separate_files(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "one")
     fs.answer(forge, 1, "done")
     assert fs.ask(forge, "two").id == 2
@@ -263,7 +264,7 @@ def test_ids_increment_across_separate_files(project: Path) -> None:
 
 
 def test_answering_a_settled_question_is_refused(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "which backend")
     fs.answer(forge, 1, "FastAPI")
     with pytest.raises(fs.StateError):
@@ -272,7 +273,7 @@ def test_answering_a_settled_question_is_refused(project: Path) -> None:
 
 def test_answering_an_unknown_id_is_refused(project: Path) -> None:
     with pytest.raises(fs.StateError):
-        fs.answer(project / ".forge", 99, "x")
+        fs.answer(project / fs.FORGE_DIR, 99, "x")
 
 
 # --------------------------------------------------------------------------
@@ -281,21 +282,21 @@ def test_answering_an_unknown_id_is_refused(project: Path) -> None:
 
 
 def test_writes_blocked_while_a_question_is_open(project: Path) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     response = run_governor(project)
     assert denied(response)
     assert "rate limiting" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_writes_allowed_once_answered(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
     assert not denied(run_governor(project))
 
 
 def test_override_lets_the_write_through(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     progress = fs.Progress.read(forge)
     progress.override_active = True
@@ -304,13 +305,13 @@ def test_override_lets_the_write_through(project: Path) -> None:
 
 
 def test_reads_are_never_blocked(project: Path) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     assert not denied(run_governor(project, tool="Read"))
 
 
 def test_forge_can_always_write_its_own_notes(project: Path) -> None:
-    fs.ask(project / ".forge", "rate limiting")
-    target = str(project / ".forge" / "decisions" / "001-x.md")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
+    target = str(project / fs.FORGE_DIR / "decisions" / "001-x.md")
     assert not denied(run_governor(project, file_path=target))
 
 
@@ -319,8 +320,8 @@ def test_non_forge_projects_are_untouched(tmp_path: Path) -> None:
 
 
 def test_broken_notes_fail_closed_with_a_repair(project: Path) -> None:
-    fs.ask(project / ".forge", "rate limiting")
-    bad = project / ".forge" / "decisions" / "002-broken.md"
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
+    bad = project / fs.FORGE_DIR / "decisions" / "002-broken.md"
     bad.write_text("no header at all\n", encoding="utf-8")
 
     response = run_governor(project)
@@ -342,7 +343,7 @@ def test_governor_never_returns_a_failure_code(project: Path) -> None:
 
 
 def test_notes_contain_nothing_account_specific(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "which backend")
     fs.answer(forge, 1, "FastAPI")
 
@@ -359,7 +360,7 @@ def test_a_record_with_an_unreadable_id_is_named_not_guessed(project: Path) -> N
     `next_decision_id` returns — and this module's whole stance is to fail
     loudly on a broken file rather than interpret it.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     (forge / fs.DECISIONS).mkdir(exist_ok=True)
     broken = forge / fs.DECISIONS / "0xx-bad-id.md"
     broken.write_text(
@@ -373,7 +374,7 @@ def test_a_record_with_an_unreadable_id_is_named_not_guessed(project: Path) -> N
 
 def test_a_missing_count_in_the_summary_is_still_forgiving(project: Path) -> None:
     """The strictness is for ids only. A cosmetic count is not worth stopping for."""
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     progress = fs.Progress.read(forge)
     progress.questions_answered = 0
     progress.write(forge)
@@ -387,7 +388,7 @@ def test_the_resume_line_never_reads_the_stale_summary_field(project: Path) -> N
     reading `Progress.open_question` shows whatever was last written there —
     which is exactly the account-switch path decision 011 protects.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "the real open question")
 
     progress = fs.Progress.read(forge)
@@ -405,7 +406,7 @@ def test_an_unrecognised_status_is_refused(project: Path) -> None:
     `open_question` only treats "open" as pending, so `status: pending` read as
     settled and the governor let code past a decision nobody had made.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     (forge / fs.DECISIONS).mkdir(exist_ok=True)
     path = forge / fs.DECISIONS / "001-typo.md"
     path.write_text(
@@ -424,7 +425,7 @@ def test_unreadable_notes_block_writes(project: Path) -> None:
     came out as "writes allowed" — Forge could not tell whether a question was
     open and said yes anyway.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
 
     allowed, reason = fs.writes_allowed(forge)
@@ -433,7 +434,7 @@ def test_unreadable_notes_block_writes(project: Path) -> None:
 
 
 def test_an_unreadable_decision_record_blocks_writes(project: Path) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     (forge / fs.DECISIONS).mkdir(exist_ok=True)
     (forge / fs.DECISIONS / "001-broken.md").write_text("no header\n", encoding="utf-8")
 
@@ -448,7 +449,7 @@ def test_two_open_records_sharing_an_id_stop_rather_than_guess(project: Path) ->
     Answering the first match filled in the wrong record — and then the second
     could never be answered at all, because the first was no longer open.
     """
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     first = fs.ask(forge, "the real question")
 
     twin = forge / fs.DECISIONS / "001-from-another-branch.md"

@@ -1,7 +1,7 @@
 """Forge Mentor — the state layer.
 
-Everything Forge knows lives in `.forge/` inside the user's own repository,
-committed with the code. There is no database and no hidden state.
+Everything Forge knows lives in `.claude/forge/` inside the user's own
+repository, committed with the code. There is no database and no hidden state.
 
 Design constraints this module exists to satisfy:
 
@@ -11,7 +11,9 @@ Design constraints this module exists to satisfy:
   decision 011  a fresh session on another account must be able to read
                 these files and carry on. That requires in-flight state,
                 not only finished decisions.
-  decision 016  `.forge/` is committed, never ignored.
+  decision 016  the notes are committed, never ignored.
+  decision 032  they live in `.claude/forge/`, and Forge refuses to write
+                there if git is ignoring it.
   decision 004  the governor reads `open_question` here to decide whether
                 code may be written.
 
@@ -26,7 +28,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-FORGE_DIR = ".forge"
+# Under `.claude/`, alongside what Claude Code already keeps for a project, so
+# turning Forge on adds one folder rather than a second unrelated one
+# (decision 032). A posix-style string on purpose: `Path / "a/b"` handles the
+# separator on every platform, and the literal is used in messages.
+FORGE_DIR = ".claude/forge"
 PROGRESS = "progress.md"
 DECISIONS = "decisions"
 SETTINGS = "settings.md"
@@ -79,8 +85,15 @@ class StateError(Exception):
 
 def _repo_relative(path: Path) -> str:
     """Show a short path — absolute paths in error text are noise."""
-    parts = path.as_posix().split(f"/{FORGE_DIR}/")
-    return f"{FORGE_DIR}/{parts[-1]}" if len(parts) > 1 else path.name
+    text = path.as_posix()
+    marker = f"/{FORGE_DIR}/"
+    if marker in text:
+        return f"{FORGE_DIR}/{text.split(marker)[-1]}"
+    # The notes directory itself, not a file inside it. Falling through to
+    # `path.name` printed a bare "forge", which names nothing a user can act on.
+    if text.endswith(f"/{FORGE_DIR}"):
+        return FORGE_DIR
+    return path.name
 
 
 # --------------------------------------------------------------------------
@@ -461,7 +474,7 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
     raise StateError(
         f"No decision {decision_id:03d} to answer.",
         forge_dir / DECISIONS,
-        repair="check .forge/decisions/ for the right id",
+        repair="check .claude/forge/decisions/ for the right id",
     )
 
 
@@ -499,14 +512,14 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
 
 
 def find_forge_dir(start: Path) -> Path | None:
-    """Find this project's `.forge/`, so Forge works from any subdirectory.
+    """Find this project's `.claude/forge/`, so Forge works from any subdirectory.
 
     The walk upward is **bounded**, and that bound is the point. An unbounded
-    search finds a stray `.forge/` in a home directory and silently activates
+    search finds a stray notes folder in a home directory and silently activates
     Forge in every project on the machine — the opposite of decision 014,
     which says Forge acts only where it was invited.
 
-    The boundary is the repository root, because decision 016 puts `.forge/`
+    The boundary is the repository root, because decision 016 puts `.claude/forge/`
     inside the project repository. The search also never rises above the
     user's home directory, for machines where the work is not in a repo.
     """
@@ -540,9 +553,75 @@ def is_forge_project(start: Path) -> bool:
     return find_forge_dir(start) is not None
 
 
+def is_ignored_by_git(path: Path) -> bool:
+    """Would git refuse to track this path?
+
+    Asked of git itself rather than by reading `.gitignore`, because the rules
+    compose across files, the global config and the exclude file, and a
+    reimplementation would be wrong in exactly the cases that matter.
+
+    This exists because `.claude/` is commonly ignored — it usually holds
+    machine-local settings, so excluding the whole folder is an ordinary thing
+    for a project to do. Harmless until Forge's memory is inside it.
+    """
+    import subprocess
+
+    # Asked from the nearest directory that exists. The path being checked is
+    # usually the folder about to be created, and neither it nor its parent is
+    # there yet — running from a directory that does not exist made git answer
+    # about whatever the process happened to be sitting in, which was a
+    # different repository entirely and always said "not ignored".
+    anchor = path
+    while not anchor.exists() and anchor != anchor.parent:
+        anchor = anchor.parent
+    if not anchor.is_dir():
+        anchor = anchor.parent
+
+    try:
+        done = subprocess.run(
+            ["git", "check-ignore", "-q", str(path)],
+            cwd=str(anchor),
+            capture_output=True,
+            timeout=15,
+            shell=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False  # cannot ask, so do not accuse
+
+    # 0 = ignored, 1 = not ignored, 128 = not a repository.
+    return done.returncode == 0
+
+
+def refuse_if_ignored(forge: Path) -> None:
+    """Stop before writing notes that would never be committed.
+
+    Refusing is the right call rather than warning and carrying on. Forge's
+    whole promise is that the repository is the memory (decision 011); notes it
+    knows git will discard are not memory, and the user would not find out
+    until they switched machine and found an empty project.
+
+    Forge cannot fix this from inside its own folder either — git will not
+    re-include a file whose parent directory is excluded — so the only thing it
+    can usefully do is say which line to change.
+    """
+    if not is_ignored_by_git(forge):
+        return
+    raise StateError(
+        f"git is ignoring {FORGE_DIR}, so Forge's notes would never be committed.\n"
+        "  Your decisions are meant to travel with the code — without that, a new\n"
+        "  machine or account opens an empty project.",
+        forge,
+        repair=(
+            f"remove the line that ignores `.claude/` (or add `!{FORGE_DIR}/` "
+            "after it) in .gitignore, then run /forge:start again"
+        ),
+    )
+
+
 def init(project_root: Path, total_questions: int = 0) -> Path:
-    """Create `.forge/` for a new project. Refuses to overwrite existing notes."""
+    """Create the notes for a new project. Refuses to overwrite existing ones."""
     forge = project_root / FORGE_DIR
+    refuse_if_ignored(forge)
     if forge.exists():
         raise StateError(
             "This project already has Forge notes.",

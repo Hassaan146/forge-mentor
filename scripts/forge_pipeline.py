@@ -10,7 +10,7 @@ over: teach, decide, write, gate, explain back.
 
 **Where a stage comes from.** Never from a model deciding what feels next. The
 stage is a function of what is on disk — is a question open, has the plan been
-challenged, did the tests pass — so two sessions reading the same `.forge/`
+challenged, did the tests pass — so two sessions reading the same `.claude/forge/`
 reach the same answer, and a session that resumes on another machine lands
 exactly where the last one stopped (decision 011).
 

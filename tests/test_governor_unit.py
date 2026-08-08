@@ -60,7 +60,7 @@ def reason(response: dict) -> str:
 
 
 def test_open_question_blocks_and_names_it(project, monkeypatch, capsys) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     response = invoke(monkeypatch, capsys, write_payload(project))
     assert is_deny(response)
     assert "rate limiting" in reason(response)
@@ -68,14 +68,14 @@ def test_open_question_blocks_and_names_it(project, monkeypatch, capsys) -> None
 
 
 def test_answered_question_allows(project, monkeypatch, capsys) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
     assert not is_deny(invoke(monkeypatch, capsys, write_payload(project)))
 
 
 def test_override_allows(project, monkeypatch, capsys) -> None:
-    forge = project / ".forge"
+    forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     progress = fs.Progress.read(forge)
     progress.override_active = True
@@ -90,18 +90,18 @@ def test_override_allows(project, monkeypatch, capsys) -> None:
 
 @pytest.mark.parametrize("tool", ["Read", "Grep", "Glob", "Bash", "WebFetch"])
 def test_non_write_tools_are_never_blocked(project, monkeypatch, capsys, tool) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     assert not is_deny(invoke(monkeypatch, capsys, write_payload(project, tool=tool)))
 
 
 @pytest.mark.parametrize("tool", ["Write", "Edit", "NotebookEdit"])
 def test_every_write_tool_is_covered(project, monkeypatch, capsys, tool) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     assert is_deny(invoke(monkeypatch, capsys, write_payload(project, tool=tool)))
 
 
 def test_other_hook_events_are_ignored(project, monkeypatch, capsys) -> None:
-    fs.ask(project / ".forge", "rate limiting")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
     payload = write_payload(project)
     payload["hook_event_name"] = "PostToolUse"
     assert not is_deny(invoke(monkeypatch, capsys, payload))
@@ -112,8 +112,8 @@ def test_project_without_forge_is_untouched(tmp_path, monkeypatch, capsys) -> No
 
 
 def test_forge_writing_its_own_notes_is_allowed(project, monkeypatch, capsys) -> None:
-    fs.ask(project / ".forge", "rate limiting")
-    target = str(project / ".forge" / "decisions" / "002-next.md")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
+    target = str(project / fs.FORGE_DIR / "decisions" / "002-next.md")
     assert not is_deny(invoke(monkeypatch, capsys, write_payload(project, target=target)))
 
 
@@ -131,8 +131,8 @@ def test_malformed_input_does_not_block(project, monkeypatch, capsys) -> None:
 
 
 def test_corrupt_notes_block_but_explain_the_repair(project, monkeypatch, capsys) -> None:
-    fs.ask(project / ".forge", "rate limiting")
-    (project / ".forge" / "decisions" / "003-broken.md").write_text("no header", encoding="utf-8")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
+    (project / fs.FORGE_DIR / "decisions" / "003-broken.md").write_text("no header", encoding="utf-8")
 
     response = invoke(monkeypatch, capsys, write_payload(project))
     assert is_deny(response)
@@ -160,11 +160,11 @@ def test_deny_and_allow_emit_valid_wire_format(capsys) -> None:
 @pytest.mark.parametrize(
     "target",
     [
-        ".forge/decisions/001-x.md",          # relative, no leading separator
-        "proj/.forge/progress.md",            # nested, no leading separator
-        "/abs/proj/.forge/decisions/002.md",  # absolute posix
-        r"C:\proj\.forge\progress.md",        # windows separators
-        ".forge",                             # the folder itself
+        f"{fs.FORGE_DIR}/decisions/001-x.md",          # relative, no leading separator
+        ".claude/forge/progress.md",              # relative, no leading separator
+        "/abs/proj/.claude/forge/decisions/002.md",  # absolute posix
+        r"C:\proj\.claude\forge\progress.md",    # windows separators
+        ".claude/forge",                          # the folder itself
     ],
 )
 def test_forge_owned_paths_are_recognised(target: str) -> None:
@@ -182,6 +182,6 @@ def test_ordinary_paths_are_not_forge_owned(target: str) -> None:
 
 def test_relative_forge_write_is_allowed(project, monkeypatch, capsys) -> None:
     """End to end: the bug Sourcery caught would have blocked this."""
-    fs.ask(project / ".forge", "rate limiting")
-    payload = write_payload(project, target=".forge/decisions/002-next.md")
+    fs.ask(project / fs.FORGE_DIR, "rate limiting")
+    payload = write_payload(project, target=f"{fs.FORGE_DIR}/decisions/002-next.md")
     assert not is_deny(invoke(monkeypatch, capsys, payload))

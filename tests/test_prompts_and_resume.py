@@ -104,7 +104,7 @@ def test_the_log_lands_where_a_reader_expects_a_project_file(
     path = fp.write(project, forge, "teamtasks")
 
     assert path == project / "prompts.md"
-    assert path.parent == project, "not buried inside .forge/"
+    assert path.parent == project, "not buried inside the notes folder"
 
 
 def test_a_project_with_no_decisions_still_produces_a_valid_log(

@@ -31,7 +31,7 @@ reviews:
   path_filters:
     - "!**/*.pdf"
     - "!**/*.html"
-    - "!.forge/**"         # decision records are prose, not code
+    - "!.claude/forge/**"         # decision records are prose, not code
 
   path_instructions:
     - path: "scripts/governor.py"
@@ -40,7 +40,7 @@ reviews:
         before the current decision is recorded. Treat any path where a write
         could slip through un-denied as critical. It must always exit 0 — a
         crash here would wedge the user's session. Reads must never be blocked.
-        Check especially that Forge can always write its own .forge/ notes,
+        Check especially that Forge can always write its own .claude/forge/ notes,
         including via relative paths; that bug existed once already.
 
     - path: "scripts/forge_integrity.py"
@@ -102,7 +102,7 @@ reviews:
       instructions: >-
         This workflow holds a token with write access to the repository
         (decision 026). Treat as critical any path where a pull request from a
-        fork could reach it, where it could commit outside `.forge/reviews/`,
+        fork could reach it, where it could commit outside `.claude/forge/reviews/`,
         or where it could be made to run on untrusted input. Check the push
         retry cannot lose a concurrent reviewer's findings.
 

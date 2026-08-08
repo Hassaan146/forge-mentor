@@ -23,7 +23,7 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" banner
 Say plainly, in a few lines, what Forge will do in this project:
 
 - It asks before it writes. Every load-bearing decision is taught first.
-- It records every decision as a file in `.forge/`, committed with the code.
+- It records every decision as a file in `.claude/forge/`, committed with the code.
 - It commits and pushes on every step.
 - It sends code for review and applies what comes back.
 
@@ -54,14 +54,14 @@ offer a reduced mode — there isn't one.
 
 ## Step 5 — Create the notes
 
-Create `.forge/` in the project with:
+Create `.claude/forge/` in the project with:
 
 - `progress.md` — the labelled header must include `open_question:` and
   `override_active:`, because the governor reads them on every write
 - `decisions/` — one file per decision
 - `settings.md` — which AI does which job, with the defaults from decision 002
 
-Commit and push it (decision 016 — `.forge/` is committed, never ignored).
+Commit and push it (decision 016 — `.claude/forge/` is committed, never ignored).
 
 ## Step 6 — Begin the foundation interrogation
 

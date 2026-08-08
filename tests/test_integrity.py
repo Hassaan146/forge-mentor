@@ -25,7 +25,7 @@ def project(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def forge(project: Path) -> Path:
-    return project / ".forge"
+    return project / fs.FORGE_DIR
 
 
 def settle(forge_dir: Path, question: str, answer_body: str = "decided") -> fs.Decision:
@@ -224,8 +224,8 @@ def test_verifying_an_unknown_id_returns_nothing(forge: Path) -> None:
 
 
 def test_no_decisions_at_all_is_not_an_error(project: Path) -> None:
-    assert fi.check_all(project / ".forge") == []
-    assert fi.untrusted(project / ".forge") == []
+    assert fi.check_all(project / fs.FORGE_DIR) == []
+    assert fi.untrusted(project / fs.FORGE_DIR) == []
 
 
 # --------------------------------------------------------------------------

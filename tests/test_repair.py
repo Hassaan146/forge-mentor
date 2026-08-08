@@ -32,7 +32,7 @@ def repo(tmp_path: Path) -> Path:
     git(tmp_path, "config", "user.name", "Test")
 
     fs.init(tmp_path)
-    forge = tmp_path / ".forge"
+    forge = tmp_path / fs.FORGE_DIR
     asked = fs.ask(forge, "how passwords are stored")
     fs.answer(forge, asked.id, "# Hashed with bcrypt\n\nNever plain text.\n")
 
@@ -43,7 +43,7 @@ def repo(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def forge(repo: Path) -> Path:
-    return repo / ".forge"
+    return repo / fs.FORGE_DIR
 
 
 def record_path(forge_dir: Path, decision_id: int = 1) -> Path:
@@ -195,7 +195,7 @@ def test_writing_the_chain_twice_succeeds(forge: Path) -> None:
 def test_no_git_means_quarantine_rather_than_restore(tmp_path: Path) -> None:
     """Without git there is no committed version, so nothing can be restored."""
     fs.init(tmp_path)
-    forge = tmp_path / ".forge"
+    forge = tmp_path / fs.FORGE_DIR
     fs.answer(forge, fs.ask(forge, "a question").id, "decided")
 
     path = record_path(forge)

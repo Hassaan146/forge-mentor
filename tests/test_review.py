@@ -571,7 +571,7 @@ def test_a_thread_forge_never_recorded_is_not_closed(tmp_path: Path) -> None:
     with the user's credentials — and nothing anywhere would record that a
     finding had been handled.
     """
-    forge = tmp_path / ".forge"
+    forge = tmp_path / fs.FORGE_DIR
     (forge / rv.REVIEWS_DIR).mkdir(parents=True)
     (forge / rv.REVIEWS_DIR / "pr-9.md").write_text(
         "### `a.py:1` — bug_risk\n\nthread: PRRT_ours\n\nbody\n", encoding="utf-8"
@@ -585,7 +585,7 @@ def test_a_thread_forge_never_recorded_is_not_closed(tmp_path: Path) -> None:
 
 
 def test_no_review_notes_means_no_thread_is_known(tmp_path: Path) -> None:
-    assert rv.known_threads(tmp_path / ".forge", 9) == set()
+    assert rv.known_threads(tmp_path / fs.FORGE_DIR, 9) == set()
 
 
 def test_the_thread_id_is_written_into_the_notes(forge: Path) -> None:

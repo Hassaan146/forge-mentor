@@ -1,13 +1,13 @@
 ---
 type: code-explained
-decisions: 30
-chosen_by_you: 30
-updated: 2026-08-05
+decisions: 31
+chosen_by_you: 31
+updated: 2026-08-08
 ---
 
 # Why Forge Mentor is built the way it is
 
-30 decisions shape this project. You made 30 of them.
+31 decisions shape this project. You made 31 of them.
 
 Read in the order they were decided, because each one was made knowing the
 ones above it — which is not the order the files are listed in.
@@ -273,3 +273,11 @@ Full record: [`030`](decisions/)
 Also considered: **C** — count only findings raised against the current head commit
 
 Full record: [`031`](decisions/)
+
+## 032 · Where do Forge's notes live inside someone's project?
+
+**C**
+
+Also considered: **A** — `.claude/forge/` for everything Forge keeps; **B** — stay at `.forge/` in the project root
+
+Full record: [`032`](decisions/)

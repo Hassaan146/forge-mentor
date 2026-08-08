@@ -18,7 +18,7 @@ Behaviour:
   decision 019  state is re-read from disk every time. Nothing is cached and
                 nothing is keyed to a Claude account, so switching accounts
                 changes nothing.
-  decision 014  Forge only acts where it was invited. No `.forge/` means this
+  decision 014  Forge only acts where it was invited. No `.claude/forge/` means this
                 is not a Forge project — stay completely out of the way.
 """
 
@@ -45,12 +45,23 @@ def is_forge_owned(target: str) -> bool:
 
     Compares path *segments* rather than matching a substring. A separator
     heuristic such as "/.forge/" misses a relative target like
-    ".forge/decisions/001.md" — which would block Forge from recording the very
-    decision that unblocks the user.
+    ".claude/forge/decisions/001.md" — which would block Forge from recording
+    the very decision that unblocks the user.
+
+    The notes folder is more than one segment deep now (decision 032), so this
+    looks for the run of segments in order. Testing membership of the whole
+    string against `parts` silently stopped matching anything the moment the
+    path gained a slash — and failing this check open would have blocked Forge
+    from writing its own records.
     """
     if not target:
         return False
-    return FORGE_DIR in Path(target.replace("\\", "/")).parts
+
+    wanted = tuple(part for part in FORGE_DIR.split("/") if part)
+    parts = Path(target.replace("\\", "/")).parts
+    return any(
+        parts[i : i + len(wanted)] == wanted for i in range(len(parts) - len(wanted) + 1)
+    )
 
 
 def allow() -> None:

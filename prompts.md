@@ -1,15 +1,15 @@
 ---
 type: prompts
 project: Forge Mentor
-entries: 30
-generated: 2026-08-05
+entries: 31
+generated: 2026-08-08
 ---
 
 # Prompts — Forge Mentor
 
 Generated from the decision records, not written afterwards. Each entry is what Forge actually asked and what was actually answered, recorded at the time.
 
-Anything credential-shaped is blanked before it is written here — this file sits in the project root and the repository may be public. The full text is always in `.forge/decisions/`.
+Anything credential-shaped is blanked before it is written here — this file sits in the project root and the repository may be public. The full text is always in `.claude/forge/decisions/`.
 
 ## Which model did what
 
@@ -495,5 +495,21 @@ live pace (R7) and warn-don't-block (decision 004).
 - **C** — count only findings raised against the current head commit
 
 **Answered by the user:** A and B together
+
+---
+
+## 032 · Where do Forge's notes live inside someone's project?
+
+**Asked:**
+
+> Where do Forge's notes live inside someone's project?
+
+**Options put to the user:**
+
+- **A** — `.claude/forge/` for everything Forge keeps
+- **B** — stay at `.forge/` in the project root
+- **C** — `.claude/forge/` for state, and `prompts.md` at the root as well
+
+**Answered by the user:** C
 
 ---
