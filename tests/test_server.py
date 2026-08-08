@@ -317,6 +317,8 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "resolve_finding",
         "settle_small_decision",
         "write_prompts_log",
+        "render_decision",
+        "foundation_question",
     }
 
 
@@ -389,9 +391,16 @@ def test_the_pipeline_tool_says_what_happens_next(project: str) -> None:
     assert answer["asks_user"] is True
     assert answer["mode"] == "pipeline"
 
-    # Once something is decided, the plan gets challenged before any code.
-    asked = ask_question(project, "which backend")
-    record_answer(project, asked["id"], "FastAPI", "small")
+    # The five foundation questions come first, in the fixed order of decision
+    # 033 — one arbitrary decision does not get past them, and should not:
+    # every question after the stack is asked inside an answer to it.
+    import forge_foundation as ff
+
+    for question in ff.FOUNDATION:
+        asked = ask_question(project, question.question)
+        record_answer(project, asked["id"], "A", "because")
+
+    # Only then is there a plan worth challenging.
     assert call(srv.next_step)(project)["stage"] == "challenge"
 
 

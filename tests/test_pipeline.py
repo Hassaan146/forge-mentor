@@ -31,14 +31,18 @@ def forge(tmp_path: Path) -> Path:
 
 
 def started(forge: Path) -> None:
-    """At least one decision recorded — a project that has actually begun.
+    """The foundation answered — a project that has actually begun.
 
-    A fresh directory now reports INTERROGATION rather than CHALLENGE: there is
-    no plan to challenge before anything has been decided. So every test past
-    the first question has to have started.
+    The five foundation questions come first and in a fixed order (decision
+    033), so nothing past them is reachable until they are recorded. One
+    arbitrary decision is not enough, and should not be: the stack is what
+    every later question is asked inside.
     """
-    asked = fs.ask(forge, "which backend")
-    fs.answer(forge, asked.id, "# FastAPI\n\n## Why\n\nsmall\n")
+    import forge_foundation as ff
+
+    for question in ff.FOUNDATION:
+        asked = fs.ask(forge, question.question)
+        fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
 
 def challenge(forge: Path) -> None:

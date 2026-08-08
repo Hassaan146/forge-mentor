@@ -95,7 +95,25 @@ BLOCKED = "⛔"
 RECORDED = "✅"
 STAR = "★"
 
-WIDTH = 62
+def _width() -> int:
+    """How wide to draw, from the terminal rather than from a guess.
+
+    This was a fixed 62, which wrapped an option's consequence onto a second
+    line on a terminal with room for it — the text looked cramped for no
+    reason. Clamped at both ends: narrow enough to stay readable in a split
+    pane, and never so wide that a line of prose becomes hard to track back to
+    the next one.
+    """
+    import shutil
+
+    try:
+        columns = shutil.get_terminal_size(fallback=(80, 24)).columns
+    except (OSError, ValueError):
+        columns = 80
+    return max(56, min(columns - 4, 96))
+
+
+WIDTH = _width()
 
 
 # --------------------------------------------------------------------------
@@ -121,44 +139,146 @@ def banner(project: str | None = None, version: str = "0.1.0") -> str:
     return "\n".join(lines)
 
 
-def question_box(title: str, subtitle: str = "", number: int | None = None) -> str:
-    """A framed decision question. Compact by rule R10 — never prose.
+def _wrap(text: str, width: int, indent: str) -> list[str]:
+    """Wrap to the terminal, keeping a hanging indent.
 
-    Border width is computed from the *visible* text so the top and bottom
-    rails always line up, whatever the heading says.
+    Long reasoning used to run past the edge and wrap wherever the terminal
+    happened to break it, which put the second half of a sentence under the
+    left margin and made the block look broken.
     """
-    inner = WIDTH - 2
-    label = f"{MARK} FORGE" + (f" · DECISION {number:03d}" if number else "")
-    # visible top-rail prefix is "┌─ " + label + " "
-    used = 3 + len(label) + 1
-    fill = max(0, inner - used + 1)
+    import textwrap
 
-    tag = f" {FAINT}·{RESET} {AMBER}DECISION {number:03d}{RESET}" if number else ""
+    if not text:
+        return []
+    return textwrap.wrap(text, width=width, initial_indent=indent, subsequent_indent=indent)
+
+
+def rule(char: str = "─") -> str:
+    return f"  {FAINT}{char * WIDTH}{RESET}"
+
+
+def question_box(
+    title: str,
+    subtitle: str = "",
+    number: int | None = None,
+    done: int = 0,
+    total: int = 0,
+    stage: str = "",
+) -> str:
+    """The heading for a decision.
+
+    **No box.** The frame this used to draw could not be relied on: `⚒` is an
+    emoji-presentation character and renders two columns wide in most
+    terminals, while `len()` counts it as one — so the top rail came out a
+    column longer than the bottom one and the whole frame looked broken. A
+    rule needs no width arithmetic, so it cannot disagree with itself.
+
+    The progress moves up here too. It was a lone bar at the bottom of the
+    screen, furthest from the thing it described; rule R4 asks for it to be
+    visible, not for it to be last.
+    """
+    right = ""
+    if total:
+        right = f"{done} of ~{total}" + (f" · {stage}" if stage else "")
+
+    left = f"{MARK} FORGE" + (f" · DECISION {number:03d}" if number else "")
+    # Padding is computed from the plain text, and the two-column symbol is the
+    # only thing that lies about its length — so it is counted as two.
+    used = len(left) + 1 + len(right)
+    gap = " " * max(2, WIDTH - used)
+
     out = [
         "",
-        f"  {FAINT}┌─{RESET} {AMBER}{BOLD}{MARK} FORGE{RESET}{tag} {FAINT}{'─' * fill}┐{RESET}",
-        f"  {FAINT}│{RESET}  {BOLD}{title}{RESET}",
+        f"  {AMBER}{BOLD}{MARK} FORGE{RESET}"
+        + (f"{FAINT} · {RESET}{AMBER}DECISION {number:03d}{RESET}" if number else "")
+        + f"{gap}{DIM}{right}{RESET}",
+        rule(),
+        "",
+        f"  {BOLD}{title}{RESET}",
     ]
     if subtitle:
-        out.append(f"  {FAINT}│{RESET}  {DIM}{subtitle}{RESET}")
-    out.append(f"  {FAINT}└{'─' * inner}┘{RESET}")
+        out.append(f"  {DIM}{subtitle}{RESET}")
     return "\n".join(out)
 
 
+def decision(
+    title: str,
+    *,
+    number: int | None = None,
+    subtitle: str = "",
+    means: list[str] | None = None,
+    choices: list[tuple[str, str, str]] | None = None,
+    recommend: tuple[str, str] | None = None,
+    against: str = "",
+    done: int = 0,
+    total: int = 0,
+    stage: str = "",
+    ask: str = "Your call",
+) -> str:
+    """A whole decision as one block.
+
+    Composed here rather than by the caller printing five pieces in order. The
+    parts have to appear in a fixed sequence to read properly — teach, then
+    options, then the recommendation, then the question — and leaving that
+    order to whoever is calling meant it drifted between stages.
+    """
+    parts = [question_box(title, subtitle, number, done, total, stage)]
+
+    if means:
+        parts.append(teaching("What this means", means))
+    if choices:
+        parts.append(options(choices))
+    if recommend:
+        parts.append(recommendation(recommend[0], recommend[1], against))
+
+    parts += [rule(), prompt(ask)]
+    return "\n".join(parts)
+
+
 def options(items: list[tuple[str, str, str]]) -> str:
-    """Options as a tight list: (letter, label, one-line consequence)."""
+    """Options as a tight list: (letter, label, one-line consequence).
+
+    The label column is sized to the longest label rather than a fixed 28, so
+    short options do not sit in a lake of whitespace and a long one is not
+    pushed off the edge. The consequence is what the user is really comparing,
+    so it gets the room that is left.
+    """
+    if not items:
+        return ""
+
+    label_width = max(len(label) for _, label, _ in items)
+    room = WIDTH - label_width - 8
+
     out = ["", f"  {AMBER}{BOLD}Options{RESET}"]
     for letter, label, note in items:
-        out.append(
-            f"    {AMBER}{BOLD}{letter}{RESET}  {label:<28} {DIM}{note}{RESET}"
-        )
+        head = f"    {AMBER}{BOLD}{letter}{RESET}  {BOLD}{label}{RESET}"
+        pad = " " * (label_width - len(label) + 2)
+        wrapped = _wrap(note, room, "")
+        out.append(f"{head}{pad}{DIM}{wrapped[0] if wrapped else ''}{RESET}")
+        # A consequence too long for one line continues under itself, not
+        # under the letter — so the columns stay readable.
+        for extra in wrapped[1:]:
+            out.append(f"{' ' * (label_width + 9)}{DIM}{extra}{RESET}")
     return "\n".join(out)
 
 
 def recommendation(choice: str, reason: str, against: str = "") -> str:
-    out = ["", f"  {GREEN}{STAR} Recommended{RESET}  {BOLD}{choice}{RESET} {DIM}— {reason}{RESET}"]
+    """Forge's own view, and what is wrong with it.
+
+    The reason wraps under the recommendation rather than trailing off the
+    right edge — it is usually the longest line on the screen, and it used to
+    break wherever the terminal happened to run out.
+    """
+    out = ["", f"  {GREEN}{BOLD}{STAR} Recommended{RESET}  {BOLD}{choice}{RESET}"]
+    out += [f"{DIM}{line}{RESET}" for line in _wrap(reason, WIDTH - 5, "     ")]
     if against:
-        out.append(f"  {DIM}Against it: {against}{RESET}")
+        # Always shown. A recommendation with no cost is advertising, and the
+        # user is being asked to weigh it, not to accept it.
+        out.append("")
+        out += [
+            f"{DIM}{line}{RESET}"
+            for line in _wrap(f"Against it: {against}", WIDTH - 5, "     ")
+        ]
     return "\n".join(out)
 
 

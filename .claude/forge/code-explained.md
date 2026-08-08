@@ -1,13 +1,13 @@
 ---
 type: code-explained
-decisions: 31
-chosen_by_you: 31
+decisions: 32
+chosen_by_you: 32
 updated: 2026-08-08
 ---
 
 # Why Forge Mentor is built the way it is
 
-31 decisions shape this project. You made 31 of them.
+32 decisions shape this project. You made 32 of them.
 
 Read in the order they were decided, because each one was made knowing the
 ones above it — which is not the order the files are listed in.
@@ -281,3 +281,11 @@ Full record: [`031`](decisions/)
 Also considered: **A** — `.claude/forge/` for everything Forge keeps; **B** — stay at `.forge/` in the project root
 
 Full record: [`032`](decisions/)
+
+## 033 · What does Forge ask first, and in what order?
+
+**A**
+
+Also considered: **B** — let the planner choose an order per project; **C** — the stack first, the rest chosen per project
+
+Full record: [`033`](decisions/)

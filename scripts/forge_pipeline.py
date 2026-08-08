@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import forge_foundation as ff
 import forge_skills as sk
 import forge_state as fs
 
@@ -272,11 +273,14 @@ def next_step(forge_dir: Path) -> Step:
     # version fell straight to CHALLENGE on a fresh directory and INTERROGATION
     # was only ever reached once a question was already open, which meant the
     # stage that opens the first question could never be the one suggested.
-    if not fs.list_decisions(forge_dir):
+    pending_foundation = ff.next_question(forge_dir)
+    if pending_foundation is not None:
+        done, total = ff.position(forge_dir)
         return _step(
             Stage.INTERROGATION,
-            why="nothing is decided yet — begin the foundation questions",
+            why=f"{pending_foundation.question} — {done + 1} of {total}",
             asks_user=True,
+            question=pending_foundation.question,
         )
 
     if not challenge_done(forge_dir):

@@ -789,9 +789,177 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
 
     return fpr.report(Path(project), forge, name or Path(project).name)
 
+@server.tool(
+    name="render_decision",
+    description=(
+        "Render a whole decision as one block — heading, what it means, the "
+        "options, the recommendation, and the prompt — in Forge's visual "
+        "identity. **Use this instead of writing the question yourself**, so "
+        "every decision looks the same and the parts stay in the order that "
+        "reads properly: teach, then options, then the recommendation, then "
+        "the question. Pass `choices` as [[letter, label, consequence], ...]. "
+        "Reads only; changes nothing."
+    ),
+)
+def render_decision(
+    title: str,
+    number: int = 0,
+    subtitle: str = "",
+    means: list[str] | None = None,
+    choices: list[list[str]] | None = None,
+    recommend_choice: str = "",
+    recommend_reason: str = "",
+    against: str = "",
+    done: int = 0,
+    total: int = 0,
+    stage: str = "",
+) -> dict[str, Any]:
+    import forge_ui as ui
+
+    try:
+        triples = [(c[0], c[1], c[2]) for c in (choices or [])]
+    except (IndexError, TypeError):
+        return {"error": "Each choice needs three parts: letter, label, consequence."}
+
+    return {
+        "block": ui.decision(
+            title,
+            number=number or None,
+            subtitle=subtitle,
+            means=means or None,
+            choices=triples or None,
+            recommend=(recommend_choice, recommend_reason) if recommend_choice else None,
+            against=against,
+            done=done,
+            total=total,
+            stage=stage,
+        )
+    }
+
+
+@server.tool(
+    name="foundation_question",
+    description=(
+        "The next foundation question for this project, in the fixed order of "
+        "decision 033 — the stack first, because every question after it is "
+        "asked inside an answer to it. Returns the question, what it decides, "
+        "the teaching lines, and its options where they do not depend on the "
+        "stack. **Ask these in the order given**; do not substitute your own. "
+        "Reads only; changes nothing."
+    ),
+)
+def foundation_question(project: str) -> dict[str, Any]:
+    import forge_foundation as ff
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    question = ff.next_question(forge)
+    done, total = ff.position(forge)
+    if question is None:
+        return {"finished": True, "answered": done, "total": total}
+
+    return {
+        "finished": False,
+        "key": question.key,
+        "question": question.question,
+        "subtitle": question.subtitle,
+        "means": list(question.means),
+        "choices": [list(o) for o in question.options],
+        "answered": done,
+        "total": total,
+    }
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom; see the note in test_server.py.
     server.run()
+
+
+@server.tool(
+    name="render_decision",
+    description=(
+        "Render a whole decision as one block — heading, what it means, the "
+        "options, the recommendation, and the prompt — in Forge's visual "
+        "identity. **Use this instead of writing the question yourself**, so "
+        "every decision looks the same and the parts stay in the order that "
+        "reads properly: teach, then options, then the recommendation, then "
+        "the question. Pass `choices` as [[letter, label, consequence], ...]. "
+        "Reads only; changes nothing."
+    ),
+)
+def render_decision(
+    title: str,
+    number: int = 0,
+    subtitle: str = "",
+    means: list[str] | None = None,
+    choices: list[list[str]] | None = None,
+    recommend_choice: str = "",
+    recommend_reason: str = "",
+    against: str = "",
+    done: int = 0,
+    total: int = 0,
+    stage: str = "",
+) -> dict[str, Any]:
+    import forge_ui as ui
+
+    try:
+        triples = [(c[0], c[1], c[2]) for c in (choices or [])]
+    except (IndexError, TypeError):
+        return {"error": "Each choice needs three parts: letter, label, consequence."}
+
+    return {
+        "block": ui.decision(
+            title,
+            number=number or None,
+            subtitle=subtitle,
+            means=means or None,
+            choices=triples or None,
+            recommend=(recommend_choice, recommend_reason) if recommend_choice else None,
+            against=against,
+            done=done,
+            total=total,
+            stage=stage,
+        )
+    }
+
+
+@server.tool(
+    name="foundation_question",
+    description=(
+        "The next foundation question for this project, in the fixed order of "
+        "decision 033 — the stack first, because every question after it is "
+        "asked inside an answer to it. Returns the question, what it decides, "
+        "the teaching lines, and its options where they do not depend on the "
+        "stack. **Ask these in the order given**; do not substitute your own. "
+        "Reads only; changes nothing."
+    ),
+)
+def foundation_question(project: str) -> dict[str, Any]:
+    import forge_foundation as ff
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    question = ff.next_question(forge)
+    done, total = ff.position(forge)
+    if question is None:
+        return {"finished": True, "answered": done, "total": total}
+
+    return {
+        "finished": False,
+        "key": question.key,
+        "question": question.question,
+        "subtitle": question.subtitle,
+        "means": list(question.means),
+        "choices": [list(o) for o in question.options],
+        "answered": done,
+        "total": total,
+    }
 
 
 if __name__ == "__main__":  # pragma: no cover - process entry point

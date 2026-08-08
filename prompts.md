@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: Forge Mentor
-entries: 31
+entries: 32
 generated: 2026-08-08
 ---
 
@@ -511,5 +511,21 @@ live pace (R7) and warn-don't-block (decision 004).
 - **C** — `.claude/forge/` for state, and `prompts.md` at the root as well
 
 **Answered by the user:** C
+
+---
+
+## 033 · What does Forge ask first, and in what order?
+
+**Asked:**
+
+> What does Forge ask first, and in what order?
+
+**Options put to the user:**
+
+- **A** — a fixed foundation sequence, the stack first
+- **B** — let the planner choose an order per project
+- **C** — the stack first, the rest chosen per project
+
+**Answered by the user:** A
 
 ---

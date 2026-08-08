@@ -58,9 +58,30 @@ def test_only_four_symbols_ship() -> None:
 
 @pytest.mark.parametrize("number", [None, 1, 7, 42, 999])
 @pytest.mark.parametrize("title", ["Short?", "How should people log in to this system?"])
-def test_box_rails_always_match(number, title) -> None:
-    lines = [ln for ln in plain(ui.question_box(title, "sub", number)).splitlines() if ln.strip()]
-    assert len(lines[0]) == len(lines[-1]), "top and bottom rails must be equal width"
+def test_the_heading_never_needs_width_arithmetic(number, title) -> None:
+    """The frame this replaced could not be relied on.
+
+    `⚒` is an emoji-presentation character: it renders two columns wide in most
+    terminals while `len()` counts it as one, so the top rail came out a column
+    longer than the bottom and the whole box looked broken. A rule needs no
+    arithmetic against the heading, so it cannot disagree with itself.
+    """
+    out = plain(ui.question_box(title, "sub", number))
+    rules = [ln for ln in out.splitlines() if set(ln.strip()) == {"─"}]
+
+    assert rules, "there is a rule under the heading"
+    for line in rules:
+        assert len(line.strip()) == ui.WIDTH, "every rule is exactly one width"
+    assert title in out
+
+
+def test_progress_sits_with_the_heading_not_alone_at_the_bottom() -> None:
+    """Rule R4 asks for it to be visible, not for it to be last."""
+    out = plain(ui.question_box("Where is the data kept?", "", 3, done=2, total=5, stage="foundation"))
+    first = out.strip().splitlines()[0]
+
+    assert "DECISION 003" in first
+    assert "2 of ~5" in first and "foundation" in first
 
 
 def test_box_shows_the_decision_number() -> None:
