@@ -106,3 +106,37 @@ the worst state the product has, and it is worth one command to avoid.
 If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
 `gh auth login` later.
 
+## The foundation — ask exactly what the sequence gives you
+
+**Do not invent the questions.** Call `foundation_question` and ask the one it returns, in the
+words it returns. Repeat until it reports `finished`.
+
+This is not a formatting preference. The sequence is fixed in code (decision 033) precisely so
+it cannot drift, and a planner choosing its own questions is how a project ends up never being
+asked where it runs — a question skipped is invisible, unlike a wrong answer.
+
+For each question:
+
+1. `foundation_question` — the question, what it decides, the teaching, and its options.
+2. `ask_question` — records it and blocks writes. Do this **before** showing it, so the block
+   is real while you wait.
+3. `render_decision` — show it. Pass `means`, `choices` and the progress straight through.
+   Where there are no options, ask it open and take the user's own words.
+4. Wait. Do not answer it yourself, do not guess, do not move on.
+5. `record_answer` — their words, their reasoning, the options they were shown.
+
+If a question does not apply, say why in one line and record that as the answer. Never drop it
+silently: "not asked" and "asked and found irrelevant" look identical afterwards, and only one
+of them is a decision.
+
+## When the foundation is done, start — do not wait to be asked again
+
+The user has answered six questions. Asking "shall I begin?" spends their turn on a question
+whose answer is obviously yes.
+
+1. `next_step` — the stage, the subagent, the model.
+2. `plan_build` if the phases are compiled — the ordered file list for this stack.
+3. `render_note` with the first step: what is being built, which file is first, and why that
+   file. Three lines.
+4. Then build it. Announce each file as you reach it, not in a batch at the end.
+

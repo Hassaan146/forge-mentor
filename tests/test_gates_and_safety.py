@@ -484,3 +484,40 @@ def test_a_quoted_git_option_does_not_hide_the_subcommand(command: str) -> None:
     name with a space in it.
     """
     assert gates.is_commit_command(command) is True
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'python -c "print(q.key)"',
+        "echo d.pem",
+        "grep -n a.key file.py",
+    ],
+)
+def test_attribute_access_is_not_a_credential_file(command: str) -> None:
+    """This blocked Forge's own tooling within a day of shipping.
+
+    `.key` is a credential suffix, so every attribute named `key` on a short
+    variable read as a secret file. A guard that blocks ordinary work is a
+    guard that gets turned off — at which point it protects nothing at all.
+    """
+    assert safety.secret_in_command(command) is None
+
+
+@pytest.mark.parametrize(
+    "command,found",
+    [
+        ("cat server" + ".key", "server" + ".key"),
+        ("cat ./x" + ".key", "x" + ".key"),
+        ("cat keys/a" + ".key", "a" + ".key"),
+        ("cat id_rsa", "id_rsa"),
+        ("sed -n 1p .env", ".env"),
+    ],
+)
+def test_a_real_credential_file_is_still_caught(command: str, found: str) -> None:
+    """The narrowing is one- and two-character stems with no separator.
+
+    Anything with a path in it, or a stem long enough to be a real filename,
+    is still a secret — the exemption is for an attribute, not for a key file.
+    """
+    assert safety.secret_in_command(command) == found

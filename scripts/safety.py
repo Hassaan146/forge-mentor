@@ -192,9 +192,36 @@ def secret_in_command(command: str, cwd: str | None = None) -> str | None:
 
     # Split on shell punctuation so quoting and chaining do not hide a name.
     for token in re.findall(r"[\w./\\~-]+", command):
+        if _looks_like_code_not_a_path(token):
+            continue
         if is_secret_file(token, cwd):
             return Path(token).name
     return None
+
+
+# A dotted name whose stem is one or two characters: `q.key`, `d.pem`, `x.p12`.
+# Real credential files are not named that; Python attribute access is.
+_ATTRIBUTE_ACCESS = re.compile(r"^[A-Za-z_]\w{0,1}\.[A-Za-z_]\w*$")
+
+
+def _looks_like_code_not_a_path(token: str) -> bool:
+    """Is this an attribute access rather than a filename?
+
+    This check blocked `python -c "print(q.key)"` — `.key` is a credential
+    suffix, so every attribute named `key` on a two-letter variable read as a
+    secret file. It fired on Forge's own tooling within a day of shipping.
+
+    A false positive here is not harmless. The check gates every shell command
+    in the session, and a guard that blocks ordinary work is a guard that gets
+    turned off — at which point it protects nothing at all.
+
+    Narrow on purpose: only a dotted name with a one- or two-character stem and
+    no path separator. `server.key`, `./x.key` and `keys/a.key` are all still
+    caught, because each of those is plausibly a file.
+    """
+    if "/" in token or "\\" in token:
+        return False
+    return bool(_ATTRIBUTE_ACCESS.match(token))
 
 
 def find_injection(text: str) -> str | None:
