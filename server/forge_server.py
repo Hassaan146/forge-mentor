@@ -873,6 +873,51 @@ def foundation_question(project: str) -> dict[str, Any]:
     }
 
 
+@server.tool(
+    name="render_note",
+    description=(
+        "Render a short follow-up in Forge's frame — a clarification, a "
+        "'why not the other option', an answer to a question about the "
+        "options. **Use this instead of writing prose.** An unframed "
+        "paragraph is indistinguishable from ordinary chat, so the user "
+        "cannot tell which of the two is bound by Forge's rules (decision "
+        "035). Capped at three lines: one per point, with the full argument "
+        "left in the decision record. `symbol` is one of the seven — pass "
+        "`cost` for a drawback, `teach` for an explanation, otherwise leave "
+        "it. Reads only; changes nothing."
+    ),
+)
+def render_note(
+    heading: str,
+    lines: list[str],
+    symbol: str = "",
+    ask: str = "",
+) -> dict[str, Any]:
+    import forge_ui as ui
+
+    marks = {
+        "": "",
+        "forge": ui.MARK,
+        "teach": ui.TEACH,
+        "options": ui.WEIGH,
+        "recommend": ui.STAR,
+        "cost": ui.COST,
+        "recorded": ui.RECORDED,
+        "blocked": ui.BLOCKED,
+    }
+    if symbol.strip().lower() not in marks:
+        return {"error": f"Unknown symbol {symbol!r}. Use one of: {', '.join(sorted(marks))}."}
+
+    return {
+        "block": ui.note(
+            heading,
+            list(lines or []),
+            symbol=marks[symbol.strip().lower()],
+            ask=ask,
+        )
+    }
+
+
 if __name__ == "__main__":  # pragma: no cover - process entry point
     # Must stay at the very bottom; see the note in test_server.py.
     server.run()
@@ -959,6 +1004,51 @@ def foundation_question(project: str) -> dict[str, Any]:
         "choices": [list(o) for o in question.options],
         "answered": done,
         "total": total,
+    }
+
+
+@server.tool(
+    name="render_note",
+    description=(
+        "Render a short follow-up in Forge's frame — a clarification, a "
+        "'why not the other option', an answer to a question about the "
+        "options. **Use this instead of writing prose.** An unframed "
+        "paragraph is indistinguishable from ordinary chat, so the user "
+        "cannot tell which of the two is bound by Forge's rules (decision "
+        "035). Capped at three lines: one per point, with the full argument "
+        "left in the decision record. `symbol` is one of the seven — pass "
+        "`cost` for a drawback, `teach` for an explanation, otherwise leave "
+        "it. Reads only; changes nothing."
+    ),
+)
+def render_note(
+    heading: str,
+    lines: list[str],
+    symbol: str = "",
+    ask: str = "",
+) -> dict[str, Any]:
+    import forge_ui as ui
+
+    marks = {
+        "": "",
+        "forge": ui.MARK,
+        "teach": ui.TEACH,
+        "options": ui.WEIGH,
+        "recommend": ui.STAR,
+        "cost": ui.COST,
+        "recorded": ui.RECORDED,
+        "blocked": ui.BLOCKED,
+    }
+    if symbol.strip().lower() not in marks:
+        return {"error": f"Unknown symbol {symbol!r}. Use one of: {', '.join(sorted(marks))}."}
+
+    return {
+        "block": ui.note(
+            heading,
+            list(lines or []),
+            symbol=marks[symbol.strip().lower()],
+            ask=ask,
+        )
     }
 
 

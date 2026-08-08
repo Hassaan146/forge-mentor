@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: Forge Mentor
-entries: 33
+entries: 34
 generated: 2026-08-08
 ---
 
@@ -543,5 +543,21 @@ live pace (R7) and warn-don't-block (decision 004).
 - **C** — block on the first write and let the user opt out
 
 **Answered by the user:** A
+
+---
+
+## 035 · How many symbols does Forge use, and what governs them?
+
+**Asked:**
+
+> How many symbols does Forge use, and what governs them?
+
+**Options put to the user:**
+
+- **A** — keep the four symbols of rule R9 unchanged
+- **B** — one symbol per meaning, fixed set, nothing decorative
+- **C** — emoji freely wherever they help
+
+**Answered by the user:** B
 
 ---

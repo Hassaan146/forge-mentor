@@ -91,11 +91,25 @@ FAINT = _c("\033[38;5;240m")  # borders
 BOLD = _c("\033[1m")
 RESET = _c("\033[0m")
 
-# The only four symbols. Restraint is deliberate (R9).
-MARK = "⚒"
-BLOCKED = "⛔"
-RECORDED = "✅"
-STAR = "★"
+# One symbol per meaning, and no symbol without one (decision 035). Seven,
+# fixed. Rule R9 said four and was right about restraint but wrong about the
+# number — headings had no marker at all, so "What this means" and "Options"
+# were told apart by position and nothing else.
+#
+# Adding an eighth requires a meaning none of these carries. That is the same
+# restraint R9 wanted, stated as a test rather than as a count.
+MARK = "⚒"        # Forge itself
+TEACH = "💡"       # what this means
+WEIGH = "⚖️"       # the options, weighed
+STAR = "★"        # the recommendation
+COST = "⚠️"        # what the recommendation costs
+RECORDED = "✅"    # recorded
+BLOCKED = "⛔"     # blocked
+
+# Every one of these renders wider than its Unicode class claims, so the frame
+# has to be told. `⚖️` and `⚠️` carry a variation selector, which is zero-width
+# and must not be counted twice.
+SYMBOLS = (MARK, TEACH, WEIGH, STAR, COST, RECORDED, BLOCKED)
 
 def _width() -> int:
     """How wide to draw, from the terminal rather than from a guess.
@@ -155,7 +169,10 @@ _ANSI = re.compile(r"\[[0-9;]*m")
 # classed Wide and need no help. Listed explicitly rather than inferred,
 # because "does this terminal draw this symbol as an emoji" is not a question
 # Python can answer.
-_RENDERS_WIDE = frozenset("⚒")
+_RENDERS_WIDE = frozenset("⚒💡⚖⚠")
+
+# U+FE0F asks for emoji presentation and occupies no column of its own.
+_VARIATION_SELECTOR = "️"
 
 
 def visible_width(text: str) -> int:
@@ -167,6 +184,8 @@ def visible_width(text: str) -> int:
     plain_text = _ANSI.sub("", text)
     width = 0
     for char in plain_text:
+        if char == _VARIATION_SELECTOR:
+            continue  # asks the terminal for emoji presentation; draws nothing
         if unicodedata.combining(char):
             continue  # an accent sits on the character before it
         if char in _RENDERS_WIDE or unicodedata.east_asian_width(char) in ("W", "F"):
@@ -277,6 +296,50 @@ def _option_lines(items: list[tuple[str, str, str]]) -> list[str]:
     return out
 
 
+MAX_NOTE_LINES = 3
+
+
+def note(
+    heading: str,
+    lines: list[str],
+    *,
+    symbol: str = "",
+    ask: str = "",
+) -> str:
+    """A short framed answer — the follow-up, not the decision.
+
+    Everything Forge says goes inside a frame (decision 035). An unframed
+    paragraph is indistinguishable from the assistant talking, so a session
+    looked like Forge while a question was on screen and like ordinary chat
+    for everything in between — and the user could not tell which of the two
+    was bound by the rules.
+
+    **Capped at three lines, and the cap is the feature.** The follow-up
+    sprawled because it had nowhere to be short: given a lid, each cost fits on
+    one line and the full argument stays in the decision record, which is where
+    someone will actually look for it in a month.
+    """
+    kept = [line for line in lines if line.strip()][:MAX_NOTE_LINES]
+    dropped = len([line for line in lines if line.strip()]) - len(kept)
+
+    body: list[str] = [""]
+    for line in kept:
+        body += [f"{DIM}{wrapped}{RESET}" for wrapped in _wrap(line, WIDTH - 8, "    ")]
+
+    if dropped:
+        body += [
+            "",
+            f"    {FAINT}{dropped} more in the decision record{RESET}",
+        ]
+
+    if ask:
+        body += ["", f"  {AMBER}{BOLD}{ask}{RESET}"]
+    body.append("")
+
+    title = f"{AMBER}{BOLD}{symbol or MARK} {heading}{RESET}"
+    return "\n" + box(body, title=title) + "\n"
+
+
 def decision(
     title: str,
     *,
@@ -310,11 +373,11 @@ def decision(
         body.append(f"  {DIM}{subtitle}{RESET}")
 
     if means:
-        body += ["", f"  {CYAN}{BOLD}What this means{RESET}"]
+        body += ["", f"  {CYAN}{BOLD}{TEACH} What this means{RESET}"]
         body += [f"    {line}" for line in means]
 
     if choices:
-        body += ["", f"  {AMBER}{BOLD}Options{RESET}"]
+        body += ["", f"  {AMBER}{BOLD}{WEIGH} Options{RESET}"]
         body += _option_lines(choices)
 
     if recommend:
@@ -324,7 +387,7 @@ def decision(
             body.append("")
             body += [
                 f"{DIM}{line}{RESET}"
-                for line in _wrap(f"Against it: {against}", WIDTH - 8, "    ")
+                for line in _wrap(f"{COST} Against it: {against}", WIDTH - 8, "    ")
             ]
 
     if total:
@@ -348,7 +411,7 @@ def options(items: list[tuple[str, str, str]]) -> str:
     label_width = max(len(label) for _, label, _ in items)
     room = WIDTH - label_width - 8
 
-    out = ["", f"  {AMBER}{BOLD}Options{RESET}"]
+    out = ["", f"  {AMBER}{BOLD}{WEIGH} Options{RESET}"]
     for letter, label, note in items:
         head = f"    {AMBER}{BOLD}{letter}{RESET}  {BOLD}{label}{RESET}"
         pad = " " * (label_width - len(label) + 2)

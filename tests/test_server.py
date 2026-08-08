@@ -332,6 +332,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "write_prompts_log",
         "render_decision",
         "foundation_question",
+        "render_note",
     }
 
 

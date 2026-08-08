@@ -1,13 +1,13 @@
 ---
 type: code-explained
-decisions: 33
-chosen_by_you: 33
+decisions: 34
+chosen_by_you: 34
 updated: 2026-08-08
 ---
 
 # Why Forge Mentor is built the way it is
 
-33 decisions shape this project. You made 33 of them.
+34 decisions shape this project. You made 34 of them.
 
 Read in the order they were decided, because each one was made knowing the
 ones above it — which is not the order the files are listed in.
@@ -297,3 +297,11 @@ Full record: [`033`](decisions/)
 Also considered: **A** — block whenever a foundation question is unanswered; **B** — block only while a question is open, as before; **C** — block on the first write and let the user opt out
 
 Full record: [`034`](decisions/)
+
+## 035 · How many symbols does Forge use, and what governs them?
+
+**B**
+
+Also considered: **A** — keep the four symbols of rule R9 unchanged; **C** — emoji freely wherever they help
+
+Full record: [`035`](decisions/)

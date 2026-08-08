@@ -251,3 +251,54 @@ def test_the_symbols_are_measured_at_their_rendered_width() -> None:
     assert ui.visible_width(ui.BLOCKED) == 2
     assert ui.visible_width(ui.RECORDED) == 2
     assert ui.visible_width(ui.STAR) == 1
+
+
+# --------------------------------------------------------------------------
+# follow-ups are framed and short — decision 035
+# --------------------------------------------------------------------------
+
+
+def test_a_follow_up_is_framed_like_everything_else() -> None:
+    """An unframed paragraph is indistinguishable from ordinary chat.
+
+    A session looked like Forge while a question was on screen and like plain
+    assistant text for everything in between, so the user could not tell which
+    of the two was bound by Forge's rules.
+    """
+    out = ui.note("Why not the others", ["No backup.", "One browser only."])
+    framed = [ln for ln in out.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+
+    assert framed, "the follow-up is inside a frame"
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "and the frame is square"
+
+
+def test_a_follow_up_is_capped_at_three_lines() -> None:
+    """The cap is the feature. It sprawled because it had nowhere to be short."""
+    out = plain(ui.note("Costs", [f"line {n}" for n in range(1, 8)]))
+
+    for kept in ("line 1", "line 2", "line 3"):
+        assert kept in out
+    assert "line 4" not in out
+    assert "4 more in the decision record" in out, "and it says what it withheld"
+
+
+def test_a_short_follow_up_is_left_alone() -> None:
+    out = plain(ui.note("Costs", ["only one point"]))
+    assert "only one point" in out
+    assert "more in the decision record" not in out
+
+
+def test_every_symbol_carries_exactly_one_meaning() -> None:
+    """Decision 035 replaced R9's count with a test: no symbol without a meaning.
+
+    Seven, fixed. An eighth needs a meaning none of these already carries.
+    """
+    assert len(ui.SYMBOLS) == 7
+    assert len(set(ui.SYMBOLS)) == 7, "no symbol used twice"
+
+
+def test_the_symbols_still_read_without_colour() -> None:
+    """R9's real point, which decision 035 keeps: colour is never alone."""
+    out = plain(ui.note("Costs", ["no backup"], symbol=ui.COST, ask="A, B, or C?"))
+    assert ui.COST in out
+    assert "Costs" in out and "A, B, or C?" in out
