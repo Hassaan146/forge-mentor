@@ -192,36 +192,59 @@ def secret_in_command(command: str, cwd: str | None = None) -> str | None:
 
     # Split on shell punctuation so quoting and chaining do not hide a name.
     for token in re.findall(r"[\w./\\~-]+", command):
-        if _looks_like_code_not_a_path(token):
+        if _looks_like_code_not_a_path(token, cwd):
             continue
         if is_secret_file(token, cwd):
             return Path(token).name
     return None
 
 
-# A dotted name whose stem is one or two characters: `q.key`, `d.pem`, `x.p12`.
-# Real credential files are not named that; Python attribute access is.
-_ATTRIBUTE_ACCESS = re.compile(r"^[A-Za-z_]\w{0,1}\.[A-Za-z_]\w*$")
+def _suffix_needs_a_real_file(token: str) -> bool:
+    """Does this token look like a credential file, or like code?
 
+    Only the suffix rules need this. An exact name — `.env`, `id_rsa`,
+    `credentials` — is unambiguous and still blocks on sight.
 
-def _looks_like_code_not_a_path(token: str) -> bool:
-    """Is this an attribute access rather than a filename?
+    The first attempt exempted dotted names with a one- or two-character stem,
+    which was arbitrary: it let `q.key` through and still blocked `first.key`,
+    `entry.key` and every other ordinary attribute. The signal that actually
+    separates them is whether the token could name a file that is there. You
+    cannot leak a file that does not exist.
 
-    This check blocked `python -c "print(q.key)"` — `.key` is a credential
-    suffix, so every attribute named `key` on a two-letter variable read as a
-    secret file. It fired on Forge's own tooling within a day of shipping.
-
-    A false positive here is not harmless. The check gates every shell command
-    in the session, and a guard that blocks ordinary work is a guard that gets
-    turned off — at which point it protects nothing at all.
-
-    Narrow on purpose: only a dotted name with a one- or two-character stem and
-    no path separator. `server.key`, `./x.key` and `keys/a.key` are all still
-    caught, because each of those is plausibly a file.
+    A path separator is enough on its own — `keys/a.key` is a path whatever it
+    resolves to, and refusing it costs nothing.
     """
     if "/" in token or "\\" in token:
         return False
-    return bool(_ATTRIBUTE_ACCESS.match(token))
+    return True
+
+
+def _looks_like_code_not_a_path(token: str, cwd: str | Path | None = None) -> bool:
+    """True when a suffix match is almost certainly an attribute access.
+
+    Checked against the filesystem rather than against a naming convention,
+    because `server.key` and `first.key` are the same shape and only one of
+    them is a file.
+    """
+    name = Path(token.replace("\\", "/")).name
+    lowered = name.lower()
+
+    # Exact credential names are never attribute accesses.
+    if lowered in SECRET_NAMES or lowered.startswith(".env"):
+        return False
+
+    if Path(lowered).suffix not in SECRET_SUFFIXES:
+        return False  # not a suffix match at all; nothing to relax
+
+    if not _suffix_needs_a_real_file(token):
+        return False  # it has a path in it, so treat it as a path
+
+    try:
+        base = Path(cwd) if cwd else Path.cwd()
+        candidate = base / token
+        return not candidate.exists()
+    except (OSError, ValueError):
+        return False  # cannot tell, so do not relax the check
 
 
 def find_injection(text: str) -> str | None:

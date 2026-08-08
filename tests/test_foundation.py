@@ -30,16 +30,22 @@ def answer(forge: Path, question: str, choice: str = "A") -> None:
     fs.answer(forge, asked.id, f"# {choice}\n\n## Why\n\nbecause\n")
 
 
-def test_what_you_want_to_make_is_asked_first(forge: Path) -> None:
-    """One open question before anything is chosen.
+def test_the_idea_is_asked_first_and_asked_openly(forge: Path) -> None:
+    """The user says "I want to make a to-do app" and that is a whole answer.
 
-    It carries no options on purpose: every option Forge could offer would
-    already assume an answer to it, and a menu narrows what the user was about
-    to say.
+    No options, on purpose: every option Forge could offer here would already
+    assume something about the idea, and a menu narrows what the user was about
+    to say. The five questions after it exist so they do not have to think in
+    those terms yet.
     """
     first = ff.next_question(forge)
-    assert first.key == "intent"
+
     assert first.options == (), "the only genuinely open question"
+    assert "idea" in first.question.lower()
+
+    teaching = " ".join(first.means).lower()
+    assert "friend" in teaching, "a description, not a specification"
+    assert "complete answer" in teaching, "a one-liner is enough"
 
 
 def test_the_stack_is_asked_before_anything_it_decides(forge: Path) -> None:

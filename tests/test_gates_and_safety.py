@@ -489,35 +489,53 @@ def test_a_quoted_git_option_does_not_hide_the_subcommand(command: str) -> None:
 @pytest.mark.parametrize(
     "command",
     [
+        'python -c "print(first.key)"',
         'python -c "print(q.key)"',
-        "echo d.pem",
-        "grep -n a.key file.py",
+        "echo entry.pem",
+        "grep -n item.key file.py",
     ],
 )
-def test_attribute_access_is_not_a_credential_file(command: str) -> None:
-    """This blocked Forge's own tooling within a day of shipping.
+def test_attribute_access_is_not_a_credential_file(command: str, tmp_path) -> None:
+    """This blocked Forge's own tooling four times in one session.
 
-    `.key` is a credential suffix, so every attribute named `key` on a short
-    variable read as a secret file. A guard that blocks ordinary work is a
-    guard that gets turned off — at which point it protects nothing at all.
+    A credential suffix on an attribute name read as a secret file, and the
+    command scan gates every shell call — so a guard meant to protect the user
+    was stopping ordinary work, which is how a guard ends up switched off.
+
+    The first fix exempted one- and two-character stems, which was arbitrary:
+    it let `q.key` through and still blocked `first.key`. The signal that
+    actually separates them is whether the token could name a file that is
+    there. You cannot leak a file that does not exist.
     """
-    assert safety.secret_in_command(command) is None
+    assert safety.secret_in_command(command, cwd=str(tmp_path)) is None
+
+
+def test_a_credential_file_that_exists_is_still_caught(tmp_path) -> None:
+    """Same shape as an attribute access; only one of them is a file."""
+    (tmp_path / "server.key").write_text("-----BEGIN PRIVATE KEY-----", encoding="utf-8")
+
+    assert safety.secret_in_command("cat server.key", cwd=str(tmp_path)) == "server.key"
 
 
 @pytest.mark.parametrize(
     "command,found",
     [
-        ("cat server" + ".key", "server" + ".key"),
-        ("cat ./x" + ".key", "x" + ".key"),
-        ("cat keys/a" + ".key", "a" + ".key"),
-        ("cat id_rsa", "id_rsa"),
-        ("sed -n 1p .env", ".env"),
+        ("cat keys/a.key", "a.key"),
+        ("cat ./nope.key", "nope.key"),
     ],
 )
-def test_a_real_credential_file_is_still_caught(command: str, found: str) -> None:
-    """The narrowing is one- and two-character stems with no separator.
+def test_anything_with_a_path_in_it_is_treated_as_a_path(
+    command: str, found: str, tmp_path
+) -> None:
+    """A separator settles it, whatever the token resolves to.
 
-    Anything with a path in it, or a stem long enough to be a real filename,
-    is still a secret — the exemption is for an attribute, not for a key file.
+    Refusing these costs nothing: nobody writes `keys/a.key` meaning an
+    attribute.
     """
-    assert safety.secret_in_command(command) == found
+    assert safety.secret_in_command(command, cwd=str(tmp_path)) == found
+
+
+@pytest.mark.parametrize("command", ["cat .env", "sed -n 1p .env", "cat id_rsa"])
+def test_an_exact_credential_name_never_needs_a_file(command: str, tmp_path) -> None:
+    """`.env` and `id_rsa` are unambiguous — nobody names an attribute that."""
+    assert safety.secret_in_command(command, cwd=str(tmp_path)) is not None

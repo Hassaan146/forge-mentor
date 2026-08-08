@@ -53,17 +53,24 @@ class Question:
 
 INTENT = Question(
     key="intent",
-    question="What do you want to make?",
-    subtitle="in your own words — there is nothing to pick from here",
+    question="What's the idea?",
+    subtitle="in your own words — the five questions after this all follow from it",
     means=(
-        "Say it however you would say it to a person. What the thing is, who it",
-        "is for, and what it should do on the first day it works.",
+        "Describe it the way you would to a friend, not the way you would write",
+        'a specification. "A to-do app for myself" is a complete answer. So is',
+        "a paragraph about a business you are trying to start.",
         "",
-        "Nothing is chosen yet. This is the one question with no options,",
-        "because every option Forge could offer would already assume an answer",
-        "to it — and a menu narrows what you were about to say.",
+        "Useful if you have it: who it is for, and what it should do on the",
+        "first day it works. Leave out anything you have not settled — that is",
+        "what the next five questions are for.",
+        "",
+        "Nothing is chosen yet, and there is nothing to pick from. Every option",
+        "Forge could offer here would already assume something about your idea,",
+        "and a menu narrows what you were about to say.",
     ),
-    # No options, deliberately. It is the only genuinely open question here.
+    # No options, deliberately. It is the only genuinely open question, and the
+    # one the other five are asked inside: a recommendation about storage or
+    # hosting is not answerable until Forge knows what the thing is.
 )
 
 STACK = Question(
