@@ -67,10 +67,26 @@ def test_open_question_blocks_and_names_it(project, monkeypatch, capsys) -> None
     assert "write it anyway" in reason(response)
 
 
+def complete_foundation(forge) -> None:
+    """Answer the six foundation questions.
+
+    The governor blocks until they are all recorded, not just between asking
+    and answering — a fresh project used to allow a write because nothing was
+    open, which let Forge write a whole file before a single decision existed.
+    Anything testing "a write is allowed" has to get past that first.
+    """
+    import forge_foundation as ff
+
+    for question in ff.FOUNDATION:
+        asked = fs.ask(forge, question.question)
+        fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
+
 def test_answered_question_allows(project, monkeypatch, capsys) -> None:
     forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
+    complete_foundation(forge)
     assert not is_deny(invoke(monkeypatch, capsys, write_payload(project)))
 
 

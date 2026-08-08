@@ -198,3 +198,56 @@ def test_output_survives_a_console_that_cannot_print_the_symbols(
     written = raw.getvalue()
     for symbol in (ui.RECORDED, ui.MARK):
         assert symbol.encode() in written, f"{symbol} reached the stream intact"
+
+
+# --------------------------------------------------------------------------
+# the box, and why it needs a width function
+# --------------------------------------------------------------------------
+
+
+def test_every_framed_line_closes_at_the_same_column() -> None:
+    """The bug this replaced, stated as a test.
+
+    `⚒` is East-Asian "Neutral", so `len()` says one column — but terminals
+    give it emoji presentation and draw two. The top rail came out a column
+    longer than the bottom and the frame looked broken.
+    """
+    out = ui.decision(
+        "What are you building this with?",
+        number=1,
+        subtitle="the first decision",
+        means=["a line of teaching"],
+        choices=[("A", "Browser only", "no server, nothing to deploy")],
+        recommend=("A", "nothing to host"),
+        against="the data lives in one browser",
+        done=0,
+        total=6,
+        stage="foundation",
+    )
+
+    framed = [ln for ln in out.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    widths = {ui.visible_width(ln) for ln in framed}
+
+    assert len(framed) > 8, "the whole decision is inside the frame"
+    assert len(widths) == 1, f"the frame is ragged: {sorted(widths)}"
+
+
+def test_colour_codes_are_not_counted_as_columns() -> None:
+    """They are bytes the terminal consumes and never draws.
+
+    Counting them is the other way padding goes silently wrong — and it only
+    shows up with colour on, which is not how tests usually run.
+    """
+    assert ui.visible_width(f"{ui.AMBER}{ui.BOLD}abc{ui.RESET}") == 3
+
+
+def test_the_symbols_are_measured_at_their_rendered_width() -> None:
+    """Pinned explicitly, because Python cannot ask the terminal.
+
+    If one of these is wrong the box goes crooked, so the assumption belongs
+    somewhere a reviewer can see and argue with it.
+    """
+    assert ui.visible_width(ui.MARK) == 2, "emoji presentation despite Neutral class"
+    assert ui.visible_width(ui.BLOCKED) == 2
+    assert ui.visible_width(ui.RECORDED) == 2
+    assert ui.visible_width(ui.STAR) == 1

@@ -288,10 +288,26 @@ def test_writes_blocked_while_a_question_is_open(project: Path) -> None:
     assert "rate limiting" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def complete_foundation(forge) -> None:
+    """Answer the six foundation questions.
+
+    The governor blocks until they are all recorded, not just between asking
+    and answering — a fresh project used to allow a write because nothing was
+    open, which let Forge write a whole file before a single decision existed.
+    Anything testing "a write is allowed" has to get past that first.
+    """
+    import forge_foundation as ff
+
+    for question in ff.FOUNDATION:
+        asked = fs.ask(forge, question.question)
+        fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
+
 def test_writes_allowed_once_answered(project: Path) -> None:
     forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
+    complete_foundation(forge)
     assert not denied(run_governor(project))
 
 

@@ -15,7 +15,9 @@ every code becomes an empty string and the symbols still carry the meaning.
 from __future__ import annotations
 
 import os
+import re
 import sys
+import unicodedata
 
 # --------------------------------------------------------------------------
 # making the symbols printable at all
@@ -139,6 +141,66 @@ def banner(project: str | None = None, version: str = "0.1.0") -> str:
     return "\n".join(lines)
 
 
+# --------------------------------------------------------------------------
+# measuring a line, which is the whole reason the box works
+# --------------------------------------------------------------------------
+
+_ANSI = re.compile(r"\[[0-9;]*m")
+
+# Characters that render wider than their Unicode width class claims.
+#
+# `⚒` is the reason the frame used to come out crooked. Its East Asian width is
+# "Neutral", so every rule says one column and `len()` agrees — but terminals
+# give it emoji presentation and draw it in two. `⛔` and `✅` are properly
+# classed Wide and need no help. Listed explicitly rather than inferred,
+# because "does this terminal draw this symbol as an emoji" is not a question
+# Python can answer.
+_RENDERS_WIDE = frozenset("⚒")
+
+
+def visible_width(text: str) -> int:
+    """How many columns this will actually occupy.
+
+    Colour codes are stripped first — they are bytes the terminal consumes and
+    never draws, so counting them is how padding silently goes wrong.
+    """
+    plain_text = _ANSI.sub("", text)
+    width = 0
+    for char in plain_text:
+        if unicodedata.combining(char):
+            continue  # an accent sits on the character before it
+        if char in _RENDERS_WIDE or unicodedata.east_asian_width(char) in ("W", "F"):
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def box(lines: list[str], title: str = "") -> str:
+    """Frame content so every row closes at the same column.
+
+    The frame is drawn from `visible_width`, never from `len`. That difference
+    is the entire bug this replaced: one emoji in the heading made the top rail
+    a column longer than the bottom, and the box looked broken in a way that
+    read as sloppiness rather than as an off-by-one.
+    """
+    inner = WIDTH - 2
+    out = []
+
+    if title:
+        pad = inner - visible_width(title) - 3
+        out.append(f"  {FAINT}┌─{RESET} {title} {FAINT}{'─' * max(0, pad)}┐{RESET}")
+    else:
+        out.append(f"  {FAINT}┌{'─' * inner}┐{RESET}")
+
+    for line in lines:
+        gap = max(0, inner - visible_width(line))
+        out.append(f"  {FAINT}│{RESET}{line}{' ' * gap}{FAINT}│{RESET}")
+
+    out.append(f"  {FAINT}└{'─' * inner}┘{RESET}")
+    return "\n".join(out)
+
+
 def _wrap(text: str, width: int, indent: str) -> list[str]:
     """Wrap to the terminal, keeping a hanging indent.
 
@@ -201,6 +263,20 @@ def question_box(
     return "\n".join(out)
 
 
+def _option_lines(items: list[tuple[str, str, str]]) -> list[str]:
+    """Option rows, sized to the longest label so nothing floats in whitespace."""
+    label_width = max(len(label) for _, label, _ in items)
+    room = WIDTH - label_width - 12
+    out: list[str] = []
+    for letter, label, note in items:
+        pad = " " * (label_width - len(label) + 2)
+        wrapped = _wrap(note, room, "") or [""]
+        out.append(f"    {AMBER}{BOLD}{letter}{RESET}  {BOLD}{label}{RESET}{pad}{DIM}{wrapped[0]}{RESET}")
+        for extra in wrapped[1:]:
+            out.append(f"{' ' * (label_width + 9)}{DIM}{extra}{RESET}")
+    return out
+
+
 def decision(
     title: str,
     *,
@@ -215,24 +291,47 @@ def decision(
     stage: str = "",
     ask: str = "Your call",
 ) -> str:
-    """A whole decision as one block.
+    """A whole decision, framed, as one block.
 
-    Composed here rather than by the caller printing five pieces in order. The
-    parts have to appear in a fixed sequence to read properly — teach, then
-    options, then the recommendation, then the question — and leaving that
-    order to whoever is calling meant it drifted between stages.
+    Composed here rather than by the caller printing pieces in order. The parts
+    have to appear in a fixed sequence to read properly — teach, then options,
+    then the recommendation, then the question — and leaving that order to
+    whoever is calling meant it drifted between stages.
+
+    The frame is measured with `visible_width`, so the emoji in the heading no
+    longer pushes the top rail a column past the bottom one.
     """
-    parts = [question_box(title, subtitle, number, done, total, stage)]
+    label = f"{AMBER}{BOLD}{MARK} FORGE{RESET}"
+    if number:
+        label += f"{FAINT} · {RESET}{AMBER}DECISION {number:03d}{RESET}"
+
+    body: list[str] = ["", f"  {BOLD}{title}{RESET}"]
+    if subtitle:
+        body.append(f"  {DIM}{subtitle}{RESET}")
 
     if means:
-        parts.append(teaching("What this means", means))
-    if choices:
-        parts.append(options(choices))
-    if recommend:
-        parts.append(recommendation(recommend[0], recommend[1], against))
+        body += ["", f"  {CYAN}{BOLD}What this means{RESET}"]
+        body += [f"    {line}" for line in means]
 
-    parts += [rule(), prompt(ask)]
-    return "\n".join(parts)
+    if choices:
+        body += ["", f"  {AMBER}{BOLD}Options{RESET}"]
+        body += _option_lines(choices)
+
+    if recommend:
+        body += ["", f"  {GREEN}{BOLD}{STAR} Recommended{RESET}  {BOLD}{recommend[0]}{RESET}"]
+        body += [f"{DIM}{line}{RESET}" for line in _wrap(recommend[1], WIDTH - 8, "    ")]
+        if against:
+            body.append("")
+            body += [
+                f"{DIM}{line}{RESET}"
+                for line in _wrap(f"Against it: {against}", WIDTH - 8, "    ")
+            ]
+
+    if total:
+        body += ["", f"  {DIM}{done} of ~{total}" + (f" · {stage}" if stage else "") + RESET]
+    body.append("")
+
+    return "\n" + box(body, title=label) + "\n" + prompt(ask)
 
 
 def options(items: list[tuple[str, str, str]]) -> str:

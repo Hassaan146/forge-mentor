@@ -30,8 +30,21 @@ def answer(forge: Path, question: str, choice: str = "A") -> None:
     fs.answer(forge, asked.id, f"# {choice}\n\n## Why\n\nbecause\n")
 
 
-def test_the_stack_is_asked_first(forge: Path) -> None:
-    """Nothing else can be asked honestly before it."""
+def test_what_you_want_to_make_is_asked_first(forge: Path) -> None:
+    """One open question before anything is chosen.
+
+    It carries no options on purpose: every option Forge could offer would
+    already assume an answer to it, and a menu narrows what the user was about
+    to say.
+    """
+    first = ff.next_question(forge)
+    assert first.key == "intent"
+    assert first.options == (), "the only genuinely open question"
+
+
+def test_the_stack_is_asked_before_anything_it_decides(forge: Path) -> None:
+    """Nothing after it can be asked honestly until it is answered."""
+    answer(forge, ff.INTENT.question)
     assert ff.next_question(forge).key == "stack"
 
 
@@ -57,7 +70,7 @@ def test_storage_is_never_asked_before_the_stack(forge: Path) -> None:
     than decided, in Forge's own opening move.
     """
     keys = [q.key for q in ff.FOUNDATION]
-    assert keys.index("stack") < keys.index("data")
+    assert keys.index("intent") < keys.index("stack") < keys.index("data")
 
 
 def test_the_data_question_offers_no_fixed_options() -> None:
@@ -70,11 +83,14 @@ def test_the_data_question_offers_no_fixed_options() -> None:
 
 
 def test_the_sequence_advances_as_questions_are_answered(forge: Path) -> None:
-    assert ff.position(forge) == (0, 5)
+    assert ff.position(forge) == (0, 6)
+
+    answer(forge, ff.INTENT.question)
+    assert ff.next_question(forge).key == "stack"
 
     answer(forge, ff.STACK.question)
     assert ff.next_question(forge).key == "data"
-    assert ff.position(forge)[0] == 1
+    assert ff.position(forge)[0] == 2
 
     answer(forge, ff.DATA.question)
     assert ff.next_question(forge).key == "people"
@@ -91,12 +107,13 @@ def test_an_unrelated_decision_does_not_count_as_a_foundation_answer(
 ) -> None:
     """Projects record other decisions in between; the numbering is shared."""
     answer(forge, "should this helper be called parse_row")
-    assert ff.next_question(forge).key == "stack"
+    assert ff.next_question(forge).key == "intent"
     assert ff.position(forge)[0] == 0
 
 
 def test_questions_that_do_not_apply_are_skipped_not_invented(forge: Path) -> None:
     """A single-file script has no delivery question worth asking."""
+    answer(forge, ff.INTENT.question)
     answer(forge, ff.STACK.question)
     answer(forge, ff.DATA.question)
 

@@ -1,13 +1,13 @@
 ---
 type: code-explained
-decisions: 32
-chosen_by_you: 32
+decisions: 33
+chosen_by_you: 33
 updated: 2026-08-08
 ---
 
 # Why Forge Mentor is built the way it is
 
-32 decisions shape this project. You made 32 of them.
+33 decisions shape this project. You made 33 of them.
 
 Read in the order they were decided, because each one was made knowing the
 ones above it — which is not the order the files are listed in.
@@ -289,3 +289,11 @@ Full record: [`032`](decisions/)
 Also considered: **B** — let the planner choose an order per project; **C** — the stack first, the rest chosen per project
 
 Full record: [`033`](decisions/)
+
+## 034 · When exactly does the governor block a write?
+
+**A**
+
+Also considered: **A** — block whenever a foundation question is unanswered; **B** — block only while a question is open, as before; **C** — block on the first write and let the user opt out
+
+Full record: [`034`](decisions/)

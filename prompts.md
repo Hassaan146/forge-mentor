@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: Forge Mentor
-entries: 32
+entries: 33
 generated: 2026-08-08
 ---
 
@@ -525,6 +525,22 @@ live pace (R7) and warn-don't-block (decision 004).
 - **A** — a fixed foundation sequence, the stack first
 - **B** — let the planner choose an order per project
 - **C** — the stack first, the rest chosen per project
+
+**Answered by the user:** A
+
+---
+
+## 034 · When exactly does the governor block a write?
+
+**Asked:**
+
+> When exactly does the governor block a write?
+
+**Options put to the user:**
+
+- **A** — block whenever a foundation question is unanswered
+- **B** — block only while a question is open, as before
+- **C** — block on the first write and let the user opt out
 
 **Answered by the user:** A
 

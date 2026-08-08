@@ -107,8 +107,21 @@ def test_answering_unblocks_and_verifies(project: str, forge: Path) -> None:
     )
 
     assert result["verified"] is True, "a record Forge wrote must be trusted"
-    assert result["writes_blocked"] is False
-    assert fs.open_question(forge) is None
+    assert fs.open_question(forge) is None, "the question is closed"
+
+    # Still blocked, and that is the point. Answering one question no longer
+    # opens the gate — the foundation has to be recorded first. A fresh project
+    # used to allow writes because nothing was open, which let Forge write a
+    # whole file before a single decision existed.
+    assert result["writes_blocked"] is True
+
+    import forge_foundation as ff
+
+    for question in ff.FOUNDATION:
+        pending = ask_question(project, question.question)
+        last = record_answer(project, pending["id"], "A", "because")
+
+    assert last["writes_blocked"] is False, "the foundation is complete"
 
 
 def test_the_record_keeps_what_the_user_will_want_later(project: str, forge: Path) -> None:

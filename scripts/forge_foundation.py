@@ -2,7 +2,13 @@
 
 The order is fixed rather than chosen per project, and the stack comes first.
 
-**Why the stack first.** Every other foundation question is asked *inside* an
+**What comes before the stack.** One open question: what do you want to
+make? It has no options, because every option Forge could offer would already
+assume an answer to it — a menu narrows what the user was about to say. It is
+also what makes the stack question answerable, since a recommendation needs to
+know what is being built.
+
+**Why the stack is next.** Every other foundation question is asked *inside* an
 answer to this one. "Where is the data kept" means something different for a
 browser app, a Django service and a command-line tool. Ask storage before the
 stack and you are asking a question whose options are not knowable yet — and
@@ -44,6 +50,21 @@ class Question:
     # the sequence.
     skip_when: tuple[str, ...] = field(default=())
 
+
+INTENT = Question(
+    key="intent",
+    question="What do you want to make?",
+    subtitle="in your own words — there is nothing to pick from here",
+    means=(
+        "Say it however you would say it to a person. What the thing is, who it",
+        "is for, and what it should do on the first day it works.",
+        "",
+        "Nothing is chosen yet. This is the one question with no options,",
+        "because every option Forge could offer would already assume an answer",
+        "to it — and a menu narrows what you were about to say.",
+    ),
+    # No options, deliberately. It is the only genuinely open question here.
+)
 
 STACK = Question(
     key="stack",
@@ -137,7 +158,7 @@ DONE = Question(
 # Fixed, not chosen per project. A planner picking the order will sometimes
 # pick badly, and a question that was skipped is invisible — unlike a wrong
 # answer, which the user can see and argue with.
-FOUNDATION: tuple[Question, ...] = (STACK, DATA, PEOPLE, DELIVERY, DONE)
+FOUNDATION: tuple[Question, ...] = (INTENT, STACK, DATA, PEOPLE, DELIVERY, DONE)
 
 BY_KEY = {q.key: q for q in FOUNDATION}
 

@@ -500,10 +500,27 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
     except StateError as exc:
         return False, f"Forge cannot read a decision record, so it will not write: {exc}"
 
-    if pending is None:
-        return True, ""
+    if pending is not None:
+        return False, pending.question
 
-    return False, pending.question
+    # An unanswered foundation blocks too, and this is the hole that made the
+    # product not work.
+    #
+    # The rule was only ever "is a question open" — the state between asking
+    # and answering. On a brand-new project nothing has been asked, so nothing
+    # was open, so writes were allowed and Forge would happily write a whole
+    # file before a single decision existed. Which is exactly what it exists to
+    # prevent, and it looked like it was working the entire time.
+    #
+    # Imported here rather than at the top: the foundation module reads the
+    # state layer, so a module-level import would be a cycle.
+    import forge_foundation as ff
+
+    unanswered = ff.next_question(forge_dir)
+    if unanswered is not None:
+        return False, unanswered.question
+
+    return True, ""
 
 
 # --------------------------------------------------------------------------
