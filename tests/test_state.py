@@ -288,13 +288,14 @@ def test_writes_blocked_while_a_question_is_open(project: Path) -> None:
     assert "rate limiting" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def complete_foundation(forge) -> None:
-    """Answer the six foundation questions.
+def ready_to_build(forge) -> None:
+    """Everything that has to be true before a single line may be written.
 
-    The governor blocks until they are all recorded, not just between asking
-    and answering — a fresh project used to allow a write because nothing was
-    open, which let Forge write a whole file before a single decision existed.
-    Anything testing "a write is allowed" has to get past that first.
+    The six foundation questions, then a compiled phase, a step list inside it,
+    and a decision recorded against the current step. The first gate was added
+    when a fresh project turned out to allow writes because nothing was open;
+    the last two after a real run wrote four files and a whole application in
+    one turn, having asked nothing since the sixth question.
     """
     import forge_foundation as ff
 
@@ -302,13 +303,46 @@ def complete_foundation(forge) -> None:
         asked = fs.ask(forge, question.question)
         fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+    import forge_steps as st
+
+    asked = fs.ask(forge, "Does this plan look right?", affects=st.PLAN_MARKER)
+    fs.answer(forge, asked.id, "# Yes\n\n## Why\n\nlooks right\n")
+
+    asked = fs.ask(forge, "phase 1 step 1", affects="phase-1.step-1")
+    fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
 
 def test_writes_allowed_once_answered(project: Path) -> None:
     forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
-    complete_foundation(forge)
+    ready_to_build(forge)
     assert not denied(run_governor(project))
+
+
+def test_an_answered_foundation_is_not_a_licence_to_build(project: Path) -> None:
+    """Decision 034 opened the gate at the end of the foundation and left it open.
+
+    That is the whole of the failure: six questions, then an application. The
+    foundation says what is being built; it does not say what the next file is,
+    and nobody was ever asked.
+    """
+    import forge_foundation as ff
+
+    forge = project / fs.FORGE_DIR
+    for question in ff.FOUNDATION:
+        asked = fs.ask(forge, question.question)
+        fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
+    allowed, reason = fs.writes_allowed(forge)
+    assert allowed is False
+    assert "phases have not been compiled" in reason
 
 
 def test_override_lets_the_write_through(project: Path) -> None:

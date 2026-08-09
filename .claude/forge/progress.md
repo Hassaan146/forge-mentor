@@ -43,6 +43,42 @@ proven to agree with the server's routing (decision 029).
 `.forge/reviews/pr-<n>.md` and commits it without anyone asking — first proved on this
 repository's own pull request #4.
 
+### The dogfood run that found the real one (2026-08-09)
+
+Forge was run against a fresh to-do app in `H:\Skills\todo-test`. It asked its foundation
+questions, then wrote `index.html`, `style.css`, `db.js` and `app.js` in a single turn —
+**nothing was asked after the last foundation question**, and every write was permitted.
+
+The cause was in `writes_allowed`, not in any prompt. Its two conditions — "is a question open"
+and, after decision 034, "is the foundation answered" — are both true exactly once, at the
+start. After the last foundation answer it returned True and had nothing left to check, ever.
+The interactive per-step loop existed only in the planner's brief, which makes it advice.
+
+Closed by [037](decisions/037-what-is-the-unit-of-work-the-governor-gates-on-once-the-foun.md)
+and rule R13: a phase is not buildable, only its steps, and the gate opens for one step at a
+time. `scripts/forge_steps.py` holds the ledger; `plan_steps`, `current_step` and `step_built`
+drive it.
+
+**Second finding, same run.** Watching it continue, the user was asked *"How is this project
+tested?"* — a question whose answer applies to every phase — having been shown phase one only,
+which was already built. Their objection: the plan should be made and shown whole, up front.
+
+Closed by [038](decisions/038-when-does-the-user-see-the-shape-of-the-whole-project.md) and
+rule R14. `compile_phases` writes every phase in one call; `show_roadmap` renders the spine and
+regenerates a self-contained `roadmap.html`; acceptance is a recorded decision carrying
+`plan-accepted`, and nothing is written until it exists. Five gates now run in order, each
+naming itself: unreadable phase file → no phases → plan not accepted → phase not broken into
+steps → current step undecided.
+
+Two things this did **not** fix, both worth knowing:
+
+- The installed plugin is **v0.1.0**, which predates the `.claude/forge/` move (decision 032)
+  and the foundation gate (034). `todo-test` has a `.forge/` directory, so the current code
+  cannot even see it. **The plugin has to be reinstalled from source before any of this
+  applies.**
+- `todo-test` itself is still in the old layout and has no `phases/`. It needs migrating or
+  restarting before it can be used as a dogfood target again.
+
 ### Bugs the tests did not catch, found this phase
 
 | Where | What |

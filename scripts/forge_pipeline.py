@@ -31,6 +31,7 @@ from pathlib import Path
 import forge_foundation as ff
 import forge_skills as sk
 import forge_state as fs
+import forge_steps as st
 
 
 class Mode(str, Enum):
@@ -55,6 +56,11 @@ class Stage(str, Enum):
     INTERROGATION = "interrogation"
     CHALLENGE = "challenge"
     PLANNING = "planning"
+    # The step's own question, asked inside a phase. Separate from
+    # INTERROGATION because the foundation runs once and this runs before every
+    # step — reporting both as "interrogation" made a live build look like it
+    # had gone back to the beginning.
+    STEP_DECISION = "step-decision"
     BUILDING = "building"
     REVIEW_FIX = "review-fix"
     TEACH_BACK = "teach-back"
@@ -64,8 +70,10 @@ class Stage(str, Enum):
 # The foundation loop, in order. Runs once, before any code exists.
 FOUNDATION = (Stage.INTERROGATION, Stage.CHALLENGE, Stage.PLANNING)
 
-# The build loop, in order. Runs per step, repeatedly.
-BUILD = (Stage.BUILDING, Stage.REVIEW_FIX, Stage.TEACH_BACK)
+# The build loop, in order. Runs per step, repeatedly — and it opens with a
+# question, which is the whole point of it. A loop starting at BUILDING is a
+# loop that writes code nobody was asked about.
+BUILD = (Stage.STEP_DECISION, Stage.BUILDING, Stage.REVIEW_FIX, Stage.TEACH_BACK)
 
 DEFAULT_MODE = Mode.PIPELINE
 
@@ -320,10 +328,61 @@ def next_step(forge_dir: Path) -> Step:
             asks_user=True,
         )
 
+    # The phase in front of the user, one step at a time. This is where the
+    # loop was missing entirely: it fell straight to BUILDING and stayed there,
+    # so the whole of a phase came out in a single turn with nothing asked.
+    gap = st.next_gap(forge_dir)
+
+    if gap is not None and gap.kind == "unplanned":
+        return _step(
+            Stage.PLANNING,
+            why=gap.reason,
+            asks_user=False,
+            blocked=True,
+        )
+
+    # The plan is shown whole before any of it is built. Separate from
+    # PLANNING because the phases already exist here — what is missing is the
+    # user having seen them, which is a question rather than a compile.
+    if gap is not None and gap.kind == "unapproved":
+        return _step(
+            Stage.PLANNING,
+            why=gap.reason,
+            asks_user=True,
+            blocked=True,
+            question=gap.reason,
+        )
+
+    if gap is not None:
+        asks = should_ask(gap.reason, current)
+        return _step(
+            Stage.STEP_DECISION,
+            why=(
+                f"{gap.reason} — waiting for your answer"
+                if asks
+                else f"{gap.reason} — small enough for Forge to settle and record"
+            ),
+            asks_user=asks,
+            blocked=True,
+            question=gap.reason,
+        )
+
+    step = st.current(forge_dir)
+    if step is None:
+        return _step(
+            Stage.BUILDING,
+            why="every phase is finished — nothing is left to build",
+            asks_user=False,
+        )
+
     return _step(
         Stage.BUILDING,
-        why="every question is answered, so code may be written",
+        why=(
+            f"step {step.number} of phase {step.phase} is decided — build that, and "
+            "only that"
+        ),
         asks_user=False,
+        question=step.question,
     )
 
 
@@ -358,6 +417,9 @@ def status(forge_dir: Path) -> dict[str, object]:
         return {"error": str(exc), "needs_repair": True}
 
     allowed, reason = fs.writes_allowed(forge_dir)
+    built, total = st.position(forge_dir)
+    here = st.current(forge_dir)
+
     out = step.as_dict()
     out.update(
         {
@@ -367,6 +429,21 @@ def status(forge_dir: Path) -> dict[str, object]:
             "planned": planned(forge_dir),
             "writes_allowed": allowed,
             "writes_reason": reason,
+            # Where the loop actually is. Without this a session could see
+            # "stage: building" and no indication of which step that meant, so
+            # the only sane thing left to do was build the phase.
+            "step": (
+                {
+                    "phase": here.phase,
+                    "number": here.number,
+                    "text": here.text,
+                    "marker": here.marker,
+                }
+                if here
+                else None
+            ),
+            "steps_built": built,
+            "steps_total": total,
         }
     )
     return out

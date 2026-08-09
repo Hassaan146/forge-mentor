@@ -121,7 +121,28 @@ def test_answering_unblocks_and_verifies(project: str, forge: Path) -> None:
         pending = ask_question(project, question.question)
         last = record_answer(project, pending["id"], "A", "because")
 
-    assert last["writes_blocked"] is False, "the foundation is complete"
+    # And still blocked, which is the second half of the same lesson. The
+    # foundation being answered says what is being built, not what the next
+    # file is. Opening the gate here is what let a real run write an entire
+    # application in one turn without asking anything after question six.
+    assert last["writes_blocked"] is True, "a plan and a decided step come first"
+
+    forge = Path(project) / fs.FORGE_DIR
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+    import forge_steps as stp
+
+    pending = ask_question(project, "Does this plan look right?", affects=stp.PLAN_MARKER)
+    record_answer(project, pending["id"], "yes", "looks right")
+
+    pending = ask_question(project, "phase 1 step 1", affects="phase-1.step-1")
+    last = record_answer(project, pending["id"], "A", "because")
+
+    assert last["writes_blocked"] is False, "the current step is decided"
 
 
 def test_the_record_keeps_what_the_user_will_want_later(project: str, forge: Path) -> None:
@@ -333,6 +354,13 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "render_decision",
         "foundation_question",
         "render_note",
+        "render_action",
+        "color_legend",
+        "plan_steps",
+        "current_step",
+        "step_built",
+        "compile_phases",
+        "show_roadmap",
     }
 
 
@@ -437,3 +465,227 @@ def test_code_explained_is_written_from_the_records(project: str, forge) -> None
     text = (forge / "code-explained.md").read_text(encoding="utf-8")
     assert "Django" in text, "what was turned down is kept"
     assert "small and agent-centric" in text, "in the user's own words"
+
+
+# ==========================================================================
+# what the user is asked to do — the render surface
+# ==========================================================================
+
+
+def test_a_decision_ends_in_the_action_frame_and_nothing_after_it() -> None:
+    """The planner must not have to remember to ask the question separately.
+
+    Two asks on screen and only one of them framed is worse than none: the
+    user answers the unframed one, and the frame stops meaning "act here".
+    """
+    block = call(srv.render_decision)(
+        "How should people log in?",
+        choices=[["A", "by us", "most work"], ["B", "a service", "less control"]],
+    )["block"]
+
+    assert "YOUR TURN" in block
+    assert "A, or B?" in block, "the frame names the letters that were offered"
+    assert block.rstrip().endswith("╝"), "the action frame is the last thing on screen"
+
+
+def test_a_detail_that_cannot_be_undone_gets_its_own_bar() -> None:
+    block = call(srv.render_decision)(
+        "Public or private?",
+        choices=[["A", "public", "free review"]],
+        important_lines=["Anyone will be able to read this code."],
+    )["block"]
+
+    assert "▌" in block
+    assert "Anyone will be able to read this code." in block
+
+
+def test_the_action_frame_states_what_shape_of_answer_is_wanted() -> None:
+    confirmed = call(srv.render_action)("Make the repository public?", kind="confirm")["block"]
+    assert "type yes" in confirmed and "no to stop" in confirmed
+
+    open_ended = call(srv.render_action)("What are you building?", kind="answer")["block"]
+    assert "your own words" in open_ended
+
+
+def test_an_unknown_kind_of_ask_is_an_error_not_an_exception() -> None:
+    assert "error" in call(srv.render_action)("go?", kind="shout")
+
+
+def test_an_action_frame_needs_something_to_act_on() -> None:
+    assert "error" in call(srv.render_action)("   ")
+
+
+def test_the_legend_returns_the_meanings_as_data_too() -> None:
+    """The block is for the user; the list is so the planner cannot misquote it."""
+    answer = call(srv.color_legend)()
+
+    assert len(answer["meanings"]) == 6
+    assert {m["colour"] for m in answer["meanings"]} == {
+        "AMBER", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE",
+    }
+    for meaning in answer["meanings"]:
+        assert meaning["name"] in answer["block"]
+
+
+def test_a_follow_up_can_carry_an_important_line_and_a_separate_ask() -> None:
+    block = call(srv.render_note)(
+        "Why not the others",
+        ["No backup."],
+        symbol="cost",
+        ask="A, B, or C?",
+        important_lines=["Moving off it later means every account signs up again."],
+    )["block"]
+
+    assert "▌" in block
+    assert "YOUR TURN" in block and "A, B, or C?" in block
+
+
+def test_an_unknown_symbol_is_still_rejected() -> None:
+    assert "error" in call(srv.render_note)("h", ["one"], symbol="sparkle")
+
+
+# ==========================================================================
+# the build loop — one step at a time
+# ==========================================================================
+
+
+def plan_one_phase(forge: Path, number: int = 1, *, accept: bool = True) -> None:
+    """A compiled phase, and by default a plan the user has accepted.
+
+    Accepting is its own gate ahead of the steps: phase files can exist
+    without anybody having read them, which is how the plan reached the user
+    one instalment at a time.
+    """
+    import forge_steps as stp
+
+    folder = forge / "phases"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{number}-phase.md").write_text(
+        f"---\nphase: {number}\ntitle: Phase {number}\n---\n", encoding="utf-8"
+    )
+    if accept and not stp.plan_accepted(forge):
+        asked = fs.ask(forge, "Does this plan look right?", affects=stp.PLAN_MARKER)
+        fs.answer(forge, asked.id, "# Yes\n\n## Why\n\nlooks right\n")
+
+
+def test_a_phase_must_be_broken_into_steps_before_anything_is_built(
+    project: str, forge: Path
+) -> None:
+    """The failure this whole loop exists to stop.
+
+    Six answers and a compiled phase used to be enough for the governor, and a
+    real run wrote four files and a whole application in one turn.
+    """
+    plan_one_phase(forge)
+    answer = call(srv.current_step)(project)
+
+    assert answer["step"] is None
+    assert "broken into steps" in answer["blocked_by"]
+
+
+def test_planning_steps_names_the_first_question(project: str, forge: Path) -> None:
+    plan_one_phase(forge)
+    answer = call(srv.plan_steps)(project, 1, ["show the list", "save a todo"])
+
+    assert [s["number"] for s in answer["steps"]] == [1, 2]
+    assert answer["steps"][0]["marker"] == "phase-1.step-1"
+    assert "show the list" in answer["next"]
+
+
+def test_the_step_tool_hands_back_the_marker_to_record_against(
+    project: str, forge: Path
+) -> None:
+    """A decision recorded without it unblocks nothing, and the loop stalls."""
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["show the list"])
+    answer = call(srv.current_step)(project)
+
+    assert answer["step"]["marker"] == "phase-1.step-1"
+    assert answer["decided"] is False
+    assert "phase-1.step-1" in answer["how_to_ask"]
+
+
+def test_a_step_decision_unblocks_only_that_step(project: str, forge: Path) -> None:
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["show the list", "save a todo"])
+
+    asked = ask_question(project, "how does the list render?", affects="phase-1.step-1")
+    record_answer(project, asked["id"], "textContent", "never innerHTML")
+
+    assert call(srv.current_step)(project)["decided"] is True
+
+    done = call(srv.step_built)(project, 1, 1)
+    assert done["steps_built"] == 1
+    assert done["next_is_a_question"] is True
+    assert "save a todo" in done["next"]
+
+    assert call(srv.current_step)(project)["decided"] is False, "step 2 is a fresh question"
+
+
+def test_ticking_a_step_that_does_not_exist_is_an_error_not_an_exception(
+    project: str, forge: Path
+) -> None:
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["only one"])
+    assert "error" in call(srv.step_built)(project, 1, 7)
+
+
+def test_rewriting_a_started_step_list_is_refused(project: str, forge: Path) -> None:
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["first", "second"])
+    asked = ask_question(project, "step one", affects="phase-1.step-1")
+    record_answer(project, asked["id"], "A", "because")
+
+    assert "error" in call(srv.plan_steps)(project, 1, ["something else"])
+
+
+def test_the_whole_plan_is_compiled_in_one_call(project: str, forge: Path) -> None:
+    """One phase at a time is how a plan becomes a surprise in instalments."""
+    answer = call(srv.compile_phases)(
+        project,
+        [
+            ["One todo, end to end", "type a todo, it survives a refresh"],
+            ["Complete and delete", "tick one off, remove one"],
+            ["Edit in place", "fix a typo without retyping"],
+        ],
+    )
+
+    assert [p["number"] for p in answer["phases"]] == [1, 2, 3]
+    assert answer["phases"][2]["title"] == "Edit in place"
+    assert Path(answer["page"]).is_file(), "and a page the user can open"
+
+
+def test_a_phase_needs_a_title_and_what_it_delivers(project: str) -> None:
+    assert "error" in call(srv.compile_phases)(project, [])
+
+
+def test_nothing_is_built_until_the_user_has_seen_the_whole_plan(
+    project: str, forge: Path
+) -> None:
+    """The failure the user reported, as a test.
+
+    Five phases existed and the first was built before they knew there were
+    five — so the question that set the shape of all of them was answered
+    without the shape being visible.
+    """
+    call(srv.compile_phases)(project, [["First", "a"], ["Second", "b"]])
+    call(srv.plan_steps)(project, 1, ["the first slice"])
+
+    blocked = call(srv.current_step)(project)
+    assert "have not seen the whole plan" in blocked["blocked_by"]
+
+    roadmap = call(srv.show_roadmap)(project)
+    assert roadmap["accepted"] is False
+    assert "First" in roadmap["block"] and "Second" in roadmap["block"]
+
+    import forge_steps as stp
+
+    asked = ask_question(project, "Does this plan look right?", affects=stp.PLAN_MARKER)
+    record_answer(project, asked["id"], "yes", "two phases, each usable")
+
+    assert call(srv.show_roadmap)(project)["accepted"] is True
+    assert "step 1" in call(srv.current_step)(project)["blocked_by"].lower()
+
+
+def test_the_roadmap_needs_a_plan_to_show(project: str) -> None:
+    assert "error" in call(srv.show_roadmap)(project)

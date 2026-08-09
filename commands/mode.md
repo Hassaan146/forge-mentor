@@ -21,7 +21,10 @@ Requested mode: $1
 Steps:
 
 1. Call `next_step` to read where the project currently stands.
-2. If `$1` is empty, print the current mode and what it means, and stop.
+2. If `$1` is empty, print the current mode and what it means through `render_note`, then
+   ask which of the three they want through `render_action` with `kind: "choose"` — and
+   stop there. A list of three modes with no framed ask is a paragraph, and the user is
+   left to work out that a reply is expected.
 3. Otherwise call `set_mode` with it.
 4. Confirm the change in one line, using the plain-language meaning rather than the mode's name
    (rule R1 — the name tells a non-technical user nothing).

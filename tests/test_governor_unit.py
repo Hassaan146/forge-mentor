@@ -67,13 +67,20 @@ def test_open_question_blocks_and_names_it(project, monkeypatch, capsys) -> None
     assert "write it anyway" in reason(response)
 
 
-def complete_foundation(forge) -> None:
-    """Answer the six foundation questions.
+def ready_to_build(forge) -> None:
+    """Everything that has to be true before a single line may be written.
 
-    The governor blocks until they are all recorded, not just between asking
-    and answering — a fresh project used to allow a write because nothing was
-    open, which let Forge write a whole file before a single decision existed.
-    Anything testing "a write is allowed" has to get past that first.
+    Three gates, each added after it was found missing.
+
+    The six foundation questions, because a fresh project used to allow a write
+    while nothing was open — Forge would write a whole file before one decision
+    existed. Then a compiled phase, a step list inside it, and a decision
+    recorded against the current step: the foundation is answered once, and
+    after that the old rule allowed everything forever. On a real run that
+    produced four files and an entire application in a single turn, with
+    nothing asked after the sixth question.
+
+    Anything testing "a write is allowed" has to get past all three.
     """
     import forge_foundation as ff
 
@@ -81,13 +88,49 @@ def complete_foundation(forge) -> None:
         asked = fs.ask(forge, question.question)
         fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+    import forge_steps as st
+
+    asked = fs.ask(forge, "Does this plan look right?", affects=st.PLAN_MARKER)
+    fs.answer(forge, asked.id, "# Yes\n\n## Why\n\nlooks right\n")
+
+    asked = fs.ask(forge, "phase 1 step 1", affects="phase-1.step-1")
+    fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
 
 def test_answered_question_allows(project, monkeypatch, capsys) -> None:
     forge = project / fs.FORGE_DIR
     fs.ask(forge, "rate limiting")
     fs.answer(forge, 1, "per-IP, 60/min")
-    complete_foundation(forge)
+    ready_to_build(forge)
     assert not is_deny(invoke(monkeypatch, capsys, write_payload(project)))
+
+
+def test_a_planned_phase_with_no_steps_still_blocks(project, monkeypatch, capsys) -> None:
+    """The gap the real run fell through.
+
+    Six answers, a progress file describing the phases in prose, and no step
+    anywhere. `writes_allowed` had nothing left to check, so it said yes — and
+    an entire application was written without another question being asked.
+    """
+    forge = project / fs.FORGE_DIR
+    ready_to_build(forge)
+    (forge / "phases" / "2-second.md").write_text(
+        "---\nphase: 2\ntitle: Second\n---\n", encoding="utf-8"
+    )
+    # Phase 1's only step is decided, so phase 1 is not what blocks here.
+    import forge_steps as st
+
+    st.mark_built(forge, 1, 1)
+
+    response = invoke(monkeypatch, capsys, write_payload(project))
+    assert is_deny(response)
+    assert "broken into steps" in reason(response)
 
 
 def test_override_allows(project, monkeypatch, capsys) -> None:

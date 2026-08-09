@@ -19,7 +19,9 @@ Then print, using the Forge visual identity:
 - the banner, then the progress bar with the count of questions answered against the estimate
   (rule R4 — always show how many remain)
 - the current stage in plain words, and what happens next
-- the open question, if there is one, and that code is blocked until it is answered
+- the open question, if there is one, and that code is blocked until it is answered — put the
+  question itself through `render_action`, because it is the one thing on this screen the user
+  can do something about, and everything around it is a report
 - which model does the next step and why (rule R2 — name it: "Fable 5", not "the teaching model")
 - usage, and any threshold warning
 - anything the review still has open

@@ -12,11 +12,34 @@ stays plain Claude Code.
 
 ## Before anything else
 
-Print the banner:
+Print the banner, then the colour key, then the readiness check — in that order,
+and all three before a single question is asked:
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" banner
 ```
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" legend
+```
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_preflight.py"
+```
+
+The legend is not decoration. From here on, Forge asks the user to *act* on
+colour — red means it stopped, yellow means the turn is theirs — and none of
+that is legible to someone who was never told the scheme. Setup is the one
+moment they are reading carefully, so it is where the key belongs.
+
+If anything is marked MISSING, stop and show the user the fix line for it. Do not
+begin the interrogation — Forge's hooks would block writes while the engine could not
+record a decision, so it would stop a write and then be unable to record the decision
+that unblocks it. That is the worst state the product has, and it is worth one command
+to avoid.
+
+If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
+`gh auth login` later.
 
 ## Step 1 — Explain before asking (decision 014)
 
@@ -90,21 +113,29 @@ to `none` once the answer is recorded. That field is what the governor reads to
 decide whether code may be written.
 
 
-## Before anything else
+## Never write the question yourself
 
-Run the readiness check and show its output:
+Every question, every follow-up, and every "type yes to continue" goes through a
+render tool. Not because hand-written prose is untidy, but because an unframed
+paragraph is indistinguishable from ordinary assistant text — the user cannot
+tell which of the two is bound by Forge's rules (decision 035).
 
-```
-python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_preflight.py"
-```
+| What you are doing | Tool | What the user sees |
+|---|---|---|
+| Asking a decision | `render_decision` | the block, then a double-ruled **YOUR TURN** frame |
+| A short follow-up | `render_note` | the frame, capped at three lines |
+| Asking yes/no, or A/B/C on its own | `render_action` | the double-ruled frame alone |
+| A detail they must not skim | `important_lines` on either render tool | a yellow bar beside it |
+| Explaining the colours | `color_legend` | the key, at setup |
 
-If anything is marked MISSING, stop and show the user the fix line for it. Do not begin the
-interrogation — Forge's hooks would block writes while the engine could not record a decision,
-so it would stop a write and then be unable to record the decision that unblocks it. That is
-the worst state the product has, and it is worth one command to avoid.
+Two rules that are not negotiable:
 
-If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
-`gh auth login` later.
+- **The ask is never the last line of a paragraph.** It goes in its own frame.
+  The double rule is the only one on the screen, so a user scrolling back finds
+  the place they have to act before reading a word of it.
+- **Anything with a cost the user cannot undo goes in `important_lines`.** "This
+  makes the repository public", "every account will have to sign up again". As
+  sentence four of a paragraph it is read past; on its own bar it is not.
 
 ## The foundation — ask exactly what the sequence gives you
 
@@ -120,8 +151,11 @@ For each question:
 1. `foundation_question` — the question, what it decides, the teaching, and its options.
 2. `ask_question` — records it and blocks writes. Do this **before** showing it, so the block
    is real while you wait.
-3. `render_decision` — show it. Pass `means`, `choices` and the progress straight through.
-   Where there are no options, ask it open and take the user's own words.
+3. `render_decision` — show it. Pass `means`, `choices` and the progress straight through,
+   and `important_lines` for anything with a cost that cannot be undone. It ends the block
+   with the **YOUR TURN** frame itself — do not add a question of your own underneath, or
+   there are two asks on screen and only one of them is framed. Where there are no options,
+   ask it open and take the user's own words.
 4. Wait. Do not answer it yourself, do not guess, do not move on.
 5. `record_answer` — their words, their reasoning, the options they were shown.
 
@@ -134,9 +168,54 @@ of them is a decision.
 The user has answered six questions. Asking "shall I begin?" spends their turn on a question
 whose answer is obviously yes.
 
-1. `next_step` — the stage, the subagent, the model.
-2. `plan_build` if the phases are compiled — the ordered file list for this stack.
-3. `render_note` with the first step: what is being built, which file is first, and why that
-   file. Three lines.
-4. Then build it. Announce each file as you reach it, not in a batch at the end.
+But **the foundation being answered is not permission to build.** It says what is being made;
+it does not say what the next file is, and nobody has been asked.
+
+## Show the whole plan before you build any of it
+
+1. `compile_phases` — **all of the phases, in one call.** Usually five. Each one delivers
+   something the user could use on its own.
+2. `show_roadmap` — print the block. Every phase, what each delivers, where the work is. It
+   also writes `.claude/forge/roadmap.html`; tell the user it is there and that they can open
+   it or send it to someone.
+3. `render_action` — ask them to accept the shape. Phases can be added, split, merged or
+   dropped now, and this is the cheapest moment to do it.
+4. `ask_question` with `affects: "plan-accepted"`, then `record_answer`. **Until that record
+   exists, every write is blocked** — including the first line of phase one.
+
+This is not ceremony. A plan revealed one phase at a time is a surprise delivered in
+instalments: the user gets asked how the project is tested while phase four is still a secret,
+and that answer sets the shape of all of them. They accept the whole thing or change it, once,
+with everything visible.
+
+Then, and only then, the build loop.
+
+## The build loop — one step, one question, one piece of code
+
+This is the product. Everything before it is setup.
+
+1. `next_step` — the stage, the subagent, the model, and which step the project is on.
+2. `plan_steps` for the current phase, if it has no list yet. Three to seven steps: each one
+   is something the user could see or test working, with a real choice inside it.
+3. `current_step` — the step and its marker.
+4. `ask_question` with `affects` set to that marker, **before** showing anything. The block
+   has to be real while you wait.
+5. `render_decision` — teach it, offer the options, recommend one with a reason from *this*
+   project. It ends in the YOUR TURN frame.
+6. **Wait.** Do not answer it. Do not build ahead. Do not write the file you can already see.
+7. `record_answer` — their words, their reasoning, the options they were shown.
+8. Build that step, and only that step.
+9. `step_built` — tick it off. This is what moves the loop on; skip it and nothing new is
+   ever asked.
+10. Back to 3.
+
+Two things that are not negotiable:
+
+- **A phase is never built in one pass.** It has happened — four files and an entire
+  application in one turn, nothing asked after question six, every write permitted. The
+  governor now blocks a phase with no step list and a step with no decision, so attempting it
+  produces a block message instead of an app. Do not make the user read that block: follow
+  the loop.
+- **One step is one question.** Not "here are the five decisions for this phase". The user is
+  learning by making these choices one at a time, and five at once is a form.
 

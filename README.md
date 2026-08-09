@@ -31,8 +31,14 @@ wherever Claude Code does. One thing differs outside a terminal: the hooks invok
 shell has. The readiness check tests that exact command rather than the interpreter you happen
 to have typed with, because those two can disagree and only the first one matters.
 
-Colour switches itself off when the output is not a terminal. Nothing is lost — no state is
-ever signalled by colour alone.
+Forge uses six colours, one meaning each — amber is Forge talking, blue is teaching, green
+means it worked, yellow means your turn, red means it stopped, purple names the AI doing the
+work. `/forge:start` prints the key before it asks you anything, because a colour scheme
+nobody was told about is one nobody can read.
+
+Colour switches itself off when the output is not a terminal, or when `NO_COLOR` is set.
+Nothing is lost — no state is ever signalled by colour alone, and the one thing you have to
+answer sits in its own double-ruled frame, which reads the same in black and white.
 
 `/forge:start` checks all of this first and prints the exact command for anything missing. You
 can also run the check yourself at any time:

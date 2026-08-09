@@ -798,7 +798,13 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
         "every decision looks the same and the parts stay in the order that "
         "reads properly: teach, then options, then the recommendation, then "
         "the question. Pass `choices` as [[letter, label, consequence], ...]. "
-        "Reads only; changes nothing."
+        "The question is drawn in its own double-ruled YOUR TURN frame at the "
+        "end — do not write a second one underneath. Pass `important_lines` "
+        "for anything with a cost the user cannot undo ('this makes the "
+        "repository public'); each gets a yellow bar, because as sentence "
+        "four of a paragraph it is read straight past. `ask` overrides the "
+        "wording of the question; left empty it names the letters that were "
+        "actually offered. Reads only; changes nothing."
     ),
 )
 def render_decision(
@@ -810,9 +816,11 @@ def render_decision(
     recommend_choice: str = "",
     recommend_reason: str = "",
     against: str = "",
+    important_lines: list[str] | None = None,
     done: int = 0,
     total: int = 0,
     stage: str = "",
+    ask: str = "",
 ) -> dict[str, Any]:
     import forge_ui as ui
 
@@ -830,9 +838,11 @@ def render_decision(
             choices=triples or None,
             recommend=(recommend_choice, recommend_reason) if recommend_choice else None,
             against=against,
+            important_lines=list(important_lines or []) or None,
             done=done,
             total=total,
             stage=stage,
+            ask=ask,
         )
     }
 
@@ -892,6 +902,7 @@ def render_note(
     lines: list[str],
     symbol: str = "",
     ask: str = "",
+    important_lines: list[str] | None = None,
 ) -> dict[str, Any]:
     import forge_ui as ui
 
@@ -904,6 +915,7 @@ def render_note(
         "cost": ui.COST,
         "recorded": ui.RECORDED,
         "blocked": ui.BLOCKED,
+        "action": ui.ACTION,
     }
     if symbol.strip().lower() not in marks:
         return {"error": f"Unknown symbol {symbol!r}. Use one of: {', '.join(sorted(marks))}."}
@@ -914,141 +926,282 @@ def render_note(
             list(lines or []),
             symbol=marks[symbol.strip().lower()],
             ask=ask,
-        )
-    }
-
-
-if __name__ == "__main__":  # pragma: no cover - process entry point
-    # Must stay at the very bottom; see the note in test_server.py.
-    server.run()
-
-
-@server.tool(
-    name="render_decision",
-    description=(
-        "Render a whole decision as one block — heading, what it means, the "
-        "options, the recommendation, and the prompt — in Forge's visual "
-        "identity. **Use this instead of writing the question yourself**, so "
-        "every decision looks the same and the parts stay in the order that "
-        "reads properly: teach, then options, then the recommendation, then "
-        "the question. Pass `choices` as [[letter, label, consequence], ...]. "
-        "Reads only; changes nothing."
-    ),
-)
-def render_decision(
-    title: str,
-    number: int = 0,
-    subtitle: str = "",
-    means: list[str] | None = None,
-    choices: list[list[str]] | None = None,
-    recommend_choice: str = "",
-    recommend_reason: str = "",
-    against: str = "",
-    done: int = 0,
-    total: int = 0,
-    stage: str = "",
-) -> dict[str, Any]:
-    import forge_ui as ui
-
-    try:
-        triples = [(c[0], c[1], c[2]) for c in (choices or [])]
-    except (IndexError, TypeError):
-        return {"error": "Each choice needs three parts: letter, label, consequence."}
-
-    return {
-        "block": ui.decision(
-            title,
-            number=number or None,
-            subtitle=subtitle,
-            means=means or None,
-            choices=triples or None,
-            recommend=(recommend_choice, recommend_reason) if recommend_choice else None,
-            against=against,
-            done=done,
-            total=total,
-            stage=stage,
+            important_lines=list(important_lines or []) or None,
         )
     }
 
 
 @server.tool(
-    name="foundation_question",
+    name="compile_phases",
     description=(
-        "The next foundation question for this project, in the fixed order of "
-        "decision 033 — the stack first, because every question after it is "
-        "asked inside an answer to it. Returns the question, what it decides, "
-        "the teaching lines, and its options where they do not depend on the "
-        "stack. **Ask these in the order given**; do not substitute your own. "
-        "Reads only; changes nothing."
+        "Write the whole plan at once — every phase, before any of them is "
+        "built. Pass `phases` as [[title, what it delivers], ...] in order. "
+        "**All of them, not the first one.** A plan compiled a phase at a time "
+        "is a surprise delivered in instalments: the user answers a question "
+        "about how the project is tested having never been told there was a "
+        "phase four, and that answer quietly sets the shape of all of them. "
+        "Five phases is the usual size; each one delivers something the user "
+        "could use on its own. Refuses to rewrite a plan whose phases have "
+        "started. **Writes `.claude/forge/phases/`.**"
     ),
 )
-def foundation_question(project: str) -> dict[str, Any]:
-    import forge_foundation as ff
+def compile_phases(project: str, phases: list[list[str]]) -> dict[str, Any]:
+    import forge_roadmap as rm
+    import forge_steps as stp
 
     try:
         forge = _forge_dir(project)
     except ValueError as exc:
         return {"error": str(exc)}
 
-    question = ff.next_question(forge)
-    done, total = ff.position(forge)
-    if question is None:
-        return {"finished": True, "answered": done, "total": total}
+    try:
+        pairs = [(p[0], p[1] if len(p) > 1 else "") for p in (phases or [])]
+    except (IndexError, TypeError):
+        return {"error": "Each phase needs a title and what it delivers."}
 
+    try:
+        written = stp.compile_phases(forge, pairs)
+    except stp.StepError as exc:
+        return {"error": str(exc)}
+
+    page = rm.write(forge, Path(project).name)
     return {
-        "finished": False,
-        "key": question.key,
-        "question": question.question,
-        "subtitle": question.subtitle,
-        "means": list(question.means),
-        "choices": [list(o) for o in question.options],
-        "answered": done,
-        "total": total,
+        "phases": [
+            {"number": p.number, "title": p.title, "delivers": p.delivers} for p in written
+        ],
+        "page": str(page),
+        "next": (
+            "Show all of them with show_roadmap, then ask the user to accept the shape. "
+            "Nothing can be built until they have."
+        ),
     }
 
 
 @server.tool(
-    name="render_note",
+    name="show_roadmap",
     description=(
-        "Render a short follow-up in Forge's frame — a clarification, a "
-        "'why not the other option', an answer to a question about the "
-        "options. **Use this instead of writing prose.** An unframed "
-        "paragraph is indistinguishable from ordinary chat, so the user "
-        "cannot tell which of the two is bound by Forge's rules (decision "
-        "035). Capped at three lines: one per point, with the full argument "
-        "left in the decision record. `symbol` is one of the seven — pass "
-        "`cost` for a drawback, `teach` for an explanation, otherwise leave "
-        "it. Reads only; changes nothing."
+        "The whole plan, ready to print: every phase, what it delivers, its "
+        "steps, and which are built. Returns the terminal block **and** "
+        "regenerates a self-contained `roadmap.html` the user can open, send "
+        "to a mentor, or read in week six when nobody remembers what phase "
+        "four was for. Show this before the first phase is built, and again "
+        "whenever the user asks where things stand. Reads the files; the only "
+        "thing it writes is the page."
     ),
 )
-def render_note(
-    heading: str,
-    lines: list[str],
-    symbol: str = "",
-    ask: str = "",
-) -> dict[str, Any]:
+def show_roadmap(project: str) -> dict[str, Any]:
+    import forge_roadmap as rm
+    import forge_steps as stp
     import forge_ui as ui
 
-    marks = {
-        "": "",
-        "forge": ui.MARK,
-        "teach": ui.TEACH,
-        "options": ui.WEIGH,
-        "recommend": ui.STAR,
-        "cost": ui.COST,
-        "recorded": ui.RECORDED,
-        "blocked": ui.BLOCKED,
-    }
-    if symbol.strip().lower() not in marks:
-        return {"error": f"Unknown symbol {symbol!r}. Use one of: {', '.join(sorted(marks))}."}
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    phases = stp.roadmap(forge)
+    if not phases:
+        return {
+            "error": (
+                "No phases have been compiled yet. Call compile_phases with the "
+                "whole plan first."
+            )
+        }
+
+    view = [
+        {
+            "number": p.number,
+            "title": p.title,
+            "delivers": p.delivers,
+            "state": p.state(),
+            "built": p.built,
+            "steps": [{"text": s.text, "built": s.built} for s in p.steps],
+        }
+        for p in phases
+    ]
+    built, total = stp.position(forge)
+    page = rm.write(forge, Path(project).name)
 
     return {
-        "block": ui.note(
-            heading,
-            list(lines or []),
-            symbol=marks[symbol.strip().lower()],
-            ask=ask,
-        )
+        "block": ui.roadmap(view),
+        "phases": view,
+        "steps_built": built,
+        "steps_total": total,
+        "accepted": stp.plan_accepted(forge),
+        "page": str(page),
+        "how_to_accept": (
+            f'ask_question(..., affects="{stp.PLAN_MARKER}") once the user has seen it. '
+            "Until that is recorded, every write is blocked."
+        ),
+    }
+
+
+@server.tool(
+    name="plan_steps",
+    description=(
+        "Break one phase into the steps it will actually be built in. **Code "
+        "cannot be written for a phase that has no step list** — a phase is "
+        "not a unit of work, it is a list of them, and building one in a "
+        "single pass is how an entire application gets written without a "
+        "question being asked. One step is one thing the user could see or "
+        "test working, small enough that there is a real choice inside it and "
+        "large enough to be worth teaching: three to seven per phase. Each "
+        "step then gets its own question before its own code. Refuses to "
+        "rewrite a list whose steps are already decided or built, because the "
+        "decisions are recorded against the step numbers. **Writes the phase "
+        "file.**"
+    ),
+)
+def plan_steps(project: str, phase: int, steps: list[str]) -> dict[str, Any]:
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        written = stp.write_steps(forge, phase, list(steps or []))
+    except stp.StepError as exc:
+        return {"error": str(exc)}
+
+    return {
+        "phase": phase,
+        "steps": [
+            {"number": s.number, "text": s.text, "marker": s.marker} for s in written
+        ],
+        "next": written[0].question,
+        "reminder": "Ask step 1 before writing anything. The governor will block it otherwise.",
+    }
+
+
+@server.tool(
+    name="current_step",
+    description=(
+        "The step the project is on: which phase, which number, its text, and "
+        "the marker a decision records against it. Call it before asking a "
+        "step question, so the `affects` field matches — a decision recorded "
+        "without the marker does not unblock anything, and the loop stalls on "
+        "a question that has already been answered. Reads only; changes "
+        "nothing."
+    ),
+)
+def current_step(project: str) -> dict[str, Any]:
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    gap = stp.next_gap(forge)
+    built, total = stp.position(forge)
+
+    if step is None:
+        return {"step": None, "built": built, "total": total, "blocked_by": gap.reason if gap else ""}
+
+    return {
+        "step": {
+            "phase": step.phase,
+            "number": step.number,
+            "text": step.text,
+            "marker": step.marker,
+        },
+        "decided": gap is None,
+        "blocked_by": gap.reason if gap else "",
+        "built": built,
+        "total": total,
+        "how_to_ask": (
+            f'ask_question(..., affects="{step.marker}") — the marker is what ties '
+            "the answer to this step"
+        ),
+    }
+
+
+@server.tool(
+    name="step_built",
+    description=(
+        "Tick a step off, once its code is written and its tests pass. This is "
+        "what moves the loop to the next question. **Until it is called the "
+        "current step stays current**, so nothing new is asked — a stall, "
+        "which is the right failure: the alternative is a loop that advances "
+        "on a model's say-so, which is how a phase gets built in one turn. "
+        "**Writes the phase file.**"
+    ),
+)
+def step_built(project: str, phase: int, number: int) -> dict[str, Any]:
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        done = stp.mark_built(forge, phase, number)
+    except stp.StepError as exc:
+        return {"error": str(exc)}
+
+    gap = stp.next_gap(forge)
+    built, total = stp.position(forge)
+    return {
+        "built": {"phase": done.phase, "number": done.number, "text": done.text},
+        "steps_built": built,
+        "steps_total": total,
+        "next": gap.reason if gap else "",
+        "next_is_a_question": bool(gap and gap.kind == "undecided"),
+    }
+
+
+@server.tool(
+    name="render_action",
+    description=(
+        "Render the moment the turn passes back to the user — 'type yes to "
+        "continue', 'A, B, or C?', 'run this and tell me when it is done'. "
+        "Draws the double-ruled YOUR TURN frame, which is the only one of its "
+        "kind on the screen. **Use this instead of ending a paragraph with a "
+        "question.** As the last line of a block the ask carried the same "
+        "weight as the text above it and was the first thing lost when the "
+        "block scrolled. `kind` is one of `confirm` (yes/no), `choose` (a "
+        "letter), `answer` (their own words), or `fix` (run something, then "
+        "come back) — it sets the line underneath that says what shape of "
+        "answer is wanted. `render_decision` already ends with one of these, "
+        "so do not add a second. Reads only; changes nothing."
+    ),
+)
+def render_action(ask: str, kind: str = "answer", hint: str = "") -> dict[str, Any]:
+    import forge_ui as ui
+
+    if kind.strip().lower() not in ui.ASK_KINDS:
+        return {
+            "error": f"Unknown kind {kind!r}. Use one of: {', '.join(sorted(ui.ASK_KINDS))}."
+        }
+    if not ask.strip():
+        return {"error": "An action frame with nothing to act on is just a box."}
+
+    return {"block": ui.action(ask, hint, kind=kind.strip().lower())}
+
+
+@server.tool(
+    name="color_legend",
+    description=(
+        "The colour key — what each of Forge's six colours means, and what "
+        "the double-ruled frame is for. Show this once during setup, before "
+        "the first question. Forge asks the user to act on colour, and a "
+        "scheme nobody was told about is a scheme nobody can read. Reads "
+        "only; changes nothing."
+    ),
+)
+def color_legend() -> dict[str, Any]:
+    import forge_ui as ui
+
+    return {
+        "block": ui.legend(),
+        "meanings": [
+            {"name": name, "colour": key, "means": means}
+            for name, key, means in ui.MEANINGS
+        ],
     }
 
 

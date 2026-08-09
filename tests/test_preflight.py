@@ -15,18 +15,52 @@ from __future__ import annotations
 import forge_preflight as pf
 
 
+ALLOWED = {"importlib", "shutil", "subprocess", "sys", "dataclasses", "forge_ui"}
+
+
+def _imports_of(module) -> set[str]:
+    """Every module imported, read from the parse tree rather than the text.
+
+    Line matching is what this replaced, and it counted a docstring sentence
+    that happened to wrap onto the word "import" as an import. A scanner that
+    reports things the file does not do will eventually be silenced, and then
+    it reports nothing at all.
+    """
+    import ast
+
+    with open(module.__file__, encoding="utf-8") as handle:
+        tree = ast.parse(handle.read())
+
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.add(node.module.split(".")[0])
+    return found - {"__future__"}
+
+
 def test_the_check_needs_nothing_but_the_standard_library() -> None:
     """Otherwise it cannot run on the machine it exists to diagnose."""
-    source = (pf.__file__)
-    with open(source, encoding="utf-8") as handle:
-        text = handle.read()
+    for module in _imports_of(pf):
+        assert module in ALLOWED, f"{module} is not in the standard library"
 
-    for line in text.splitlines():
-        if line.startswith(("import ", "from ")) and "__future__" not in line:
-            module = line.split()[1].split(".")[0]
-            assert module in {
-                "importlib", "shutil", "subprocess", "sys", "dataclasses",
-            }, f"{module} is not in the standard library"
+
+def test_the_one_local_import_is_stdlib_only_itself() -> None:
+    """`forge_ui` is allowed here, and this is the reason it is allowed.
+
+    The rule is not "no imports" — it is that nothing this file needs can be
+    the thing that is missing. `forge_ui` ships in the same folder and pulls in
+    nothing but the standard library, so it is always there. The moment that
+    stops being true, the readiness check stops being able to run on the
+    machine it exists to diagnose, and this test is what notices.
+    """
+    import forge_ui
+
+    for module in _imports_of(forge_ui):
+        assert module in {
+            "os", "re", "sys", "unicodedata", "shutil", "textwrap",
+        }, f"forge_ui now needs {module}, so preflight can no longer rely on it"
 
 
 def test_a_missing_engine_package_is_fatal() -> None:

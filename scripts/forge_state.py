@@ -500,8 +500,13 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
     except StateError as exc:
         return False, f"Forge cannot read a decision record, so it will not write: {exc}"
 
+    # Every reason this function returns is a complete sentence, because the
+    # governor prints it as one. It used to return a bare question and let the
+    # governor prefix "No decision recorded yet for:" — which read correctly
+    # for a question and absurdly for anything else: "No decision recorded yet
+    # for: Forge cannot read its own notes."
     if pending is not None:
-        return False, pending.question
+        return False, f"No decision recorded yet for: {pending.question}"
 
     # An unanswered foundation blocks too, and this is the hole that made the
     # product not work.
@@ -518,7 +523,25 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
 
     unanswered = ff.next_question(forge_dir)
     if unanswered is not None:
-        return False, unanswered.question
+        return False, f"No decision recorded yet for: {unanswered.question}"
+
+    # And the current build step blocks, which is the hole that made the
+    # product stop working after the sixth question.
+    #
+    # Both rules above are true exactly once, at the start. After the last
+    # foundation answer this function returned True and never returned anything
+    # else — so Forge asked six questions, compiled the phases, and then wrote a
+    # whole application in one turn without asking again. The interactive loop
+    # existed only in the planner's instructions, which makes it advice.
+    #
+    # A phase is not buildable. Its steps are, one at a time, each after its own
+    # decision. Imported here for the same reason as the foundation module: the
+    # step layer reads this one.
+    import forge_steps as st
+
+    gap = st.next_gap(forge_dir)
+    if gap is not None:
+        return False, gap.reason
 
     return True, ""
 

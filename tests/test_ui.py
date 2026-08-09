@@ -46,8 +46,12 @@ def test_recommendation_carries_a_symbol() -> None:
     assert ui.STAR in plain(ui.recommendation("B", "because"))
 
 
-def test_only_four_symbols_ship() -> None:
-    """Restraint is deliberate — a busy screen competes with the decision."""
+def test_the_original_four_symbols_still_mean_what_they_meant() -> None:
+    """Rule R9's set, pinned. Later decisions added to it; none may redefine it.
+
+    A symbol whose meaning moves is worse than no symbol: the user has already
+    learned it, and nothing on the screen announces that it changed.
+    """
     assert {ui.MARK, ui.BLOCKED, ui.RECORDED, ui.STAR} == {"⚒", "⛔", "✅", "★"}
 
 
@@ -159,7 +163,7 @@ def test_colour_is_disabled_when_not_a_terminal() -> None:
         [sys.executable, "-c",
          "import sys; sys.path.insert(0, r'%s'); import forge_ui; print(forge_ui.banner('x'))"
          % str(Path(__file__).resolve().parents[1] / "scripts")],
-        capture_output=True, text=True, check=True,
+        capture_output=True, check=True, encoding="utf-8", errors="replace",
         env={**os.environ, "FORCE_COLOR": "", "NO_COLOR": ""},
     )
     assert ANSI.search(result.stdout) is None, "piped output carried escape codes"
@@ -291,10 +295,12 @@ def test_a_short_follow_up_is_left_alone() -> None:
 def test_every_symbol_carries_exactly_one_meaning() -> None:
     """Decision 035 replaced R9's count with a test: no symbol without a meaning.
 
-    Seven, fixed. An eighth needs a meaning none of these already carries.
+    Eight now. `→` earned the eighth place by that test — "Forge has stopped and
+    is waiting for you" is a meaning none of the others carries, and it had no
+    marker at all until the action frame existed.
     """
-    assert len(ui.SYMBOLS) == 7
-    assert len(set(ui.SYMBOLS)) == 7, "no symbol used twice"
+    assert len(ui.SYMBOLS) == 8
+    assert len(set(ui.SYMBOLS)) == 8, "no symbol used twice"
 
 
 def test_the_symbols_still_read_without_colour() -> None:
@@ -302,3 +308,266 @@ def test_the_symbols_still_read_without_colour() -> None:
     out = plain(ui.note("Costs", ["no backup"], symbol=ui.COST, ask="A, B, or C?"))
     assert ui.COST in out
     assert "Costs" in out and "A, B, or C?" in out
+
+
+# --------------------------------------------------------------------------
+# the colour system — rule R11
+# --------------------------------------------------------------------------
+
+
+def in_colour(snippet: str) -> str:
+    """Run `snippet` in a subprocess with colour forced on, and return stdout.
+
+    Colour is off under pytest, because stdout is captured and `isatty()` is
+    false — which is correct behaviour and useless for testing the colours
+    themselves. A subprocess with FORCE_COLOR set is the only place the real
+    escape codes exist.
+
+    `encoding` is pinned, and that is not tidiness. The child writes its frames
+    as UTF-8; a Windows parent decodes a pipe in the system code page, which
+    has no byte for `╔`. The decode happens on a reader thread, so the error
+    never surfaces as an exception — `subprocess` hands back `stdout=None` and
+    the test fails somewhere else entirely, pointing at nothing.
+    """
+    import subprocess
+
+    scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+    result = subprocess.run(
+        [sys.executable, "-c", f"import sys; sys.path.insert(0, r'{scripts}');\n{snippet}"],
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "FORCE_COLOR": "1", "NO_COLOR": ""},
+    )
+    return result.stdout
+
+
+def test_each_meaning_has_its_own_colour() -> None:
+    """Six meanings, six codes, no two the same.
+
+    Two meanings sharing a colour is the failure the whole scheme exists to
+    avoid: the user learns the colour, applies it, and is wrong half the time.
+    """
+    codes = in_colour(
+        "import forge_ui as ui\n"
+        "print('|'.join(ui._PALETTE[key] for _, key, _ in ui.MEANINGS))"
+    ).strip().split("|")
+
+    assert len(codes) == 6
+    assert len(set(codes)) == 6, "two meanings are drawn in the same colour"
+
+
+def test_the_legend_teaches_every_colour_it_uses() -> None:
+    """A colour system nobody was told about is a colour system nobody reads."""
+    out = plain(ui.legend())
+    for name, _, meaning in ui.MEANINGS:
+        assert name in out, f"the legend never names {name}"
+        assert meaning.split(" — ")[0][:20] in out
+    assert "double-ruled" in out, "and what the double frame means"
+
+
+def test_the_legend_still_names_its_colours_without_colour() -> None:
+    """The swatch is the one thing that cannot survive NO_COLOR, so it is named."""
+    out = plain(ui.legend())
+    for _, key, _ in ui.MEANINGS:
+        assert f"[{key.lower()}]" in out
+
+
+def test_the_legend_frame_is_square_at_any_width() -> None:
+    framed = [ln for ln in ui.legend().splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    assert framed
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the legend frame is ragged"
+
+
+def test_nc_is_the_reset_under_the_name_shell_scripts_use() -> None:
+    assert ui.NC == ui.RESET
+
+
+def test_paint_always_closes_the_span() -> None:
+    """An unclosed span does not stop at the end of Forge's output.
+
+    It recolours whatever the terminal prints next — usually the user's own
+    shell prompt, which reads as Forge having broken their terminal.
+    """
+    out = in_colour(
+        "import forge_ui as ui\n"
+        "print(ui.paint(ui.RED, 'stopped'), ui.paint(ui.GREEN, 'done', bold=True))"
+    )
+    assert "stopped" in out and "done" in out
+    assert out.rstrip().endswith("\033[0m"), "the last thing printed is a reset"
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "ui.decision('t', means=['m'], choices=[('A','one','first')])",
+        "ui.note('h', ['one'], ask='yes?')",
+        "ui.blocked('rate limiting', 'nothing recorded for', ['decide it'])",
+        "ui.important(['this cannot be undone'])",
+        "ui.legend()",
+        "ui.recorded('B', 'x.md')",
+        "ui.confirm('go ahead?')",
+    ],
+)
+def test_no_block_leaves_a_colour_open(call: str) -> None:
+    """Every block closes its own colour, whichever block it is."""
+    out = in_colour(f"import forge_ui as ui\nprint({call}.rstrip())")
+    assert out.rstrip().endswith("\033[0m"), f"{call} left a colour running"
+
+
+# --------------------------------------------------------------------------
+# the action frame — the moment the turn passes to the user
+# --------------------------------------------------------------------------
+
+
+def test_the_ask_is_in_its_own_frame_not_the_content_one() -> None:
+    """The one thing the user has to act on is not the last line of a block.
+
+    Inside the box it carried the same weight as the option above it, and it
+    was the first thing lost when the block scrolled.
+    """
+    out = plain(ui.decision("How should people log in?", choices=[("A", "one", "first")]))
+    single = [ln for ln in out.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    double = [ln for ln in out.splitlines() if ln.strip()[:1] in {"╔", "║", "╚"}]
+
+    assert single, "the decision is still framed"
+    assert double, "and the ask has a frame of its own"
+    assert "YOUR TURN" in out
+    assert ui.ACTION in out, "and a symbol, for a terminal with no colour"
+
+
+def test_the_action_frame_is_square() -> None:
+    framed = [ln for ln in ui.confirm("go ahead?").splitlines() if ln.strip()[:1] in {"╔", "║", "╚"}]
+    assert framed
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the action frame is ragged"
+
+
+def test_the_ask_names_the_letters_that_were_actually_offered() -> None:
+    """A two-option question must not ask for a C that was never shown."""
+    two = plain(ui.decision("t", choices=[("A", "one", "x"), ("B", "two", "y")]))
+    three = plain(ui.decision("t", choices=[("A", "1", "x"), ("B", "2", "y"), ("C", "3", "z")]))
+
+    assert "A, or B?" in two
+    assert "A, B, or C?" in three
+
+
+def test_a_yes_no_gate_says_what_yes_and_no_do() -> None:
+    """"Type yes to continue" is only clear if the alternative is stated too."""
+    out = plain(ui.confirm("This makes the repository public. Continue?"))
+    assert "type yes" in out and "no to stop" in out
+    assert "public" in out
+
+
+def test_an_open_question_asks_for_words_not_a_letter() -> None:
+    out = plain(ui.decision("What are you building?", means=["a line"]))
+    assert "your own words" in out
+    assert "A, B, or C" not in out
+
+
+# --------------------------------------------------------------------------
+# details that must not be skimmed past
+# --------------------------------------------------------------------------
+
+
+def test_an_important_detail_is_barred_and_framed() -> None:
+    out = plain(ui.important(["This cannot be undone."]))
+    assert ui.BAR in out, "the bar puts it on its own vertical"
+    assert "This cannot be undone." in out
+
+    framed = [ln for ln in ui.important(["x"]).splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    assert len({ui.visible_width(ln) for ln in framed}) == 1
+
+
+def test_a_decision_can_carry_an_important_detail_inside_it() -> None:
+    out = plain(
+        ui.decision(
+            "Public or private?",
+            choices=[("A", "public", "free review")],
+            important_lines=["Anyone will be able to read this code."],
+        )
+    )
+    assert ui.BAR in out
+    assert "Anyone will be able to read this code." in out
+
+
+def test_a_long_important_detail_wraps_inside_its_frame() -> None:
+    """It is the line the user most needs to read; it cannot break the box."""
+    long_line = "This cannot be undone once the repository is public. " * 3
+    framed = [
+        ln for ln in ui.important([long_line]).splitlines() if ln.strip()[:1] in {"┌", "│", "└"}
+    ]
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "a long detail broke the frame"
+
+
+def test_a_block_names_the_undecided_thing_on_its_own_line() -> None:
+    """It tells the user which question to go and answer.
+
+    As the tail of a sentence it was the easiest part of the message to read
+    past — which for the governor means a user who cannot find the way out.
+    """
+    out = plain(ui.blocked("rate limiting", "No decision recorded yet for:", ["answer it"]))
+    barred = [ln for ln in out.splitlines() if ui.BAR in ln]
+
+    assert any("rate limiting" in ln for ln in barred)
+    assert "YOUR TURN" in out and "answer it" in out
+
+
+# --------------------------------------------------------------------------
+# the plan, on one screen
+# --------------------------------------------------------------------------
+
+
+def a_plan() -> list[dict]:
+    return [
+        {
+            "number": 1, "title": "One todo, end to end", "delivers": "it survives a refresh",
+            "state": "done", "built": 2,
+            "steps": [{"text": "show the list", "built": True},
+                      {"text": "save a todo", "built": True}],
+        },
+        {
+            "number": 2, "title": "Complete and delete", "delivers": "tick one off",
+            "state": "now", "built": 1,
+            "steps": [{"text": "mark complete", "built": True},
+                      {"text": "delete one", "built": False}],
+        },
+        {
+            "number": 3, "title": "Edit in place", "delivers": "fix a typo",
+            "state": "later", "built": 0, "steps": [],
+        },
+    ]
+
+
+def test_the_roadmap_shows_every_phase_at_once() -> None:
+    """A plan revealed one phase at a time is not a plan."""
+    out = plain(ui.roadmap(a_plan()))
+    for title in ("One todo, end to end", "Complete and delete", "Edit in place"):
+        assert title in out
+
+
+def test_each_phase_says_which_state_it_is_in_without_colour() -> None:
+    out = plain(ui.roadmap(a_plan()))
+    for word in ("done", "now", "later"):
+        assert word in out
+
+
+def test_only_the_current_phase_lists_its_steps() -> None:
+    """Every step of every phase would bury the shape the user is here to see."""
+    out = plain(ui.roadmap(a_plan()))
+    assert "mark complete" in out, "the phase being worked on shows its steps"
+    assert "show the list" not in out, "a finished phase does not"
+
+
+def test_a_phase_with_no_steps_says_so_rather_than_looking_empty() -> None:
+    assert "not broken into steps yet" in plain(ui.roadmap(a_plan()))
+
+
+def test_the_roadmap_frame_is_square() -> None:
+    framed = [ln for ln in ui.roadmap(a_plan()).splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    assert framed
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the roadmap frame is ragged"
+
+
+def test_an_empty_plan_says_so_instead_of_drawing_nothing() -> None:
+    assert "No phases have been compiled yet" in plain(ui.roadmap([]))

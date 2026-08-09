@@ -80,6 +80,51 @@ the difference between a teacher and a form field.
 ⛔ (blocked), ✅ (recorded), ★ (recommended), plus `!` for a review finding. The screen
 stays clean; decoration never competes with the decision.
 **Applies to:** the visual layer (Phase 2).
+**Amended by [035](decisions/035-one-symbol-per-meaning.md) and R11:** the count was
+replaced by a test — one symbol per meaning, and no symbol without one. Eight now.
+
+## R11 — Every colour means one thing, and the user is told which
+
+**Came from:** user feedback — *"each response must have colours… red is error, green is
+this, yellow is this, blue is this. For each colour there should be some notations."*
+**Rule:** six colours, one meaning each, the same meaning everywhere in the product:
+
+| | |
+|---|---|
+| amber | Forge itself — if it is this colour, the plugin is talking |
+| blue | information — teaching, explanations, file paths |
+| green | it worked — decided, recorded, passed, recommended |
+| yellow | your turn, or a cost to weigh |
+| red | it stopped — errors, blocked writes, findings |
+| purple | which AI is doing the current job |
+
+Two things follow from it. **The key is taught at setup**, beside the permissions, because
+Forge asks the user to *act* on colour and a scheme nobody was told about is a scheme
+nobody can read. And **colour is never the only signal** — every line carries a symbol and
+words that say the same thing, so the whole system survives `NO_COLOR`, a monochrome
+terminal, or a user who cannot distinguish the hues.
+
+Every coloured span closes with the reset. An unclosed one does not stop at the end of
+Forge's output; it recolours the user's own shell prompt.
+**Applies to:** the visual layer (Phase 2), the readiness check, every question and every
+block Forge prints.
+
+## R12 — What the user must do next has its own frame
+
+**Came from:** user feedback — *"'press type yes' or something like this, encapsulate it in
+a special frame so that it gets separated."*
+**Rule:** the ask is never the last line of a block. "Type yes to continue", "A, B, or C?",
+"run this and tell me when it is done" — each goes in the double-ruled **YOUR TURN** frame,
+the only one of its kind on the screen, so a user scrolling back finds the place they have
+to act before reading a word of it. The frame states what shape of answer is wanted, and
+names the letters that were actually offered rather than a fixed A/B/C.
+
+The same applies to details with a cost that cannot be undone — *this makes the repository
+public*, *every account will have to sign up again*. They get a yellow bar and their own
+vertical. As sentence four of a paragraph they are read straight past, and those are the
+sentences the user most needs to have read.
+**Applies to:** every question (Phase 8), the governor's block message, the readiness
+check, and the visual layer (Phase 2).
 
 ## R10 — Questions are compact and boxed, never prose
 
@@ -89,6 +134,43 @@ at most two lines of explanation, options as a tight list of one line each, one 
 recommendation, one line against it, and the progress bar. If it does not fit on a screen,
 it is too long.
 **Applies to:** every question Forge asks (Phase 8), and the visual layer (Phase 2).
+
+## R13 — The loop is enforced by the files, never by the instructions
+
+**Came from:** a dogfood run, and the user watching it — *"it didn't ask me about anything and
+directly started building. I want it to be an interactive process."*
+**Rule:** every rule about how Forge behaves has to be a fact about `.claude/forge/`, checkable
+by the governor. Anything living only in a prompt is advice, and advice is what produced an
+entire application in one turn with nothing asked after the sixth question.
+
+Concretely: a phase cannot be built, only its steps. A phase with no step list is blocked; a
+step with no recorded decision is blocked; the gate opens for one step and closes when that
+step is ticked off. The planner's brief still describes the rhythm — teach, offer, recommend,
+wait — but the brief is now the explanation of a gate rather than the gate itself.
+
+The test for any future rule is the same: *if the model ignored this paragraph, what would stop
+it?* If the answer is nothing, it is not a rule yet.
+**Applies to:** the write gate (Phase 4), the pipeline (Phase 8), every agent brief.
+
+## R14 — The user sees the whole shape before any of it is built
+
+**Came from:** the user watching a run — *"Why are we moving with a phase-by-phase approach?
+First, you will make all the phase plans… we have to show all the phases to the user."*
+**Rule:** every phase is compiled in one pass, the whole plan is shown, and the user accepts or
+changes its shape before a line is written. A plan revealed one phase at a time is a surprise
+delivered in instalments: a question with project-wide reach — how is this tested, where does it
+run — gets answered while three phases are still invisible, and that answer silently sets the
+shape of all of them.
+
+Shown twice over, because the two do different jobs. The terminal roadmap is what is in front of
+the user at the moment they accept it, and it needs nothing but a terminal. `roadmap.html` is
+self-contained, opens from disk with no network, survives the scrollback, and can be sent to a
+mentor or read in week six when nobody remembers what phase four was for. It is generated from
+the files every time — a roadmap maintained by hand disagrees with the project inside a week,
+and the copy someone is reading is always the wrong one.
+
+Acceptance is a recorded decision, not a flag, so it rides on the chain like everything else.
+**Applies to:** the pipeline (Phase 8), the write gate (Phase 4), `/forge:start`.
 
 ## R6 — Keep a written record, not a conversational one
 

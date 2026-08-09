@@ -63,6 +63,16 @@ ROUTE: dict[str, tuple[str, ...]] = {
     "interrogation": ("forge-security-floor", "forge-teaching", "socratic", "socrates", "learn"),
     "challenge": ("forge-security-floor", "premortem", "redteam"),
     "planning": ("forge-security-floor", "forge-teaching", "writing-plans"),
+    # The same skills as the foundation, because it is the same job at a
+    # smaller scale: teach the choice, then let the user make it. It runs
+    # before every step rather than once at the start.
+    "step-decision": (
+        "forge-security-floor",
+        "forge-teaching",
+        "socratic",
+        "socrates",
+        "learn",
+    ),
     "building": (
         "forge-security-floor",
         "forge-coding-standards",
@@ -89,6 +99,7 @@ STAGE_AGENT: dict[str, str] = {
     "interrogation": "planner",
     "challenge": "planner",
     "planning": "planner",
+    "step-decision": "planner",
     "building": "builder",
     "review-fix": "review-fixer",
     "teach-back": "planner",

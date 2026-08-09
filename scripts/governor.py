@@ -105,7 +105,7 @@ def main() -> None:
         allow()  # Forge writing its own notes
 
     try:
-        permitted, question = writes_allowed(forge_dir)
+        permitted, reason = writes_allowed(forge_dir)
     except StateError as exc:
         # Fail closed (004), but always with a way out (challenge finding H1).
         deny(f"Forge cannot read its own notes.\n{exc}")
@@ -113,10 +113,15 @@ def main() -> None:
     if permitted:
         allow()
 
+    # Printed as it comes. `writes_allowed` returns a complete sentence for
+    # every reason it has, because there are several shapes of them now and a
+    # single prefix cannot fit them all — "No decision recorded yet for: the
+    # phases have not been compiled" reads as a bug in Forge rather than as
+    # Forge working.
     deny(
-        f"No decision recorded yet for: {question}\n"
-        "Code cannot be written until you decide this.\n"
-        "  → answer the open question, or\n"
+        f"{reason}\n"
+        "Code cannot be written until that is settled.\n"
+        "  → answer it, or\n"
         '  → say "write it anyway" and confirm (the override is recorded)'
     )
 

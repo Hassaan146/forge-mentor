@@ -50,14 +50,41 @@ def challenge(forge: Path) -> None:
     (forge / pl.CHALLENGED_MARKER).write_text("# challenged\n", encoding="utf-8")
 
 
-def plan(forge: Path) -> None:
+def plan(forge: Path, steps: list[str] | None = None) -> None:
     (forge / "phases").mkdir(exist_ok=True)
-    (forge / "phases" / "1-first.md").write_text("---\nphase: 1\n---\n", encoding="utf-8")
+    body = "---\nphase: 1\ntitle: First\n---\n"
+    if steps:
+        body += "\n## Steps\n\n"
+        body += "\n".join(f"{n}. [ ] {text}" for n, text in enumerate(steps, start=1))
+        body += "\n"
+    (forge / "phases" / "1-first.md").write_text(body, encoding="utf-8")
+
+
+def decide_step(forge: Path, phase: int, number: int) -> None:
+    """Record a decision against one step, the way the loop does."""
+    asked = fs.ask(forge, f"step {number}", affects=f"phase-{phase}.step-{number}")
+    fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
+
+
+def accept_plan(forge: Path) -> None:
+    """The user has seen every phase. Its own gate, ahead of the steps."""
+    import forge_steps as st
+
+    asked = fs.ask(forge, "Does this plan look right?", affects=st.PLAN_MARKER)
+    fs.answer(forge, asked.id, "# Yes\n\n## Why\n\nlooks right\n")
 
 
 def ready_to_build(forge: Path) -> None:
+    """Everything a project needs before its first line of code.
+
+    The step list and the first step's decision are part of that now. A phase
+    with neither used to reach BUILDING, which is precisely the state that let
+    a whole application be written without a question being asked.
+    """
     challenge(forge)
-    plan(forge)
+    plan(forge, ["the first thing that works end to end"])
+    accept_plan(forge)
+    decide_step(forge, 1, 1)
 
 
 # --------------------------------------------------------------------------

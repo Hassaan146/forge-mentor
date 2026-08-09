@@ -15,6 +15,12 @@ unblocks it, which is the worst state the product has.
 So this is checked up front, in plain language, with the exact command to fix
 each thing. Stdlib only, deliberately — a readiness check that needs a
 dependency installed cannot report that the dependency is missing.
+
+It is also the first Forge output most people ever see, so it is the first
+place the colour system has to hold (rule R11): green passed, red stops you,
+yellow is only missing something optional. `forge_ui` is the one non-stdlib
+import allowed here, and only because it is stdlib-only itself and ships in
+this same folder — it cannot be the missing thing this file exists to report.
 """
 
 from __future__ import annotations
@@ -24,6 +30,8 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+
+import forge_ui as ui
 
 # 3.12 is where `shutil.rmtree(onexc=...)` arrives, which the library cleanup
 # uses. Below that Forge still runs, so this is a warning rather than a refusal.
@@ -160,32 +168,57 @@ def run() -> list[Check]:
 
 
 def report(checks: list[Check] | None = None) -> str:
-    """The answer as a person reads it."""
+    """The answer as a person reads it.
+
+    Three states, three colours, and the word beside each one says the same
+    thing — a check list read at a glance is exactly where colour earns its
+    place, and exactly where colour alone would fail the user who cannot see
+    it. `MISSING` is red and stops you; `not set` is yellow and does not.
+    """
     checks = run() if checks is None else checks
     missing = [c for c in checks if not c.ok]
     blocking = [c for c in missing if c.fatal]
 
-    lines = ["", "  Forge — is this machine ready?", ""]
+    lines = ["", f"  {ui.AMBER}{ui.BOLD}{ui.MARK} Forge — is this machine ready?{ui.NC}", ""]
     for check in checks:
-        mark = "ok  " if check.ok else ("MISSING" if check.fatal else "not set")
-        lines.append(f"    [{mark:>7}]  {check.name}")
+        if check.ok:
+            mark, ink, symbol = "ok", ui.GREEN, ui.RECORDED
+        elif check.fatal:
+            mark, ink, symbol = "MISSING", ui.RED, ui.BLOCKED
+        else:
+            mark, ink, symbol = "not set", ui.YELLOW, ui.COST
+
+        lines.append(f"    {ink}{symbol} {mark:<8}{ui.NC} {check.name}")
         if not check.ok:
-            lines.append(f"               {check.detail}")
-            lines.append(f"               fix:  {check.fix}")
+            lines.append(f"               {ui.DIM}{check.detail}{ui.NC}")
+            lines.append(f"               {ui.DIM}fix:{ui.NC}  {ui.BLUE}{check.fix}{ui.NC}")
     lines.append("")
 
     if blocking:
-        lines += [
-            "  Forge cannot run yet. The hooks would still block writes, but the",
-            "  engine that records your decisions would be missing — so Forge would",
-            "  stop a write and then be unable to record the decision that unblocks",
-            "  it. Fix the lines marked MISSING first.",
+        body = [
+            "",
+            f"  {ui.RED}{ui.BOLD}Forge cannot run yet.{ui.NC}",
+            "",
+            f"  {ui.DIM}The hooks would still block writes, but the engine that records{ui.NC}",
+            f"  {ui.DIM}your decisions would be missing — so Forge would stop a write and{ui.NC}",
+            f"  {ui.DIM}then be unable to record the decision that unblocks it.{ui.NC}",
             "",
         ]
-    elif missing:
-        lines += ["  Ready. The unset item above only affects reading reviews.", ""]
+        return "\n".join(lines) + ui.box(
+            body, title=f"{ui.RED}{ui.BOLD}{ui.BLOCKED} NOT READY{ui.NC}", edge=ui.RED
+        ) + ui.action(
+            "Run the fix lines marked MISSING above.",
+            hint="then run this check again — it has to come back Ready before Forge starts",
+        )
+
+    if missing:
+        lines += [
+            f"  {ui.GREEN}{ui.RECORDED} Ready.{ui.NC}  "
+            f"{ui.DIM}The unset item above only affects reading reviews.{ui.NC}",
+            "",
+        ]
     else:
-        lines += ["  Ready.", ""]
+        lines += [f"  {ui.GREEN}{ui.BOLD}{ui.RECORDED} Ready.{ui.NC}", ""]
     return "\n".join(lines)
 
 
