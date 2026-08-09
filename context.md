@@ -129,7 +129,8 @@ pip install "mcp>=2.0.0,<3"
 /plugin install forge@forge-marketplace
 ```
 
-Then per project: `/forge:start`, and afterwards `/forge:status`, `/forge:mode`.
+Then per project: `/forge:start`, and afterwards `/forge:status`, `/forge:mode`,
+`/forge:update`.
 
 Check a machine before installing anything:
 
@@ -143,14 +144,14 @@ Tests:
 python -m pytest
 ```
 
-534 tests, ~88% coverage, no model calls anywhere in the suite.
+660 tests, ~89% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 534 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (34 records), MCP engine, skills, subagents,
+**Built:** all ten phases. 660 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (40 records), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 
@@ -166,15 +167,17 @@ opt-in push, `prompts.md` and Code Explained generation.
   written — and was interrupted mid-write. Not committed.
 - **Presentation, demo video, reflection document.**
 
-**Known friction:** the installed plugin on the author's machine has lagged the
-working copy repeatedly, which produces confusing sessions — old hooks blocking
-work that the current code allows. Update the marketplace before testing.
+**Known friction, now handled:** the installed plugin lagged the working copy for
+four sessions running, and every one of them opened by debugging the wrong build.
+Decision 040 makes the plugin say so itself — a once-a-day version check that
+prints one frame with the command to run. Still restart Claude Code rather than
+reloading it: hooks and the engine register at startup.
 
 ---
 
 ## Reading order for the records
 
-`.claude/forge/decisions/` holds 34, oldest first. The load-bearing ones:
+`.claude/forge/decisions/` holds 40, oldest first. The load-bearing ones:
 
 | | |
 |---|---|
@@ -192,6 +195,7 @@ work that the current code allows. Update the marketplace before testing.
 | 037 | the governor gates on the build step, not the phase |
 | 038 | the whole plan is shown, and accepted, before any of it is built |
 | 039 | speech is gated like writing, and the colour never left the process |
+| 040 | the plugin tells you when it is out of date |
 
 `.claude/forge/code-explained.md` is the generated version of all of them, and
 `prompts.md` is every question and answer, assembled from the records rather

@@ -206,6 +206,30 @@ The general form: when output looks wrong, find which process emits it and what 
 believes about its own stdout, before changing anything about how it is drawn.
 **Applies to:** every render tool, the readiness check, the hooks.
 
+## R17 — A tool that is out of date has to say so itself
+
+**Came from:** the user, after four sessions spent debugging a build that had already been
+fixed — *"after every update, the plugin should show 'Update your current plugin', like we
+have on the Play Store, so that we don't have to uninstall and reinstall from scratch."*
+**Rule:** the plugin checks its own version against its repository once a day and says so in
+one frame, with the command to run. Nothing else about the remote is displayed — only a
+version string, and only after it matches a strict numeric pattern, because remote text on a
+screen is remote text in a model's context.
+
+Silence is the normal answer and the answer to every failure: no network, a proxy, a rate
+limit, junk in the response. `FORGE_NO_UPDATE_CHECK=1` turns it off. An update check is the
+least important thing in a session and must never be why one fails to start.
+
+The notice says two things beyond the command, because they are what stops people delaying:
+the user's decisions are untouched — they live in the project, not the plugin — and Claude Code
+must be **restarted**, not reloaded, since hooks and the engine register at startup.
+
+The general form: any version a user reads must come from the artefact itself. The banner
+printed "0.1.0" from a default argument while the manifest said 1.0.0, and it is the first
+thing anybody checks to see whether an update landed. A number that is wrong is worse than no
+number, because it is believed.
+**Applies to:** the plugin shell (Phase 2), release (Phase 10), `/forge:update`.
+
 ## R6 — Keep a written record, not a conversational one
 
 **Came from:** user asking whether responses were being recorded.

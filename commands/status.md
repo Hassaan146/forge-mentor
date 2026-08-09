@@ -14,6 +14,15 @@ Steps:
    unavailable in one line and carry on — nothing else depends on it.
 4. Call `check_history` to confirm the decision records are intact.
 
+Then check the version — a status report from a plugin that is two weeks behind
+describes a project state that may already have moved:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py"
+```
+
+It prints nothing when the copy is current. Print what it returns, add nothing.
+
 Then print, using the Forge visual identity:
 
 - the banner, then the progress bar with the count of questions answered against the estimate

@@ -33,6 +33,18 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py\" --hook",
+            "timeout": 15,
+            "_note": "The installed copy lagged the repository for four sessions running, and every one of them began by debugging the wrong build. Checks once a day, caches the answer outside the plugin so a reinstall does not reset it, and says nothing on any failure. FORGE_NO_UPDATE_CHECK=1 turns it off."
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

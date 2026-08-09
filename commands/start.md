@@ -24,8 +24,17 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" legend
 ```
 
 ```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py"
+```
+
+```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_preflight.py"
 ```
+
+The update check prints nothing when the copy is current, which is most of the
+time — print what it returns and say nothing when it returns nothing. If it does
+report a version, show it before the readiness check: setting up a project with a
+plugin that is about to be replaced wastes the setup.
 
 The legend is not decoration. From here on, Forge asks the user to *act* on
 colour — red means it stopped, yellow means the turn is theirs — and none of

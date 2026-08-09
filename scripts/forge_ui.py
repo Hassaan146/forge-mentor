@@ -214,8 +214,28 @@ WIDTH = _width()
 # --------------------------------------------------------------------------
 
 
-def banner(project: str | None = None, version: str = "0.1.0") -> str:
+def plugin_version() -> str:
+    """The version this copy actually is, read from the manifest.
+
+    It was a default argument reading "0.1.0" while the manifest said 1.0.0 —
+    so the banner reported a version that had not been true for months, and it
+    is the first thing anybody looks at to check whether an update landed. A
+    number that is wrong is worse than no number, because it is believed.
+    """
+    import json
+    import pathlib
+
+    try:
+        here = pathlib.Path(__file__).resolve().parent.parent
+        manifest = here / ".claude-plugin" / "plugin.json"
+        return str(json.loads(manifest.read_text(encoding="utf-8")).get("version", "")) or "unknown"
+    except (OSError, ValueError, TypeError, AttributeError):
+        return "unknown"
+
+
+def banner(project: str | None = None, version: str | None = None) -> str:
     """The start-up banner. Printed once when a session begins."""
+    version = version or plugin_version()
     lines = [
         "",
         f"  {AMBER}{BOLD}   ▄▄▄▄▄  ▄▄▄▄  ▄▄▄▄▄   ▄▄▄▄  ▄▄▄▄▄{RESET}",
@@ -429,13 +449,15 @@ def action(ask: str, hint: str = "", *, kind: str = "answer") -> str:
     means "your turn" everywhere in Forge; and `→`, which means it in a
     terminal with no colour at all.
     """
-    body = [
-        "",
-        f"  {YELLOW}{BOLD}{ask}{RESET}",
-    ]
+    # Wrapped, both of them. A hint long enough to reach the right rail does
+    # not overflow tidily — the row runs past the border and the frame goes
+    # ragged, which on a narrow pane is every row at once.
+    body = [""]
+    body += [f"  {YELLOW}{BOLD}{line}{RESET}" for line in _wrap(ask, WIDTH - 6, "")]
+
     tail = hint or ASK_KINDS.get(kind, "")
     if tail:
-        body.append(f"  {DIM}{tail}{RESET}")
+        body += [f"  {DIM}{line}{RESET}" for line in _wrap(tail, WIDTH - 6, "")]
     body.append("")
 
     title = f"{YELLOW}{BOLD}{ACTION} YOUR TURN{RESET}"

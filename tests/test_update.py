@@ -1,0 +1,249 @@
+"""Tests for the update check.
+
+The installed plugin lagged the repository for four sessions running, and every
+one of them opened by debugging the wrong build — rules that were fixed still
+firing, questions that had been reordered still coming out in the old order,
+colours that had shipped still absent. Nothing on screen ever said the copy on
+disk was two weeks behind.
+
+The check itself is one line of text. Nearly every test here is about the ways
+it must stay out of the way: no network, a proxy, a rate limit, junk in the
+response, a machine that has never had a cache file.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import pytest
+
+import forge_update as up
+
+
+@pytest.fixture()
+def plugin(tmp_path: Path) -> Path:
+    """A plugin root that looks like an installed copy."""
+    manifest = tmp_path / ".claude-plugin"
+    manifest.mkdir(parents=True)
+    (manifest / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "forge",
+                "version": "1.0.0",
+                "repository": "https://github.com/Hassaan146/forge-mentor",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def isolated_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Never touch the real one — these tests must not affect a real session.
+
+    Redirected through the env var the function itself honours, rather than by
+    replacing the function. Patching it out would mean the real one is never
+    the thing under test, and where the cache lives is exactly what one of
+    these tests is about.
+    """
+    path = tmp_path / "cache" / "forge-update-check.json"
+    monkeypatch.setenv("FORGE_UPDATE_CACHE", str(path))
+    monkeypatch.delenv("FORGE_NO_UPDATE_CHECK", raising=False)
+    return path
+
+
+def offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_a, **_k):
+        raise OSError("no network")
+
+    monkeypatch.setattr(up.urllib.request, "urlopen", refuse)
+
+
+def answers(monkeypatch: pytest.MonkeyPatch, version: str) -> None:
+    monkeypatch.setattr(up, "fetch_latest", lambda *a, **k: version)
+
+
+# --------------------------------------------------------------------------
+# comparing versions
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "latest,installed,expected",
+    [
+        ("1.1.0", "1.0.0", True),
+        ("1.0.0", "1.0.0", False),
+        ("1.0.0", "1.1.0", False),
+        # The one that quietly stops every update notice from ever appearing
+        # again, because "1.10.0" < "1.9.0" as text.
+        ("1.10.0", "1.9.0", True),
+        ("1.1", "1.0.9", True),
+        ("2.0", "1.9.9", True),
+        ("", "1.0.0", False),
+        ("latest", "1.0.0", False),
+        ("1.0.0", "", False),
+    ],
+)
+def test_versions_compare_as_numbers_not_as_text(latest, installed, expected) -> None:
+    assert up.is_newer(latest, installed) is expected
+
+
+def test_the_repository_comes_from_the_manifest(plugin: Path) -> None:
+    """A fork must check itself, not report that it is behind the original."""
+    owner, repo, url = up.repository_of(plugin)
+    assert (owner, repo) == ("Hassaan146", "forge-mentor")
+    assert url == "https://github.com/Hassaan146/forge-mentor"
+
+
+def test_a_manifest_without_a_repository_checks_nothing(tmp_path: Path) -> None:
+    (tmp_path / ".claude-plugin").mkdir()
+    (tmp_path / ".claude-plugin" / "plugin.json").write_text('{"version": "1.0.0"}', "utf-8")
+    assert up.repository_of(tmp_path) == ("", "", "")
+    assert up.check(tmp_path) is None
+
+
+# --------------------------------------------------------------------------
+# saying so, once
+# --------------------------------------------------------------------------
+
+
+def test_a_newer_version_is_reported(plugin: Path, monkeypatch) -> None:
+    answers(monkeypatch, "1.1.0")
+    found = up.check(plugin)
+
+    assert found is not None
+    assert (found.installed, found.latest) == ("1.0.0", "1.1.0")
+
+
+def test_the_same_version_says_nothing(plugin: Path, monkeypatch) -> None:
+    answers(monkeypatch, "1.0.0")
+    assert up.check(plugin) is None
+
+
+def test_the_notice_says_what_to_run_and_that_notes_are_safe(plugin: Path, monkeypatch) -> None:
+    """The two things anybody wants to know before updating anything."""
+    answers(monkeypatch, "1.1.0")
+    text = up.report(plugin)
+
+    assert "1.0.0" in text and "1.1.0" in text
+    assert "/plugin update" in text
+    assert "restart" in text.lower()
+    assert "untouched" in text, "their decisions live in the project, not the plugin"
+
+
+def test_the_notice_is_framed_like_everything_else(plugin: Path, monkeypatch) -> None:
+    answers(monkeypatch, "1.1.0")
+    text = up.report(plugin)
+    assert any(char in text for char in "┌│└"), "decision 035: every block is framed"
+
+
+# --------------------------------------------------------------------------
+# staying out of the way
+# --------------------------------------------------------------------------
+
+
+def test_no_network_is_silence_not_an_error(plugin: Path, monkeypatch) -> None:
+    offline(monkeypatch)
+    assert up.check(plugin) is None
+    assert up.report(plugin) == ""
+
+
+def test_junk_in_the_response_is_treated_as_no_update(plugin: Path, monkeypatch) -> None:
+    """Nothing from the network reaches a screen except a version.
+
+    Remote text on the user's screen is remote text in a model's context
+    (challenge finding C3), and a release note is not worth that door.
+    """
+
+    class Response:
+        status = 200
+
+        def read(self, _n=None):
+            return b'{"version": "<script>alert(1)</script>"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(up.urllib.request, "urlopen", lambda *a, **k: Response())
+    assert up.fetch_latest("o", "r") == ""
+
+
+def test_a_non_200_is_treated_as_no_answer(plugin: Path, monkeypatch) -> None:
+    class Response:
+        status = 403  # rate limited, which is the common one
+
+        def read(self, _n=None):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(up.urllib.request, "urlopen", lambda *a, **k: Response())
+    assert up.fetch_latest("o", "r") == ""
+
+
+def test_the_switch_turns_it_off_entirely(plugin: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FORGE_NO_UPDATE_CHECK", "1")
+
+    def never(*_a, **_k):
+        raise AssertionError("it asked the network anyway")
+
+    monkeypatch.setattr(up, "fetch_latest", never)
+    assert up.check(plugin) is None
+
+
+def test_it_asks_at_most_once_a_day(plugin: Path, monkeypatch, isolated_cache: Path) -> None:
+    """A check that runs every session is a check that is in the way."""
+    calls = []
+
+    def counted(*_a, **_k):
+        calls.append(1)
+        return "1.1.0"
+
+    monkeypatch.setattr(up, "fetch_latest", counted)
+
+    assert up.check(plugin) is not None
+    assert up.check(plugin) is not None
+    assert len(calls) == 1, "the second one came from the cache"
+
+
+def test_a_stale_cache_is_asked_again(plugin: Path, monkeypatch, isolated_cache: Path) -> None:
+    isolated_cache.parent.mkdir(parents=True, exist_ok=True)
+    isolated_cache.write_text(
+        json.dumps({"checked_at": int(time.time()) - up.CHECK_EVERY - 60, "latest": "1.0.0"}),
+        encoding="utf-8",
+    )
+    answers(monkeypatch, "1.1.0")
+
+    assert up.check(plugin) is not None, "yesterday's answer is not this morning's"
+
+
+def test_a_corrupt_cache_does_not_stop_the_check(plugin: Path, monkeypatch, isolated_cache) -> None:
+    isolated_cache.parent.mkdir(parents=True, exist_ok=True)
+    isolated_cache.write_text("not json", encoding="utf-8")
+    answers(monkeypatch, "1.1.0")
+
+    assert up.check(plugin) is not None
+
+
+def test_the_cache_lives_outside_the_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inside it, the reinstall it exists to make unnecessary would delete it."""
+    monkeypatch.delenv("FORGE_UPDATE_CACHE", raising=False)
+    where = up.cache_file()
+
+    assert where.parent.name == ".claude"
+    assert "plugins" not in str(where), "not somewhere a reinstall wipes"
+
+
+def test_a_missing_manifest_is_silence(tmp_path: Path) -> None:
+    assert up.installed_version(tmp_path) == ""
+    assert up.check(tmp_path) is None

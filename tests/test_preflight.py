@@ -59,7 +59,7 @@ def test_the_one_local_import_is_stdlib_only_itself() -> None:
 
     for module in _imports_of(forge_ui):
         assert module in {
-            "os", "re", "sys", "unicodedata", "shutil", "textwrap",
+            "os", "re", "sys", "unicodedata", "shutil", "textwrap", "json", "pathlib",
         }, f"forge_ui now needs {module}, so preflight can no longer rely on it"
 
 
