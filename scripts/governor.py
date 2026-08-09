@@ -9,13 +9,17 @@ Contract with Claude Code:
   stdout  JSON; permissionDecision "deny" blocks the call and shows the reason
   exit 0  always — a crash here must not wedge the user's session
 
-Behaviour is decision 004 (fail closed) with decision 017 (all-or-nothing):
-  * a project with no .forge/ is not a Forge project — stay out of the way
-  * an open question with no recorded answer blocks writes
-  * an explicit, recorded override lets the write through
-
-Rule R3 applies: everything it needs is read from files in the repo, so a
-fresh session on another account behaves identically.
+Behaviour:
+  decision 004  fail closed. Blocked by default; an explicit, recorded
+                override is the only way through.
+  decision 018  the open question is *computed* from the decision files, not
+                read from a mutable field. A question is a file with
+                `status: open`.
+  decision 019  state is re-read from disk every time. Nothing is cached and
+                nothing is keyed to a Claude account, so switching accounts
+                changes nothing.
+  decision 014  Forge only acts where it was invited. No `.claude/forge/` means this
+                is not a Forge project — stay completely out of the way.
 """
 
 from __future__ import annotations
@@ -24,12 +28,40 @@ import json
 import sys
 from pathlib import Path
 
+# Claude Code invokes this file directly as a hook command, so it runs as a
+# standalone script with no package context. There is no install step for a
+# plugin, so the sibling import has to be made reachable here.
+sys.path.insert(0, str(Path(__file__).parent))
+
+from forge_state import FORGE_DIR, StateError, find_forge_dir, writes_allowed  # noqa: E402
+
 # Tools that write to the project. Reads are never blocked — the mentor has to
 # be able to look at the code in order to teach it.
 WRITE_TOOLS = {"Write", "Edit", "NotebookEdit"}
 
-# Files Forge owns. Writing its own records must never be blocked by itself.
-SELF_PATHS = (".forge/",)
+
+def is_forge_owned(target: str) -> bool:
+    """True when this write is Forge writing its own notes.
+
+    Compares path *segments* rather than matching a substring. A separator
+    heuristic such as "/.forge/" misses a relative target like
+    ".claude/forge/decisions/001.md" — which would block Forge from recording
+    the very decision that unblocks the user.
+
+    The notes folder is more than one segment deep now (decision 032), so this
+    looks for the run of segments in order. Testing membership of the whole
+    string against `parts` silently stopped matching anything the moment the
+    path gained a slash — and failing this check open would have blocked Forge
+    from writing its own records.
+    """
+    if not target:
+        return False
+
+    wanted = tuple(part for part in FORGE_DIR.split("/") if part)
+    parts = Path(target.replace("\\", "/")).parts
+    return any(
+        parts[i : i + len(wanted)] == wanted for i in range(len(parts) - len(wanted) + 1)
+    )
 
 
 def allow() -> None:
@@ -53,39 +85,6 @@ def deny(reason: str) -> None:
     sys.exit(0)
 
 
-def read_progress(forge_dir: Path) -> dict:
-    """Read the progress file's labelled header.
-
-    Decision 001 accepts that a hand edit can break this file, and requires
-    Forge to say exactly what is wrong rather than guess. Decision 011 requires
-    in-flight state to live here so another account can pick the work up.
-    """
-    progress = forge_dir / "progress.md"
-    if not progress.exists():
-        return {}
-
-    text = progress.read_text(encoding="utf-8", errors="replace")
-    if not text.startswith("---"):
-        raise ValueError(
-            f"{progress} is missing its labelled section at the top. "
-            "Restore it with:  git checkout -- .forge/progress.md"
-        )
-
-    end = text.find("---", 3)
-    if end == -1:
-        raise ValueError(
-            f"{progress} has an unterminated labelled section. "
-            "Restore it with:  git checkout -- .forge/progress.md"
-        )
-
-    header: dict[str, str] = {}
-    for line in text[3:end].splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            header[key.strip()] = value.strip()
-    return header
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -98,56 +97,42 @@ def main() -> None:
     if payload.get("tool_name") not in WRITE_TOOLS:
         allow()
 
-    cwd = Path(payload.get("cwd") or ".")
-    forge_dir = cwd / ".forge"
+    forge_dir = find_forge_dir(Path(payload.get("cwd") or "."))
+    if forge_dir is None:
+        allow()  # not a Forge project
 
-    # Not a Forge project. Forge only acts where it was invited (decision 014).
-    if not forge_dir.is_dir():
-        allow()
-
-    target = str(payload.get("tool_input", {}).get("file_path", ""))
-    if any(part in target.replace("\\", "/") for part in SELF_PATHS):
-        allow()
+    if is_forge_owned(str(payload.get("tool_input", {}).get("file_path", ""))):
+        allow()  # Forge writing its own notes
 
     try:
-        header = read_progress(forge_dir)
-    except ValueError as exc:
-        # Fail closed (decision 004), but always with a way out (challenge H1).
+        permitted, reason = writes_allowed(forge_dir)
+    except StateError as exc:
+        # Fail closed (004), but always with a way out (challenge finding H1).
         deny(f"Forge cannot read its own notes.\n{exc}")
 
-    open_question = header.get("open_question", "").strip()
-    override = header.get("override_active", "").strip().lower()
-
-    if override in {"true", "yes"}:
+    if permitted:
         allow()
 
-    if open_question and open_question.lower() not in {"none", "", "null"}:
-        deny(
-            f"No decision recorded yet for: {open_question}\n"
-            "Code cannot be written until you decide this.\n"
-            "  → answer the open question, or\n"
-            "  → say \"write it anyway\" and confirm (the override is recorded)"
-        )
-
-    allow()
+    # Printed as it comes. `writes_allowed` returns a complete sentence for
+    # every reason it has, because there are several shapes of them now and a
+    # single prefix cannot fit them all — "No decision recorded yet for: the
+    # phases have not been compiled" reads as a bug in Forge rather than as
+    # Forge working.
+    deny(
+        f"{reason}\n"
+        "Code cannot be written until that is settled.\n"
+        "  → answer it, or\n"
+        '  → say "write it anyway" and confirm (the override is recorded)'
+    )
 
 
 if __name__ == "__main__":
     try:
         main()
+    except SystemExit:
+        raise
     except Exception as exc:  # never wedge the session
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": (
-                            f"Forge's safety check failed to run: {exc}\n"
-                            "Blocked by default. Say \"write it anyway\" to override."
-                        ),
-                    }
-                }
-            )
+        deny(
+            f"Forge's safety check failed to run: {exc}\n"
+            'Blocked by default. Say "write it anyway" to override.'
         )
-        sys.exit(0)
