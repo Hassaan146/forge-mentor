@@ -60,7 +60,22 @@ _make_output_utf8_safe()
 
 
 def _colour_enabled() -> bool:
-    """True when it is safe to emit ANSI colour."""
+    """True when it is safe to emit ANSI colour.
+
+    **`isatty` is the right question for a command and the wrong one for a
+    renderer**, and getting that backwards is why Forge shipped with no colour
+    at all. The MCP server writes JSON-RPC down a pipe, so `isatty()` is false
+    inside it — and every block it returned came out with every colour code
+    replaced by an empty string. Not dimmed, not degraded: absent, in every
+    build, always. The palette, the legend teaching it, and the tests holding
+    it to account were all correct, and none of them ran in a process that
+    could emit a single escape byte.
+
+    The server sets `FORCE_COLOR` for exactly this reason (see `.mcp.json`):
+    it is not writing to its own terminal, it is composing a block for a client
+    that has one. `NO_COLOR` still wins over it, because that is the user's
+    switch and it outranks ours.
+    """
     if os.environ.get("NO_COLOR"):
         return False
     if os.environ.get("FORGE_NO_COLOR"):

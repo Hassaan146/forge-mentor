@@ -2,7 +2,11 @@
   "mcpServers": {
     "forge": {
       "command": "python",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server/forge_server.py"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/forge_server.py"],
+      "env": {
+        "FORCE_COLOR": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }

@@ -1,0 +1,176 @@
+"""Forge Mentor — the hook that will not let a question be asked as prose.
+
+**Why this exists.** Rules R10 and R12 say a question is framed and short, and
+both lived in `start.md` and the planner's brief. Rule R13 says that makes them
+advice. It was right: a real run put a decision on screen as three paragraphs
+of plain text with no frame around it, and nothing anywhere could tell.
+
+The governor gates *writes*, which is a file path a hook can see. Nothing gated
+*speech*, and speech is most of what Forge does. This closes that.
+
+**How.** `Stop` fires when the assistant has finished its turn, and it carries
+the transcript. So the last thing said can be read back and checked against the
+one rule that matters: if a question is open, the user must be looking at a
+frame. If they are not, the turn is refused and the assistant is told to render
+it properly — the same shape of refusal the governor gives a bad write.
+
+**It fails open, everywhere.** A governor that blocks a write costs a turn; a
+presenter that wedges the session costs the session. Any unreadable transcript,
+any unexpected shape, any error at all, and this allows. `stop_hook_active` is
+honoured absolutely, so it can never ask twice in a row.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from forge_state import find_forge_dir, open_question  # noqa: E402
+
+# The frame characters. Any one of them means a block was rendered — the single
+# rule and the double one both count, since a note, a decision and an action
+# frame are all Forge speaking in its own shape.
+FRAMES = frozenset("┌│└╔║╚")
+
+# Unframed prose allowed alongside a question. Two lines is a lead-in; ten is
+# the wall of text rule R10 exists to prevent, wearing a box at the bottom.
+MAX_LOOSE_LINES = 6
+
+
+def allow() -> None:
+    print(json.dumps({}))
+    sys.exit(0)
+
+
+def block(reason: str) -> None:
+    """Refuse the turn and say what to do instead.
+
+    The reason is written to be acted on rather than apologised for: it names
+    the tool, because "be more concise" is not a thing a model can reliably do
+    and "call render_decision and print what it returns" is.
+    """
+    print(json.dumps({"decision": "block", "reason": reason}))
+    sys.exit(0)
+
+
+def last_assistant_text(transcript: Path) -> str:
+    """The text of the most recent assistant turn, or "" if it cannot be read.
+
+    The transcript is JSONL and its shape is the client's business, not ours —
+    so every field is reached defensively and any surprise yields "", which
+    allows the turn.
+    """
+    try:
+        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("type") != "assistant":
+            continue
+
+        content = (entry.get("message") or {}).get("content")
+        if isinstance(content, str):
+            return content
+        if not isinstance(content, list):
+            return ""
+
+        parts = [
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        ]
+        text = "\n".join(p for p in parts if p)
+        if text.strip():
+            return text
+        # An assistant entry carrying only tool calls is not the turn's speech;
+        # keep looking back for the one that actually said something.
+    return ""
+
+
+def is_framed(text: str) -> bool:
+    return any(char in FRAMES for char in text)
+
+
+def loose_lines(text: str) -> int:
+    """Lines of prose outside any frame."""
+    return len(
+        [
+            line
+            for line in text.splitlines()
+            if line.strip() and not any(char in FRAMES for char in line)
+        ]
+    )
+
+
+def main() -> None:
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        allow()
+
+    if payload.get("hook_event_name") != "Stop":
+        allow()
+
+    # Absolute. This is what stops the hook asking twice for the same turn, and
+    # a presenter that can loop is a presenter that ends the session.
+    if payload.get("stop_hook_active"):
+        allow()
+
+    try:
+        forge_dir = find_forge_dir(Path(payload.get("cwd") or "."))
+        if forge_dir is None:
+            allow()  # not a Forge project
+
+        pending = open_question(forge_dir)
+        if pending is None:
+            allow()  # nothing is being asked, so nothing has to be framed
+
+        transcript = payload.get("transcript_path")
+        if not transcript:
+            allow()
+
+        said = last_assistant_text(Path(transcript))
+        if not said.strip():
+            allow()
+
+        if not is_framed(said):
+            block(
+                "A question is open and it was asked as prose.\n"
+                f"  Open: {pending.question}\n"
+                "Forge never asks in plain text — an unframed paragraph is "
+                "indistinguishable from ordinary chat, so the user cannot tell "
+                "which of the two is bound by Forge's rules (decision 035).\n"
+                "  → call render_decision (or render_note, or render_action) and "
+                "print the `block` it returns, verbatim, nothing added around it."
+            )
+
+        if loose_lines(said) > MAX_LOOSE_LINES:
+            block(
+                f"The frame is there, but {loose_lines(said)} lines of loose prose "
+                f"are around it (the limit is {MAX_LOOSE_LINES}).\n"
+                "Rule R10: a question is a short title, two lines of explanation, "
+                "one line per option, one recommendation, one cost. Everything else "
+                "belongs in the decision record, where someone will look for it in "
+                "a month.\n"
+                "  → move it into the block, or into the record, and say the rest "
+                "with fewer words."
+            )
+    except Exception:
+        # Never wedge a session over presentation. The governor can afford to
+        # fail closed because a blocked write costs one turn; this cannot,
+        # because a Stop hook that errors on every turn ends the conversation.
+        allow()
+
+    allow()
+
+
+if __name__ == "__main__":
+    main()

@@ -191,6 +191,7 @@ work that the current code allows. Update the marketplace before testing.
 | 036 | six colours with a key the user is taught, and a frame of its own for the ask |
 | 037 | the governor gates on the build step, not the phase |
 | 038 | the whole plan is shown, and accepted, before any of it is built |
+| 039 | speech is gated like writing, and the colour never left the process |
 
 `.claude/forge/code-explained.md` is the generated version of all of them, and
 `prompts.md` is every question and answer, assembled from the records rather

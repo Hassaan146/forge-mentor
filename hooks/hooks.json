@@ -32,6 +32,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/presenter.py\"",
+            "timeout": 10,
+            "_note": "The governor gates writes, which are a file path a hook can see. This gates speech. Rules R10 and R12 lived only in the prompts until a run put a decision on screen as three unframed paragraphs and nothing could tell. Fails open on everything: a blocked write costs a turn, a wedged Stop hook costs the session."
+          }
+        ]
+      }
     ]
   }
 }

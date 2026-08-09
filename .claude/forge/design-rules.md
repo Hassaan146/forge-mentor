@@ -172,6 +172,40 @@ and the copy someone is reading is always the wrong one.
 Acceptance is a recorded decision, not a flag, so it rides on the chain like everything else.
 **Applies to:** the pipeline (Phase 8), the write gate (Phase 4), `/forge:start`.
 
+## R15 — Speech is gated the same as writing
+
+**Came from:** the user, on seeing a decision arrive as unframed prose —
+*"I asked you that this must be short and encapsulated in a box, there should be a guardrail
+which enforces this thing."*
+**Rule:** the governor gates writes because a write is a file path a hook can see. Most of what
+Forge does is talk, and talk was gated by nothing — so R10 and R12 held exactly as long as a
+model felt like following them. A `Stop` hook now reads the last thing said: if a question is
+open and there is no frame around it, the turn is refused and the assistant is told which tool
+to call. Loose prose around a frame is refused too, because a block with ten paragraphs above it
+is the same wall of text wearing a box.
+
+It fails open on everything — an unreadable transcript, an unexpected shape, any error at all.
+The governor can afford to fail closed, because a blocked write costs one turn. A `Stop` hook
+that errors costs the session.
+
+**Applies to:** every turn in a Forge project where a question is open.
+
+## R16 — Check which process the output is actually leaving
+
+**Came from:** the same report — *"and also no colors, why?"*
+**Rule:** `isatty()` answers "am I writing to a terminal", which is the right question for a
+command and the wrong one for a renderer. The MCP server writes JSON-RPC down a pipe, so inside
+it every colour code was replaced by an empty string — not dimmed, *absent*, in every build,
+always. The palette, the legend teaching it, and the tests holding it to account were all
+correct, and none of them ran in a process that could emit one escape byte.
+
+A renderer composes for a client that has a terminal; it is not writing to its own. The server
+sets `FORCE_COLOR` for that reason. `NO_COLOR` still outranks it — that switch is the user's.
+
+The general form: when output looks wrong, find which process emits it and what that process
+believes about its own stdout, before changing anything about how it is drawn.
+**Applies to:** every render tool, the readiness check, the hooks.
+
 ## R6 — Keep a written record, not a conversational one
 
 **Came from:** user asking whether responses were being recorded.
