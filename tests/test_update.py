@@ -178,6 +178,32 @@ def test_each_command_sits_on_its_own_line() -> None:
         assert command in [line.strip() for line in lines], f"{command} is not on its own line"
 
 
+def test_no_command_is_offered_that_does_not_exist() -> None:
+    """`/plugin update <name>` is not a subcommand.
+
+    Claude Code reads `/plugin` as the plugin browser and opens it, arguments
+    and all, so a user told to run it lands in a list of 284 plugins wondering
+    what went wrong. It was written here on the assumption that the slash
+    commands mirror the CLI, and they do not.
+    """
+    text = ANSI.sub("", up.how_to_update())
+
+    assert "/plugin update" not in text.replace("no /plugin update", "")
+    assert up.SLASH_COMMANDS == ("/plugin marketplace update forge-marketplace",)
+
+
+def test_the_session_route_is_one_command_and_says_why() -> None:
+    """Refreshing the marketplace downloads the plugin with it.
+
+    It reports "1 plugin bumped", and the bump is the download. Presenting it as
+    the short half of the terminal pair is what sent a user looking for a second
+    command that does not exist.
+    """
+    assert len(up.SLASH_COMMANDS) == 1
+    assert len(up.UPDATE_COMMANDS) == 2
+    assert "downloads the plugin with it" in ANSI.sub("", up.how_to_update())
+
+
 def test_the_surface_you_are_on_is_marked(monkeypatch) -> None:
     monkeypatch.setenv("CLAUDECODE", "1")
     inside = ANSI.sub("", up.how_to_update())

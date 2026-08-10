@@ -355,15 +355,21 @@ UPDATE_COMMANDS = (
     UPDATE_COMMAND,
 )
 
-# The same two, as they are typed inside a Claude Code session. Not the same
-# strings, and not interchangeable: a slash command pasted into a shell does
-# nothing, and a `claude ...` line typed at a Claude Code prompt is a sentence
-# rather than a command. Both sets are always shown, because a notice that
-# guesses wrong sends the user to a prompt where their commands do not work.
-SLASH_COMMANDS = (
-    "/plugin marketplace update forge-marketplace",
-    "/plugin update forge@forge-marketplace",
-)
+# Inside a session it is **one** command, and that is not a shorter version of
+# the terminal pair. Refreshing the marketplace downloads the new plugin with
+# it: `/plugin marketplace update` reports "1 plugin bumped", and the bump is
+# the download.
+#
+# There is no `/plugin update <name>`. Claude Code takes `/plugin` and opens the
+# plugin browser, arguments and all, so a user told to run it lands in a list of
+# 284 plugins wondering what went wrong. That was written here on the assumption
+# that the slash commands mirror the CLI, which they do not, and it cost a
+# round trip to find out. Anything in this file that a user is told to type is
+# now something that has been watched running.
+SLASH_COMMANDS = ("/plugin marketplace update forge-marketplace",)
+
+# For the panel, which is the manual route when a command is not enough.
+PANEL_ROUTE = "/plugin  then the Installed tab"
 
 
 def how_to_update() -> str:
@@ -386,15 +392,27 @@ def how_to_update() -> str:
         rows.append("")
 
     if here:
-        block("Inside Claude Code, at the prompt", SLASH_COMMANDS, True)
+        block("Inside Claude Code, one command", SLASH_COMMANDS, True)
+        rows.insert(
+            len(rows) - 1,
+            f"      {ui.DIM}refreshing the marketplace downloads the plugin with it{ui.NC}",
+        )
         block("Or in a terminal, outside Claude Code", UPDATE_COMMANDS, False)
+        rows.insert(
+            len(rows) - 1,
+            f"      {ui.DIM}two, in that order: the second reads what the first refreshes{ui.NC}",
+        )
     else:
-        block("In this terminal", UPDATE_COMMANDS, True)
-        block("Or inside Claude Code, at the prompt", SLASH_COMMANDS, False)
+        block("In this terminal, both in this order", UPDATE_COMMANDS, True)
+        rows.insert(
+            len(rows) - 1,
+            f"      {ui.DIM}the second reads the catalogue the first refreshes{ui.NC}",
+        )
+        block("Or inside Claude Code, one command", SLASH_COMMANDS, False)
 
     rows += [
-        f"  {ui.DIM}Both, in that order. The second reads the catalogue that the{ui.NC}",
-        f"  {ui.DIM}first one refreshes, so it finds nothing on its own.{ui.NC}",
+        f"  {ui.DIM}There is no /plugin update. Claude Code reads /plugin as the{ui.NC}",
+        f"  {ui.DIM}plugin browser and opens it, arguments and all.{ui.NC}",
         "",
     ]
     return "\n" + ui.box(rows, title=f"{ui.AMBER}{ui.BOLD}{ui.MARK} How to update{ui.NC}") + "\n"
