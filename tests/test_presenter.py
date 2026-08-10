@@ -93,7 +93,8 @@ def test_an_open_question_asked_as_prose_is_refused(project: Path) -> None:
 
     assert blocked(answer)
     assert "asked as prose" in answer["reason"]
-    assert "render_decision" in answer["reason"], "and it names the tool to use"
+    assert "forge_ui.py" in answer["reason"], "and it names the command to run"
+    assert "render" in answer["reason"]
 
 
 def test_a_framed_question_passes(project: Path) -> None:
@@ -243,3 +244,77 @@ def test_a_turn_that_only_called_tools_is_not_treated_as_speech(project: Path) -
         {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
     )
     assert not blocked(answer), "it looked back to the turn that actually spoke"
+
+
+def test_a_block_printed_by_the_command_counts_as_framed(project: Path) -> None:
+    """The path that fixed the colours must not be the one that gets refused.
+
+    A block pasted into a reply loses every colour on the way through markdown.
+    Printed by the command it reaches the terminal intact, so the frame is on
+    screen even though the reply text has none.
+    """
+    ask(project)
+    path = project / "rendered.jsonl"
+    path.write_text(
+        json.dumps({"type": "user", "message": {"content": "go on"}})
+        + "\n"
+        + json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Bash",
+                            "input": {
+                                "command": 'python "$CLAUDE_PLUGIN_ROOT/scripts/'
+                                "forge_ui.py\" render <<'JSON'\n{}\nJSON"
+                            },
+                        }
+                    ]
+                },
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Your call."}]}}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    answer = run(
+        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
+    )
+    assert not blocked(answer)
+
+
+def test_an_unrelated_command_does_not_count_as_a_frame(project: Path) -> None:
+    """Otherwise any turn that ran anything would pass."""
+    ask(project)
+    path = project / "other.jsonl"
+    path.write_text(
+        json.dumps({"type": "user", "message": {"content": "go on"}})
+        + "\n"
+        + json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Bash", "input": {"command": "git status"}}
+                    ]
+                },
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "so, which?"}]}}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    answer = run(
+        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
+    )
+    assert blocked(answer)

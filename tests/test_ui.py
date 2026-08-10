@@ -571,3 +571,47 @@ def test_the_roadmap_frame_is_square() -> None:
 
 def test_an_empty_plan_says_so_instead_of_drawing_nothing() -> None:
     assert "No phases have been compiled yet" in plain(ui.roadmap([]))
+
+
+# --------------------------------------------------------------------------
+# printing a block from a command, which is how the colour survives
+# --------------------------------------------------------------------------
+
+
+def test_every_kind_of_block_can_be_built_from_plain_data() -> None:
+    """The command takes JSON, so every block has to be reachable that way."""
+    payloads = [
+        {"kind": "decision", "title": "t", "choices": [["A", "one", "first"]]},
+        {"kind": "note", "heading": "h", "lines": ["one"]},
+        {"kind": "action", "ask": "go?", "ask_kind": "confirm"},
+        {"kind": "legend"},
+        {"kind": "banner", "project": "todo"},
+        {"kind": "roadmap", "phases": [
+            {"number": 1, "title": "First", "delivers": "d", "state": "now",
+             "built": 0, "steps": [{"text": "s", "built": False}]}]},
+    ]
+    for payload in payloads:
+        out = ui.render_from(payload)
+        assert out.strip(), f"{payload['kind']} rendered nothing"
+
+
+def test_an_unknown_kind_says_which_ones_exist() -> None:
+    with pytest.raises(ValueError) as err:
+        ui.render_from({"kind": "sonnet"})
+    assert "decision" in str(err.value) and "roadmap" in str(err.value)
+
+
+def test_the_command_prints_colour_where_a_retyped_block_would_not() -> None:
+    """The bug this path exists for.
+
+    A block returned to the model and pasted into its reply is rendered as
+    markdown, which has no idea what an escape code is. Every colour was
+    stripped on the last hop: right at the source, invisible on the screen,
+    and every test passing.
+    """
+    out = in_colour(
+        "import json, sys, forge_ui as ui\n"
+        "print(ui.render_from({'kind': 'action', 'ask': 'A, B, or C?'}))"
+    )
+    assert "\033[" in out, "the command emits real escape codes"
+    assert "A, B, or C?" in out

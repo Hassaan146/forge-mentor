@@ -56,6 +56,44 @@ def block(reason: str) -> None:
     sys.exit(0)
 
 
+# How a block reaches the terminal with its colour intact. A block returned to
+# the model and retyped into its reply is rendered as markdown, and markdown
+# does not know what an escape code is, so the colour died on the last hop.
+# Printing it through this command puts it on the same channel as the banner.
+RENDER_COMMAND = "forge_ui.py"
+
+
+def rendered_by_command(transcript: Path) -> bool:
+    """Did this turn print a block through the render command?
+
+    A turn that did is framed, whatever its text says: the frame is on the
+    user's screen, in colour, above whatever the assistant then wrote. Judging
+    only the reply text would refuse the very path that fixed the colours.
+    """
+    try:
+        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+
+    for line in reversed(lines[-40:]):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("type") == "user":
+            break  # back past the start of this turn
+        content = (entry.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "tool_use":
+                continue
+            command = str((part.get("input") or {}).get("command", ""))
+            if RENDER_COMMAND in command and " render" in command:
+                return True
+    return False
+
+
 def last_assistant_text(transcript: Path) -> str:
     """The text of the most recent assistant turn, or "" if it cannot be read.
 
@@ -137,6 +175,9 @@ def main() -> None:
         if not transcript:
             allow()
 
+        if rendered_by_command(Path(transcript)):
+            allow()  # the frame is on screen, in colour, printed by the command
+
         said = last_assistant_text(Path(transcript))
         if not said.strip():
             allow()
@@ -145,11 +186,18 @@ def main() -> None:
             block(
                 "A question is open and it was asked as prose.\n"
                 f"  Open: {pending.question}\n"
-                "Forge never asks in plain text — an unframed paragraph is "
+                "Forge never asks in plain text. An unframed paragraph is "
                 "indistinguishable from ordinary chat, so the user cannot tell "
                 "which of the two is bound by Forge's rules (decision 035).\n"
-                "  → call render_decision (or render_note, or render_action) and "
-                "print the `block` it returns, verbatim, nothing added around it."
+                "  -> print it with the render command, which is what puts the "
+                "block on screen in colour:\n"
+                '     python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render '
+                "<<'JSON'\n"
+                '     {\"kind\": \"decision\", \"title\": \"...\", \"choices\": '
+                '[[\"A\", \"...\", \"...\"]]}\n'
+                "     JSON\n"
+                "  Do not paste the block into your reply instead. Retyped, it "
+                "loses every colour on the way through markdown."
             )
 
         if loose_lines(said) > MAX_LOOSE_LINES:

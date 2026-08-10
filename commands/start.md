@@ -122,20 +122,39 @@ to `none` once the answer is recorded. That field is what the governor reads to
 decide whether code may be written.
 
 
-## Never write the question yourself
+## Never write the question yourself, and never retype the block
 
-Every question, every follow-up, and every "type yes to continue" goes through a
-render tool. Not because hand-written prose is untidy, but because an unframed
-paragraph is indistinguishable from ordinary assistant text — the user cannot
-tell which of the two is bound by Forge's rules (decision 035).
+Every question, every follow-up and every "type yes to continue" is **printed by
+the render command**, not written into your reply.
 
-| What you are doing | Tool | What the user sees |
-|---|---|---|
-| Asking a decision | `render_decision` | the block, then a double-ruled **YOUR TURN** frame |
-| A short follow-up | `render_note` | the frame, capped at three lines |
-| Asking yes/no, or A/B/C on its own | `render_action` | the double-ruled frame alone |
-| A detail they must not skim | `important_lines` on either render tool | a yellow bar beside it |
-| Explaining the colours | `color_legend` | the key, at setup |
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" render <<'JSON'
+{"kind": "decision", "number": 2, "title": "How should people log in?",
+ "means": ["one line of teaching", "and a second"],
+ "choices": [["A", "Email and password", "full control, most work"],
+             ["B", "A login service", "fast, less control"]],
+ "recommend": ["B", "password safety comes free"],
+ "against": "you depend on someone else's service",
+ "important_lines": ["Moving off it later means every account signs up again."],
+ "done": 1, "total": 6, "stage": "foundation"}
+JSON
+```
+
+`kind` is one of `decision`, `note`, `action`, `legend`, `roadmap`, `banner`.
+
+**Why a command and not your own text.** Both were tried. A block pasted into a
+reply is rendered as markdown, and markdown does not know what an escape code is,
+so every colour is stripped on the last hop: correct at the source, invisible on
+the screen, and every test still passing. Printed by the command it goes out on
+the same channel as the banner, which arrives intact.
+
+So: run the command, then say nothing else, or one short line. Do not repeat the
+block in your reply. The user has already seen it, in colour, and a second
+monochrome copy underneath is worse than none.
+
+The MCP render tools (`render_decision`, `render_note`, `render_action`,
+`color_legend`, `show_roadmap`) still exist and still compose the same blocks.
+Use them when you need the text as data. When the user has to **see** it, print it.
 
 Two rules that are not negotiable:
 

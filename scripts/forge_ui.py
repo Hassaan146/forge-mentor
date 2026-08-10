@@ -924,11 +924,83 @@ def _demo() -> None:
     print()
 
 
+def render_from(payload: dict) -> str:
+    """Build a block from a plain dict, so it can be printed by a command.
+
+    **Why this exists.** Every render tool returned its block to the model,
+    which retyped it into its reply. That reply is rendered as markdown, and
+    markdown has no idea what an escape code is, so the colours were stripped
+    on the last hop. They were correct at the source and invisible at the
+    destination, which is the worst kind of wrong: every test passed.
+
+    Printing through a command puts the block on the same channel as the
+    banner, which is the one channel already known to reach a terminal intact.
+    """
+    kind = str(payload.get("kind", "")).strip().lower()
+
+    if kind == "legend":
+        return legend()
+
+    if kind == "banner":
+        return banner(payload.get("project"), payload.get("version"))
+
+    if kind == "roadmap":
+        return roadmap(list(payload.get("phases") or []), payload.get("title", "THE PLAN"))
+
+    if kind == "action":
+        return action(
+            str(payload.get("ask", "")),
+            str(payload.get("hint", "")),
+            kind=str(payload.get("ask_kind", "answer")),
+        )
+
+    if kind == "note":
+        return note(
+            str(payload.get("heading", "")),
+            list(payload.get("lines") or []),
+            symbol=str(payload.get("symbol", "")),
+            ask=str(payload.get("ask", "")),
+            important_lines=list(payload.get("important_lines") or []) or None,
+        )
+
+    if kind == "decision":
+        recommend = payload.get("recommend")
+        return decision(
+            str(payload.get("title", "")),
+            number=payload.get("number") or None,
+            subtitle=str(payload.get("subtitle", "")),
+            means=list(payload.get("means") or []) or None,
+            choices=[tuple(c) for c in (payload.get("choices") or [])] or None,
+            recommend=(tuple(recommend) if recommend else None),
+            against=str(payload.get("against", "")),
+            important_lines=list(payload.get("important_lines") or []) or None,
+            done=int(payload.get("done") or 0),
+            total=int(payload.get("total") or 0),
+            stage=str(payload.get("stage", "")),
+            ask=str(payload.get("ask", "")),
+        )
+
+    raise ValueError(
+        f"Unknown block kind {kind!r}. "
+        "Use one of: decision, note, action, legend, roadmap, banner."
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover - CLI surface
     arg = sys.argv[1] if len(sys.argv) > 1 else "demo"
     if arg == "banner":
         print(banner(sys.argv[2] if len(sys.argv) > 2 else None))
     elif arg == "legend":
         print(legend())
+    elif arg == "render":
+        # JSON on stdin, a coloured block on stdout. The whole point is that
+        # the model never retypes it.
+        import json as _json
+
+        try:
+            print(render_from(_json.loads(sys.stdin.read() or "{}")))
+        except (ValueError, TypeError) as exc:
+            print(note("That block could not be drawn", [str(exc)], symbol=BLOCKED))
+            sys.exit(1)
     else:
         _demo()
