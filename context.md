@@ -35,7 +35,7 @@ They run as subprocesses, are **standard-library only**, and never depend on
 anything being installed. The governor blocks writes; safety blocks secret reads
 and quotes outside text as data; gates hold the commit until tests pass.
 
-**The MCP server** (`server/forge_server.py`) is the engine — 26 tools for
+**The MCP server** (`server/forge_server.py`) is the engine — 33 tools for
 recording decisions, reading reviews, metering usage, planning the pipeline.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
 below it is silently never registered.
@@ -105,6 +105,21 @@ code, and the code was not in the path.**
 When adding a guarantee, the question is not "is it implemented" but "what
 calls it, and would I notice if nothing did".
 
+Two more from the visual layer, same shape:
+
+- **`isatty()` answers "am I a terminal", not "will this be seen".** The MCP
+  server writes down a pipe, so every colour constant was the empty string
+  inside it: the palette, the legend and the tests were all correct and none of
+  them ran anywhere that could emit an escape byte. Then, forced back on, the
+  codes were stripped by the client's markdown renderer anyway. Find which
+  process emits the output and what it believes about its own stdout before
+  changing anything about how it is drawn.
+- **Never document a command you have not watched run.** `/plugin update
+  forge@forge-marketplace` was written on the assumption that the slash commands
+  mirror the CLI. Claude Code reads `/plugin` as the plugin browser and opens
+  it, arguments and all, so the user landed in a list of 284 plugins. It did not
+  fail; it did something else quietly.
+
 Two related traps:
 
 - **Tests that cannot fail.** Several shipped: a trailing `or True`, a colour
@@ -130,7 +145,7 @@ pip install "mcp>=2.0.0,<3"
 ```
 
 Then per project: `/forge:start`, and afterwards `/forge:status`, `/forge:mode`,
-`/forge:update`.
+`/forge:update`, `/forge:stop`.
 
 Check a machine before installing anything:
 
@@ -144,14 +159,14 @@ Tests:
 python -m pytest
 ```
 
-660 tests, ~89% coverage, no model calls anywhere in the suite.
+707 tests, ~89% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 660 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (40 records), MCP engine, skills, subagents,
+**Built:** all ten phases. 707 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (42 records, ids 1 to 43; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 
@@ -177,7 +192,7 @@ reloading it: hooks and the engine register at startup.
 
 ## Reading order for the records
 
-`.claude/forge/decisions/` holds 40, oldest first. The load-bearing ones:
+`.claude/forge/decisions/` holds 42, oldest first. The load-bearing ones:
 
 | | |
 |---|---|
@@ -195,6 +210,9 @@ reloading it: hooks and the engine register at startup.
 | 037 | the governor gates on the build step, not the phase |
 | 038 | the whole plan is shown, and accepted, before any of it is built |
 | 039 | speech is gated like writing, and the colour never left the process |
+| 041 | the stack options name the shape, not the technology |
+| 042 | Opus 5 writes the code, and 002 is amended rather than edited |
+| 043 | one file switches Forge off in a project, and deletes nothing |
 | 040 | the plugin tells you when it is out of date |
 
 `.claude/forge/code-explained.md` is the generated version of all of them, and

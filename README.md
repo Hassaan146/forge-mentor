@@ -31,14 +31,24 @@ wherever Claude Code does. One thing differs outside a terminal: the hooks invok
 shell has. The readiness check tests that exact command rather than the interpreter you happen
 to have typed with, because those two can disagree and only the first one matters.
 
-Forge uses six colours, one meaning each — amber is Forge talking, blue is teaching, green
-means it worked, yellow means your turn, red means it stopped, purple names the AI doing the
-work. `/forge:start` prints the key before it asks you anything, because a colour scheme
-nobody was told about is one nobody can read.
+**Colour, honestly.** Forge has six, one meaning each: amber is Forge talking, blue is
+teaching, green means it worked, yellow means your turn, red means it stopped, purple names
+the AI doing the work. You will see them running Forge's own commands in a terminal.
 
-Colour switches itself off when the output is not a terminal, or when `NO_COLOR` is set.
-Nothing is lost — no state is ever signalled by colour alone, and the one thing you have to
-answer sits in its own double-ruled frame, which reads the same in black and white.
+**You will not see them inside Claude Code**, and that is not a bug in Forge. Everything the
+plugin prints reaches you through the client, which renders it as markdown, and markdown has
+no concept of an escape sequence. Forge detects this and stops emitting the codes rather than
+sending colour that is stripped on arrival, because the leftovers made the legend print as
+grey blocks.
+
+Nothing is lost, because nothing was ever signalled by colour alone. Every block carries a
+symbol and the words that say the same thing, and the one thing you have to answer sits in its
+own double-ruled frame, which reads identically in black and white. `/forge:start` prints the
+key for whichever set applies: the six colours where they render, the nine symbols where they
+do not.
+
+`NO_COLOR=1` turns it off anywhere. `FORCE_COLOR=1` turns it back on if you want to see for
+yourself what your setup does with it.
 
 `/forge:start` checks all of this first and prints the exact command for anything missing. You
 can also run the check yourself at any time — and here too the command depends on where you
@@ -185,9 +195,21 @@ written — that is the product working, not a delay.
 | `/forge:status` | Where the work stands and what happens next |
 | `/forge:mode` | `pipeline` · `accept-edits` · `auto` — how much Forge settles itself |
 | `/forge:update` | Check now whether a newer Forge is out, and how to get it |
+| `/forge:stop` | Switch Forge off in this project, keeping every record |
 
 The three modes differ in one thing only: how much gets decided for you. Code can never
 move past an undecided question in any of them.
+
+## Switching it off
+
+`/forge:stop` stops Forge acting in a project: no gates, no questions, no blocked
+writes. It writes one file, `.claude/forge/paused.md`, and every hook stands down
+when it sees it.
+
+Nothing is deleted. The decisions, the chain and the phases are the project's own
+history and stay committed with the code, so `/forge:start` resumes rather than
+restarts. Deleting the record is a separate, manual choice, and Forge will not
+make it for you.
 
 ## What it does
 
