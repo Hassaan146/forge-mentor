@@ -242,22 +242,46 @@ def pending_restart(plugin_root: Path) -> Update | None:
 
 
 def restart_notice(update: Update) -> str:
-    """What to do, and what it costs, which is nothing."""
+    """What to do, and what it costs, which is nothing.
+
+    No commands here on purpose. There is no command for this: the download is
+    already done and what is left is closing a window. Offering one would send
+    the user back to the update they have already run, which is the loop this
+    whole notice exists to end.
+    """
     import forge_ui as ui
 
-    return ui.note(
-        f"Forge {update.latest} is downloaded, this session is running {update.installed}",
-        [
-            "A session reads its hooks and its engine once, at startup, so this "
-            "one keeps the old ones until you open a new one.",
-            "Nothing is lost by restarting. Your decisions live in the project, "
-            "not in the plugin.",
-        ],
-        symbol=ui.COST,
-    ) + ui.action(
-        "Quit Claude Code completely, then open it again",
-        hint="then /forge:status to see where you are, and carry on from there",
-        kind="fix",
+    body = [
+        "",
+        f"  {ui.DIM}A session reads its hooks and its engine once, at startup, so this{ui.NC}",
+        f"  {ui.DIM}one keeps the old ones however many times you update.{ui.NC}",
+        "",
+        f"  {ui.YELLOW}{ui.BOLD}Quit Claude Code completely{ui.NC}",
+        f"      {ui.DIM}the whole application. Not /clear, not a new tab.{ui.NC}",
+        "",
+        f"  {ui.YELLOW}{ui.BOLD}Open it again, then run{ui.NC}",
+        f"      {ui.BOLD}/forge:status{ui.NC}",
+        f"      {ui.DIM}it reads your notes and says which question is open{ui.NC}",
+        "",
+    ]
+    body += ui._important_lines(
+        ["Nothing is lost. Your decisions live in the project, not in the plugin."]
+    )
+    body.append("")
+
+    title = (
+        f"{ui.YELLOW}{ui.BOLD}{ui.COST} Forge {update.latest} is downloaded, "
+        f"this session runs {update.installed}{ui.NC}"
+    )
+    return (
+        "\n"
+        + ui.box(body, title=title, edge=ui.YELLOW)
+        + "\n"
+        + ui.action(
+            "Restart now, or finish what you are on and restart after",
+            hint="both are fine. Nothing expires and nothing is half applied",
+            kind="confirm",
+        )
     )
 
 
@@ -316,9 +340,9 @@ def notice(update: Update) -> str:
             "not in the plugin.",
         ],
         symbol=ui.COST,
-    ) + ui.action(
-        "Shall I update it for you now?",
-        hint="yes and I will run both commands, then tell you when to restart",
+    ) + how_to_update() + ui.action(
+        "Shall I run those for you now?",
+        hint="yes and I will do both, then tell you when to restart",
         kind="confirm",
     )
 
@@ -330,6 +354,50 @@ UPDATE_COMMANDS = (
     "claude plugin marketplace update forge-marketplace",
     UPDATE_COMMAND,
 )
+
+# The same two, as they are typed inside a Claude Code session. Not the same
+# strings, and not interchangeable: a slash command pasted into a shell does
+# nothing, and a `claude ...` line typed at a Claude Code prompt is a sentence
+# rather than a command. Both sets are always shown, because a notice that
+# guesses wrong sends the user to a prompt where their commands do not work.
+SLASH_COMMANDS = (
+    "/plugin marketplace update forge-marketplace",
+    "/plugin update forge@forge-marketplace",
+)
+
+
+def how_to_update() -> str:
+    """Both surfaces, labelled, one command to a line.
+
+    This was a paragraph with the commands inline in backticks, wrapped by the
+    frame, and it read as prose rather than as something to run. A command the
+    user has to extract from a sentence is a command they will mistype.
+    """
+    import forge_ui as ui
+
+    here = bool(os.environ.get("CLAUDECODE"))
+    rows: list[str] = [""]
+
+    def block(title: str, commands: tuple[str, ...], current: bool) -> None:
+        mark = f"  {ui.DIM}(you are here){ui.NC}" if current else ""
+        ink = ui.YELLOW if current else ui.DIM
+        rows.append(f"  {ink}{ui.BOLD}{title}{ui.NC}{mark}")
+        rows.extend(f"      {ui.BOLD}{command}{ui.NC}" for command in commands)
+        rows.append("")
+
+    if here:
+        block("Inside Claude Code, at the prompt", SLASH_COMMANDS, True)
+        block("Or in a terminal, outside Claude Code", UPDATE_COMMANDS, False)
+    else:
+        block("In this terminal", UPDATE_COMMANDS, True)
+        block("Or inside Claude Code, at the prompt", SLASH_COMMANDS, False)
+
+    rows += [
+        f"  {ui.DIM}Both, in that order. The second reads the catalogue that the{ui.NC}",
+        f"  {ui.DIM}first one refreshes, so it finds nothing on its own.{ui.NC}",
+        "",
+    ]
+    return "\n" + ui.box(rows, title=f"{ui.AMBER}{ui.BOLD}{ui.MARK} How to update{ui.NC}") + "\n"
 
 
 def report(plugin_root: Path, *, force: bool = False) -> str:

@@ -14,12 +14,15 @@ response, a machine that has never had a cache file.
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
 import pytest
 
 import forge_update as up
+
+ANSI = re.compile(r"\033\[[0-9;]*m")
 
 
 @pytest.fixture()
@@ -136,7 +139,7 @@ def test_the_notice_offers_to_do_it_rather_than_handing_over_commands(
     text = up.report(plugin)
 
     assert "1.0.0" in text and "1.1.0" in text
-    assert "update it for you" in text
+    assert "run those for you" in text
     assert "untouched" in text, "their decisions live in the project, not the plugin"
 
 
@@ -145,6 +148,58 @@ def test_the_commands_are_available_in_the_order_they_must_run() -> None:
     assert up.UPDATE_COMMANDS[0].startswith("claude plugin marketplace update")
     assert up.UPDATE_COMMANDS[1] == up.UPDATE_COMMAND
     assert "forge@forge-marketplace" in up.UPDATE_COMMAND
+
+
+def test_both_surfaces_are_shown_with_their_own_commands() -> None:
+    """A slash command in a shell does nothing, and the reverse is a sentence.
+
+    A notice that guesses which prompt the user is at sends half of them
+    somewhere their commands do not work, so both sets are always printed and
+    labelled rather than one being inferred.
+    """
+    text = up.how_to_update()
+
+    for command in up.SLASH_COMMANDS:
+        assert command in text
+    for command in up.UPDATE_COMMANDS:
+        assert command in text
+    assert "Inside Claude Code" in text
+    assert "terminal" in text
+
+
+def test_each_command_sits_on_its_own_line() -> None:
+    """They were inline in a sentence, wrapped by the frame, and read as prose.
+
+    A command someone has to extract from a paragraph is one they will mistype.
+    """
+    lines = [line.strip("│ ") for line in ANSI.sub("", up.how_to_update()).splitlines()]
+
+    for command in up.SLASH_COMMANDS + up.UPDATE_COMMANDS:
+        assert command in [line.strip() for line in lines], f"{command} is not on its own line"
+
+
+def test_the_surface_you_are_on_is_marked(monkeypatch) -> None:
+    monkeypatch.setenv("CLAUDECODE", "1")
+    inside = ANSI.sub("", up.how_to_update())
+    assert inside.index("Inside Claude Code") < inside.index("Or in a terminal")
+
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    outside = ANSI.sub("", up.how_to_update())
+    assert outside.index("In this terminal") < outside.index("Or inside Claude Code")
+
+
+def test_the_restart_notice_offers_no_command_to_run() -> None:
+    """There is no command for it. The download is done; a window has to close.
+
+    Offering one would send the user back to the update they already ran, which
+    is the exact loop this notice exists to end.
+    """
+    text = ANSI.sub("", up.restart_notice(up.Update("1.5.0", "1.6.0", "x")))
+
+    assert "claude plugin update" not in text
+    assert "Quit Claude Code completely" in text
+    assert "/forge:status" in text
+    assert "Nothing is lost" in text
 
 
 def test_the_notice_is_framed_like_everything_else(plugin: Path, monkeypatch) -> None:
