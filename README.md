@@ -41,20 +41,96 @@ Nothing is lost — no state is ever signalled by colour alone, and the one thin
 answer sits in its own double-ruled frame, which reads the same in black and white.
 
 `/forge:start` checks all of this first and prints the exact command for anything missing. You
-can also run the check yourself at any time:
+can also run the check yourself at any time — and here too the command depends on where you
+are typing.
 
-```
+Inside a Claude Code session, `$CLAUDE_PLUGIN_ROOT` is set for you:
+
+```bash
 python "$CLAUDE_PLUGIN_ROOT/scripts/forge_preflight.py"
 ```
 
+In a normal terminal it is not set, so point at the installed copy directly:
+
+```bash
+python ~/.claude/plugins/cache/forge-marketplace/forge/*/scripts/forge_preflight.py
+```
+
+On Windows, that path is `%USERPROFILE%\.claude\plugins\cache\forge-marketplace\forge\`, with
+a folder per installed version. If two versions are listed, the newest is the one running.
+
 ## Install
+
+There are two sets of commands and they are not interchangeable. Which one you want
+depends on where you are typing.
+
+### Inside Claude Code — slash commands
+
+If you are already in a Claude Code session and see a `>` prompt, use these:
 
 ```
 /plugin marketplace add Hassaan146/forge-marketplace
+```
+
+```
 /plugin install forge@forge-marketplace
 ```
 
-Then, once per project:
+Bare `/plugin` opens the panel, which is also where you **enable or disable** an
+installed plugin. Worth knowing where that switch is: a disabled plugin is still
+installed and still the right version, and it loads nothing at all — no hooks, no
+engine, no `/forge:*` commands. It looks exactly like a plugin that is not working.
+
+### In a normal terminal — the `claude` CLI
+
+If you are at a shell prompt, outside any Claude Code session, the same operations are
+subcommands of `claude`:
+
+```bash
+claude plugin marketplace add Hassaan146/forge-marketplace
+```
+
+```bash
+claude plugin install forge@forge-marketplace
+```
+
+The CLI can do a few things the slash commands cannot, and these are the ones worth
+having to hand:
+
+| | |
+|---|---|
+| `claude plugin list` | every plugin, its version, and whether it is enabled |
+| `claude plugin enable forge@forge-marketplace` | switch it on |
+| `claude plugin disable forge@forge-marketplace` | switch it off without uninstalling |
+| `claude plugin update forge@forge-marketplace` | fetch the newest version |
+| `claude plugin uninstall forge@forge-marketplace` | remove it |
+
+### Restart, don't reload
+
+Hooks and the MCP engine are registered when Claude Code starts. A plugin installed,
+updated or enabled mid-session keeps running the old configuration until you quit and
+start again — which is the state that looks like a bug and costs a whole session. The
+CLI says so itself: `claude plugin update --help` reads *"restart required to apply"*.
+
+Check it took:
+
+```bash
+claude plugin list
+```
+
+You want `forge@forge-marketplace` showing the version you expect and `Status: ✔ loaded`.
+
+### Updating
+
+Forge tells you. It checks its own version against this repository once a day and prints
+one frame with the command when there is something newer; `/forge:start` is held back
+until you have either updated or said to carry on anyway. Ask on demand with
+`/forge:update`, and turn the whole thing off with `FORGE_NO_UPDATE_CHECK=1`.
+
+Your decisions are never at risk in an update — they live in your project's
+`.claude/forge/`, not in the plugin.
+
+### Then, once per project
 
 ```
 /forge:start
@@ -83,6 +159,7 @@ written — that is the product working, not a delay.
 | `/forge:start` | Set up Forge in this project and begin |
 | `/forge:status` | Where the work stands and what happens next |
 | `/forge:mode` | `pipeline` · `accept-edits` · `auto` — how much Forge settles itself |
+| `/forge:update` | Check now whether a newer Forge is out, and how to get it |
 
 The three modes differ in one thing only: how much gets decided for you. Code can never
 move past an undecided question in any of them.
