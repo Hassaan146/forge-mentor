@@ -513,3 +513,58 @@ def test_two_open_records_sharing_an_id_stop_rather_than_guess(project: Path) ->
 
     with pytest.raises(fs.StateError, match="share id"):
         fs.answer(forge, first.id, "# anything\n")
+
+
+# --------------------------------------------------------------------------
+# switching Forge off in a project
+# --------------------------------------------------------------------------
+
+
+def test_a_paused_project_allows_every_write(project: Path) -> None:
+    """`/forge:stop` means stop, not "stop except for the gates"."""
+    forge = project / fs.FORGE_DIR
+    fs.ask(forge, "something nobody has answered")
+
+    assert fs.writes_allowed(forge)[0] is False
+
+    (forge / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+    assert fs.paused(forge) is True
+    assert fs.writes_allowed(forge)[0] is True
+
+
+def test_pausing_beats_notes_that_cannot_be_read(project: Path) -> None:
+    """Otherwise a damaged file locks someone out of their own repository.
+
+    Everywhere else the safety path fails closed, and it should. Here it must
+    not: the user has said stop, and a broken note is not a reason to keep
+    refusing their writes.
+    """
+    forge = project / fs.FORGE_DIR
+    (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
+    assert fs.writes_allowed(forge)[0] is False
+
+    (forge / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+    assert fs.writes_allowed(forge)[0] is True
+
+
+def test_pausing_destroys_nothing(project: Path) -> None:
+    """The records outlive the tool that produced them. That is decision 016."""
+    forge = project / fs.FORGE_DIR
+    asked = fs.ask(forge, "which backend")
+    fs.answer(forge, asked.id, "# FastAPI\n\n## Why\n\nsmall\n")
+    before = fs.list_decisions(forge)
+
+    (forge / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+
+    assert [d.question for d in fs.list_decisions(forge)] == [d.question for d in before]
+    assert (forge / fs.PROGRESS).is_file()
+
+
+def test_resuming_is_deleting_one_file(project: Path) -> None:
+    forge = project / fs.FORGE_DIR
+    fs.ask(forge, "still open")
+    (forge / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+
+    (forge / fs.PAUSED).unlink()
+    assert fs.paused(forge) is False
+    assert fs.writes_allowed(forge)[0] is False, "and the open question is still open"

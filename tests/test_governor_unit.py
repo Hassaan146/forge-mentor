@@ -244,3 +244,29 @@ def test_relative_forge_write_is_allowed(project, monkeypatch, capsys) -> None:
     fs.ask(project / fs.FORGE_DIR, "rate limiting")
     payload = write_payload(project, target=f"{fs.FORGE_DIR}/decisions/002-next.md")
     assert not is_deny(invoke(monkeypatch, capsys, payload))
+
+
+def test_a_paused_project_allows_the_write(project, monkeypatch, capsys) -> None:
+    """The governor is the gate, so it is the one that most has to let go."""
+    forge = project / fs.FORGE_DIR
+    fs.ask(forge, "rate limiting")
+    assert is_deny(invoke(monkeypatch, capsys, write_payload(project)))
+
+    (forge / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+    assert not is_deny(invoke(monkeypatch, capsys, write_payload(project)))
+
+
+def test_a_block_is_framed_and_names_a_way_out(project, monkeypatch, capsys) -> None:
+    """A refusal in bare prose is indistinguishable from the client's own errors.
+
+    That is what it looked like: "operation blocked by hook" and four paragraphs
+    with nothing marking them as Forge speaking, and no exit named.
+    """
+    forge = project / fs.FORGE_DIR
+    fs.ask(forge, "rate limiting")
+    text = reason(invoke(monkeypatch, capsys, write_payload(project)))
+
+    assert "┌" in text and "└" in text, "framed, like everything else Forge says"
+    assert "→" in text, "and every refusal names its exits"
+    assert "write it anyway" in text
+    assert "/forge:stop" in text, "including the one that switches Forge off here"

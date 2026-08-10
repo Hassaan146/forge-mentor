@@ -318,3 +318,11 @@ def test_an_unrelated_command_does_not_count_as_a_frame(project: Path) -> None:
         {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
     )
     assert blocked(answer)
+
+
+def test_a_paused_project_gets_no_opinion_about_its_answers(project: Path) -> None:
+    """`/forge:stop` means stop, including the part that shapes replies."""
+    ask(project)
+    (project / fs.FORGE_DIR / fs.PAUSED).write_text("paused\n", encoding="utf-8")
+
+    assert not blocked(stop(project, "no frame here at all"))

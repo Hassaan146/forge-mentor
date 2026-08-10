@@ -358,9 +358,10 @@ def test_starting_a_project_on_a_stale_plugin_is_held_back(plugin: Path, monkeyp
     held = up.gate("/forge:start", plugin)
 
     assert held
-    assert up.UPDATE_COMMAND in held
-    assert "restart" in held.lower()
+    assert "1.1.0 is out" in held
+    assert "quit claude code" in held.lower()
     assert "anyway" in held, "and there is always a way past"
+    assert held.lstrip().startswith("┌"), "framed, like everything else Forge says"
 
 
 def test_the_command_it_hands_over_is_one_that_exists(plugin: Path) -> None:
@@ -500,6 +501,7 @@ def test_the_gate_holds_forge_start_on_a_pending_restart(tmp_path: Path) -> None
     root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
     held = up.gate("/forge:start", root)
 
-    assert "already downloaded" in held
+    assert "is downloaded" in held
     assert "Quit Claude Code" in held
     assert "anyway" in held
+    assert held.lstrip().startswith("┌"), "framed, like everything else Forge says"

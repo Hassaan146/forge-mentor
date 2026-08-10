@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from forge_state import find_forge_dir, open_question  # noqa: E402
+from forge_state import find_forge_dir, open_question, paused  # noqa: E402
 
 # The frame characters. Any one of them means a block was rendered — the single
 # rule and the double one both count, since a note, a decision and an action
@@ -166,6 +166,8 @@ def main() -> None:
         forge_dir = find_forge_dir(Path(payload.get("cwd") or "."))
         if forge_dir is None:
             allow()  # not a Forge project
+        if paused(forge_dir):
+            allow()  # switched off here; Forge has no opinion about the answer
 
         pending = open_question(forge_dir)
         if pending is None:

@@ -465,34 +465,56 @@ def gate(prompt: str, plugin_root: Path) -> str:
     # A downloaded-but-not-loaded version comes first, and needs no network.
     # It is also the more urgent of the two: the user has already done the
     # updating, and one restart is between them and the version they asked for.
+    import forge_say as say
+
     waiting = pending_restart(plugin_root)
     if waiting is not None:
-        return (
-            f"Forge {waiting.latest} is already downloaded. This session is still "
-            f"running {waiting.installed}.\n\n"
-            "    Quit Claude Code completely, then open it again.\n\n"
+        return say.framed(
+            f"Forge {waiting.latest} is downloaded, this session runs {waiting.installed}",
             "Hooks, the engine and the commands are read once at startup, so this "
             "session keeps the old ones however many times you update. That is why "
-            "the change you are looking for has not appeared.\n\n"
+            "the change you are looking for has not appeared.\n"
+            "\n"
             "Nothing is lost. Your decisions live in the project, so reopening puts "
-            "you back exactly here, and /forge:status will say where that is.\n"
-            'To carry on regardless, say it again with "anyway".'
+            "you back exactly here.",
+            [
+                "Quit Claude Code completely, then open it again",
+                "Run /forge:status to see which question is open",
+                'Or say it again with "anyway" to carry on regardless',
+            ],
         )
 
     found = check(plugin_root)
     if found is None:
         return ""
 
-    return (
-        f"Forge {found.installed} is running, and {found.latest} is out.\n\n"
-        f"    {UPDATE_COMMAND}\n\n"
-        "Then restart Claude Code. Hooks and the engine register at startup, so a "
-        "reload keeps the old ones running.\n\n"
-        "Starting a project on the older build is worth avoiding: /forge:start writes "
-        "the notes layout, asks the fixed question sequence and records decisions "
-        "against it, and all three are shaped by the version doing the writing.\n\n"
-        "Your decisions are safe either way. They live in the project, not the plugin.\n"
-        "To carry on regardless, say it again with \"anyway\"."
+    return _framed_gate(found)
+
+
+def _framed_gate(found: Update) -> str:
+    """The version notice, in Forge's shape, with the commands for this surface."""
+    import forge_say as say
+
+    inside = bool(os.environ.get("CLAUDECODE"))
+    fetch = (
+        f"Run {SLASH_COMMANDS[0]}"
+        if inside
+        else f"Run {UPDATE_COMMANDS[0]}, then {UPDATE_COMMANDS[1]}"
+    )
+    return say.framed(
+        f"Forge {found.installed} is running, and {found.latest} is out",
+        "Starting a project on the older build is worth avoiding: /forge:start "
+        "writes the notes layout, asks the fixed question sequence and records "
+        "decisions against it, and all three are shaped by the version doing the "
+        "writing.\n"
+        "\n"
+        "Your decisions are safe either way. They live in the project, not the "
+        "plugin.",
+        [
+            fetch,
+            "Then quit Claude Code completely and open it again",
+            'Or say it again with "anyway" to carry on regardless',
+        ],
     )
 
 

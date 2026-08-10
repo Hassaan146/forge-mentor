@@ -10,6 +10,14 @@ foundation interrogation.
 Forge only acts in projects where this command has been run. Every other project
 stays plain Claude Code.
 
+## If Forge was switched off here
+
+If `.claude/forge/paused.md` exists, someone ran `/forge:stop` in this project.
+Delete it, say in one line that Forge is back on, and carry on from whatever the
+notes say is open. Do not re-run setup and do not ask the foundation questions
+again: the answers are already recorded, and asking a question twice is the
+fastest way to lose a user's trust in the record.
+
 ## Before anything else
 
 Print the banner, then the colour key, then the readiness check — in that order,

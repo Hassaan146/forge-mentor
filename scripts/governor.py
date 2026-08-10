@@ -113,16 +113,24 @@ def main() -> None:
     if permitted:
         allow()
 
-    # Printed as it comes. `writes_allowed` returns a complete sentence for
-    # every reason it has, because there are several shapes of them now and a
-    # single prefix cannot fit them all — "No decision recorded yet for: the
-    # phases have not been compiled" reads as a bug in Forge rather than as
-    # Forge working.
+    # Framed, because a refusal arriving as bare prose is indistinguishable
+    # from the client's own error text. `writes_allowed` returns a complete
+    # sentence for every reason it has: there are several shapes of them and a
+    # single prefix cannot fit them all, so "No decision recorded yet for: the
+    # phases have not been compiled" would read as a bug rather than as Forge
+    # working.
+    import forge_say as say
+
     deny(
-        f"{reason}\n"
-        "Code cannot be written until that is settled.\n"
-        "  → answer it, or\n"
-        '  → say "write it anyway" and confirm (the override is recorded)'
+        say.framed(
+            "Forge stopped this write",
+            reason + "\nCode cannot be written until that is settled.",
+            [
+                "Answer the open question",
+                'Or say "write it anyway" and confirm; the override is recorded',
+                "Or run /forge:stop to switch Forge off in this project",
+            ],
+        )
     )
 
 

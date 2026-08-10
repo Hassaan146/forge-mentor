@@ -37,6 +37,27 @@ PROGRESS = "progress.md"
 DECISIONS = "decisions"
 SETTINGS = "settings.md"
 
+# Forge is switched off in this project while this file exists.
+#
+# **Why a file and not a header field.** Every hook has to answer "am I on"
+# before it does anything, and a file either exists or it does not: no parsing,
+# nothing to be malformed, and nothing that can fail closed and lock someone
+# out of their own repository. A user can create or delete it by hand and the
+# answer is obvious from a directory listing.
+#
+# It never deletes anything. The decisions, the chain and the phases are the
+# project's own history and stay exactly where they are, so switching Forge
+# back on resumes rather than restarts.
+PAUSED = "paused.md"
+
+
+def paused(forge_dir: Path) -> bool:
+    """Has the user told Forge to stop acting in this project?"""
+    try:
+        return (forge_dir / PAUSED).is_file()
+    except OSError:
+        return False
+
 # Fields the governor depends on. Missing any of these is a broken file, not
 # a default — guessing here would silently disable the product's guarantee.
 REQUIRED_PROGRESS_FIELDS = ("stage", "open_question", "override_active")
@@ -487,6 +508,13 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
     said yes anyway. Decision 004 is explicit that the safety path fails
     closed, and this is the safety path.
     """
+    # Switched off in this project, so every write is somebody else's business.
+    # Checked before the state is even read: a paused project must not be able
+    # to lock its owner out because a note file is malformed, and asking Forge
+    # to stop should stop it completely rather than mostly.
+    if paused(forge_dir):
+        return True, ""
+
     try:
         progress = Progress.read(forge_dir)
     except StateError as exc:
