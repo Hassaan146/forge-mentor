@@ -129,7 +129,7 @@ def test_the_notice_says_what_to_run_and_that_notes_are_safe(plugin: Path, monke
     text = up.report(plugin)
 
     assert "1.0.0" in text and "1.1.0" in text
-    assert "/plugin update" in text
+    assert "claude plugin update" in text, "and it is a command that exists"
     assert "restart" in text.lower()
     assert "untouched" in text, "their decisions live in the project, not the plugin"
 
@@ -247,3 +247,73 @@ def test_the_cache_lives_outside_the_plugin(monkeypatch: pytest.MonkeyPatch) -> 
 def test_a_missing_manifest_is_silence(tmp_path: Path) -> None:
     assert up.installed_version(tmp_path) == ""
     assert up.check(tmp_path) is None
+
+
+# --------------------------------------------------------------------------
+# holding /forge:start back — the gate the user asked for
+# --------------------------------------------------------------------------
+
+
+def test_starting_a_project_on_a_stale_plugin_is_held_back(plugin: Path, monkeypatch) -> None:
+    """`/forge:start` writes the notes layout and the question sequence.
+
+    Both are shaped by the version doing the writing, so doing it twice is the
+    afternoon this has already cost.
+    """
+    answers(monkeypatch, "1.1.0")
+    held = up.gate("/forge:start", plugin)
+
+    assert held
+    assert up.UPDATE_COMMAND in held
+    assert "restart" in held.lower()
+    assert "anyway" in held, "and there is always a way past"
+
+
+def test_the_command_it_hands_over_is_one_that_exists(plugin: Path) -> None:
+    """`claude plugin update` is real; a slash command was a guess.
+
+    Its own help says "(restart required to apply)", which is where the restart
+    line comes from rather than from an assumption.
+    """
+    assert up.UPDATE_COMMAND.startswith("claude plugin update ")
+    assert "forge@forge-marketplace" in up.UPDATE_COMMAND
+
+
+def test_a_current_plugin_holds_nothing_back(plugin: Path, monkeypatch) -> None:
+    answers(monkeypatch, "1.0.0")
+    assert up.gate("/forge:start", plugin) == ""
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["what does this project do?", "fix the login bug", "", "forge is a good name"],
+)
+def test_ordinary_prompts_are_never_touched(plugin: Path, monkeypatch, prompt) -> None:
+    """It sits in front of every prompt the user types. Nearly all of them pass."""
+    answers(monkeypatch, "1.1.0")
+    assert up.gate(prompt, plugin) == ""
+
+
+@pytest.mark.parametrize("prompt", ["/forge:start", "/forge:status", "run /forge:mode auto"])
+def test_every_command_that_starts_work_is_covered(plugin: Path, monkeypatch, prompt) -> None:
+    answers(monkeypatch, "1.1.0")
+    assert up.gate(prompt, plugin) != ""
+
+
+@pytest.mark.parametrize("prompt", ["/forge:start anyway", "/forge:start, skip the update"])
+def test_saying_anyway_gets_past_it(plugin: Path, monkeypatch, prompt) -> None:
+    """Decision 004 and challenge finding H1: a gate with no exit gets ripped out."""
+    answers(monkeypatch, "1.1.0")
+    assert up.gate(prompt, plugin) == ""
+
+
+def test_no_network_never_holds_a_prompt_back(plugin: Path, monkeypatch) -> None:
+    """This runs in front of every prompt. It cannot be the reason one fails."""
+    offline(monkeypatch)
+    assert up.gate("/forge:start", plugin) == ""
+
+
+def test_the_switch_turns_the_gate_off_too(plugin: Path, monkeypatch) -> None:
+    monkeypatch.setenv("FORGE_NO_UPDATE_CHECK", "1")
+    answers(monkeypatch, "1.1.0")
+    assert up.gate("/forge:start", plugin) == ""

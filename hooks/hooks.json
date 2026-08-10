@@ -33,6 +33,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py\" --gate",
+            "timeout": 10,
+            "_note": "Holds /forge:start back when the plugin is stale, and hands over the exact command. start.md already said to check, and rule R13 is what it is — an instruction the model can skip is advice. Starting on an old build writes a notes layout and a question sequence shaped by the wrong version. Says nothing for every other prompt, and 'anyway' gets past it."
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

@@ -229,8 +229,15 @@ def check(plugin_root: Path, *, force: bool = False) -> Update | None:
 # --------------------------------------------------------------------------
 
 
+# The command that actually exists. `claude plugin update --help` says it in
+# its own words — "Update a plugin to the latest version (restart required to
+# apply)" — which is also where the restart line below comes from rather than
+# from a guess.
+UPDATE_COMMAND = "claude plugin update forge@forge-marketplace"
+
+
 def notice(update: Update) -> str:
-    """One frame, three lines, and the commands to run.
+    """One frame, three lines, and the command to run.
 
     Framed like everything else (decision 035) so it reads as Forge speaking,
     and short because nobody has ever wanted a longer update notice.
@@ -246,8 +253,9 @@ def notice(update: Update) -> str:
         ],
         symbol=ui.COST,
     ) + ui.action(
-        f"/plugin update forge@forge-marketplace   ·   then restart Claude Code",
-        hint="hooks and the engine are registered at startup, so a reload is not enough",
+        UPDATE_COMMAND,
+        hint="then restart Claude Code — hooks and the engine register at startup, "
+        "so a reload is not enough",
         kind="fix",
     )
 
@@ -256,6 +264,51 @@ def report(plugin_root: Path, *, force: bool = False) -> str:
     """The notice, or nothing at all. Nothing is the common case."""
     found = check(plugin_root, force=force)
     return notice(found) if found else ""
+
+
+# Prompts that start real work. A stale plugin is harmless while someone is
+# reading; it is expensive the moment it starts writing state into a project,
+# because the questions, the gates and the file layout are all version-shaped.
+STARTING = ("forge:start", "forge:status", "forge:mode", "forge:update")
+
+# How someone gets past it. There is always a way past — decision 004, and
+# challenge finding H1: a gate with no exit is a gate that gets ripped out.
+OVERRIDE = ("anyway", "skip the update", "ignore the update")
+
+
+def gate(prompt: str, plugin_root: Path) -> str:
+    """Should this prompt be held back, and what should the user be told?
+
+    Returns "" to let it through, which is nearly always.
+
+    **Why a hook and not a line in `start.md`.** That line already exists, and
+    rule R13 is what it is: an instruction the model can skip is advice. Setting
+    a project up on a stale plugin is not a small waste — `/forge:start` writes
+    the notes layout, asks the fixed question sequence and records decisions
+    against it, all of which are shaped by the version doing the writing. Doing
+    that twice is the whole afternoon this has already cost.
+    """
+    text = (prompt or "").lower()
+    if not any(name in text for name in STARTING):
+        return ""
+    if any(word in text for word in OVERRIDE):
+        return ""
+
+    found = check(plugin_root)
+    if found is None:
+        return ""
+
+    return (
+        f"Forge {found.installed} is running, and {found.latest} is out.\n\n"
+        f"    {UPDATE_COMMAND}\n\n"
+        "Then restart Claude Code — hooks and the engine register at startup, so a "
+        "reload keeps the old ones running.\n\n"
+        "Starting a project on the older build is worth avoiding: /forge:start writes "
+        "the notes layout, asks the fixed question sequence and records decisions "
+        "against it, and all three are shaped by the version doing the writing.\n\n"
+        "Your decisions are safe either way — they live in the project, not the plugin.\n"
+        "To carry on regardless, say it again with \"anyway\"."
+    )
 
 
 def _plugin_root() -> Path:
@@ -268,13 +321,41 @@ def _plugin_root() -> Path:
     return Path(root) if root else Path(__file__).resolve().parent.parent
 
 
-def main() -> None:
-    """Two shapes of the same answer, chosen by how it was invoked.
+def _gate_mode() -> None:
+    """UserPromptSubmit: hold `/forge:start` back when the plugin is stale.
 
-    `--hook` speaks the SessionStart protocol; bare prints the block for a
-    terminal. Both say nothing when there is nothing to say, which is most days.
+    Fails open on absolutely everything. This one sits in front of every prompt
+    the user types, so a bug here does not cost a turn or a session — it costs
+    the ability to say anything at all.
     """
     import sys
+
+    try:
+        payload = json.load(sys.stdin)
+        if payload.get("hook_event_name") != "UserPromptSubmit":
+            print(json.dumps({}))
+            return
+
+        reason = gate(str(payload.get("prompt", "")), _plugin_root())
+    except Exception:
+        reason = ""
+
+    print(json.dumps({"decision": "block", "reason": reason} if reason else {}))
+
+
+def main() -> None:
+    """Three shapes of the same answer, chosen by how it was invoked.
+
+    `--gate` speaks the UserPromptSubmit protocol and can hold a prompt back;
+    `--hook` speaks SessionStart and only adds context; bare prints the block
+    for a terminal. All three say nothing when there is nothing to say, which
+    is most days.
+    """
+    import sys
+
+    if "--gate" in sys.argv:
+        _gate_mode()
+        return
 
     hook_mode = "--hook" in sys.argv
     try:

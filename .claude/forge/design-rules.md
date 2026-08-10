@@ -228,6 +228,17 @@ The general form: any version a user reads must come from the artefact itself. T
 printed "0.1.0" from a default argument while the manifest said 1.0.0, and it is the first
 thing anybody checks to see whether an update landed. A number that is wrong is worse than no
 number, because it is believed.
+
+**And the notice is enforced, not suggested.** `start.md` already said to run the check, which
+by rule R13 makes it advice. A `UserPromptSubmit` hook now holds `/forge:start` back when the
+plugin is stale and hands over the command — because that command writes the notes layout, asks
+the fixed question sequence and records decisions against it, and all three are shaped by the
+version doing the writing. Saying it again with "anyway" gets past, per decision 004.
+
+The command it hands over is one that exists: `claude plugin update forge@forge-marketplace`,
+taken from `claude plugin update --help`, whose own text supplies the restart line. An earlier
+draft invented a slash command. A fix instruction that does not work is worse than none, because
+the user now believes they have tried.
 **Applies to:** the plugin shell (Phase 2), release (Phase 10), `/forge:update`.
 
 ## R6 — Keep a written record, not a conversational one
