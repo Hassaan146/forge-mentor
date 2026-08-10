@@ -156,3 +156,24 @@ def test_nothing_the_user_reads_uses_an_em_dash() -> None:
             assert "\u2014" not in text, f"{question.key}: {text}"
         for _letter, label, note in question.options:
             assert "\u2014" not in label and "\u2014" not in note, question.key
+
+
+def test_the_stack_options_name_shapes_not_technologies() -> None:
+    """The user's report: the shape they wanted was on the list, unrecognisably.
+
+    "Browser + small API" and "Python service" described what you would type
+    rather than what you would end up with, so "build the API first and add
+    screens later" was option B and nobody could see it. A menu that hides an
+    answer fails the same way as one that omits it.
+    """
+    labels = [label for _letter, label, _note in ff.STACK.options]
+
+    assert labels == ["Front end only", "Back end only", "Both together", "Command line"]
+    for shape in ("front end", "back end"):
+        assert any(shape in label.lower() for label in labels)
+
+
+def test_building_the_api_first_is_visibly_offered() -> None:
+    """It is the one that was missing in practice, so it gets its own test."""
+    back_end = [note for _l, label, note in ff.STACK.options if label == "Back end only"][0]
+    assert "later" in back_end, "it has to say the screens come afterwards"

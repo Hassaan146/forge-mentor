@@ -73,16 +73,21 @@ STACK = Question(
     question="What are you building this with?",
     subtitle="the first decision, everything below is built on top of it",
     means=(
-        "Language, framework and where the code runs, settled together.",
-        "They do not separate cleanly: picking one narrows the others.",
+        "You are choosing the shape: screens, a server, or both.",
+        "Language and framework follow from that, so they are settled together.",
     ),
-    # One line each, per rule R10. These ran to three lines apiece, which turns
-    # a menu into a page and buries the thing being compared: the consequence.
+    # Named by shape, not by technology. "Browser + small API" and "Python
+    # service" described what you would type rather than what you would have,
+    # so the option a user actually wanted, build the API first and add screens
+    # later, was on the list and unrecognisable. A menu that hides an answer is
+    # the same failure as not offering it.
+    #
+    # One line each, per rule R10.
     options=(
-        ("A", "Browser only", "no server, nothing to deploy, data lives in the browser"),
-        ("B", "Browser + small API", "a thin server you own; more parts, the data is yours"),
-        ("C", "Python service", "FastAPI or Django and a database; strongest for logic"),
-        ("D", "Command line tool", "a script on your machine; fastest, no users but you"),
+        ("A", "Front end only", "screens in the browser. No server; data stays on this machine"),
+        ("B", "Back end only", "an API and a database now, screens added later"),
+        ("C", "Both together", "screens plus your own API and database. Most parts, data is yours"),
+        ("D", "Command line", "you type commands. Nothing to host, no screens at all"),
     ),
 )
 
