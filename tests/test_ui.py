@@ -360,18 +360,56 @@ def test_each_meaning_has_its_own_colour() -> None:
 
 def test_the_legend_teaches_every_colour_it_uses() -> None:
     """A colour system nobody was told about is a colour system nobody reads."""
-    out = plain(ui.legend())
+    out = ANSI.sub("", in_colour("import forge_ui as ui\nprint(ui.legend())"))
     for name, _, meaning in ui.MEANINGS:
         assert name in out, f"the legend never names {name}"
-        assert meaning.split(" — ")[0][:20] in out
     assert "double-ruled" in out, "and what the double frame means"
 
 
-def test_the_legend_still_names_its_colours_without_colour() -> None:
-    """The swatch is the one thing that cannot survive NO_COLOR, so it is named."""
+def test_without_colour_the_legend_teaches_the_symbols_instead() -> None:
+    """Not a fallback with something missing.
+
+    Inside Claude Code the colour never arrives, so teaching six colours there
+    would be teaching a scheme the user cannot use, and the swatches would come
+    out as nine grey blocks. The symbols were always the ones carrying the
+    meaning; this is rule R11 collecting on its own promise.
+    """
     out = plain(ui.legend())
+
+    for symbol, _ in ui.SYMBOL_MEANINGS:
+        assert symbol in out, f"the symbol key never names {symbol}"
+    assert "your turn" in out.lower()
+    assert "double-ruled" in out
     for _, key, _ in ui.MEANINGS:
-        assert f"[{key.lower()}]" in out
+        assert f"[{key.lower()}]" not in out, "no swatch for a colour nobody sees"
+
+
+def test_colour_is_off_inside_the_client_that_strips_it() -> None:
+    """Escape codes that never arrive are not free.
+
+    They come out as blank grey swatches in the legend, and as noise anywhere
+    one survives. The codes are for a real terminal, where Forge's commands run
+    directly and they work.
+    """
+    import subprocess
+
+    scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+    snippet = (
+        f"import sys; sys.path.insert(0, r'{scripts}'); "
+        "import forge_ui; print(forge_ui._ON)"
+    )
+
+    inside = subprocess.run(
+        [sys.executable, "-c", snippet], capture_output=True, encoding="utf-8",
+        env={**os.environ, "CLAUDECODE": "1", "FORCE_COLOR": "", "NO_COLOR": ""},
+    )
+    asked_anyway = subprocess.run(
+        [sys.executable, "-c", snippet], capture_output=True, encoding="utf-8",
+        env={**os.environ, "CLAUDECODE": "1", "FORCE_COLOR": "1", "NO_COLOR": ""},
+    )
+
+    assert inside.stdout.strip() == "False"
+    assert asked_anyway.stdout.strip() == "True", "an explicit request still wins"
 
 
 def test_the_legend_frame_is_square_at_any_width() -> None:

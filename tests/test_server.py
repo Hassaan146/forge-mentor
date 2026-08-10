@@ -516,15 +516,28 @@ def test_an_action_frame_needs_something_to_act_on() -> None:
 
 
 def test_the_legend_returns_the_meanings_as_data_too() -> None:
-    """The block is for the user; the list is so the planner cannot misquote it."""
+    """The block is for the user; the list is so the planner cannot misquote it.
+
+    The block itself now depends on where it is going: inside a client that
+    strips escape codes it teaches the symbols instead, because teaching six
+    colours to someone who will never see one is worse than teaching nothing.
+    The data is the same either way.
+    """
+    import forge_ui as ui
+
     answer = call(srv.color_legend)()
 
     assert len(answer["meanings"]) == 6
     assert {m["colour"] for m in answer["meanings"]} == {
         "AMBER", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE",
     }
-    for meaning in answer["meanings"]:
-        assert meaning["name"] in answer["block"]
+
+    if ui._ON:
+        for meaning in answer["meanings"]:
+            assert meaning["name"] in answer["block"]
+    else:
+        for symbol, _ in ui.SYMBOL_MEANINGS:
+            assert symbol in answer["block"]
 
 
 def test_a_follow_up_can_carry_an_important_line_and_a_separate_ask() -> None:

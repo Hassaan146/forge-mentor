@@ -82,9 +82,26 @@ def _colour_enabled() -> bool:
         return False
     if os.environ.get("TERM") == "dumb":
         return False
+
     # CI systems usually render colour fine; honour an explicit opt-in too.
+    # Checked before the Claude Code test so a user who sets it anyway gets
+    # what they asked for.
     if os.environ.get("FORCE_COLOR"):
         return True
+
+    # **Inside Claude Code, colour does not arrive.** Everything Forge prints
+    # reaches the user through the client, which renders it as markdown, and
+    # markdown drops escape sequences. Emitting them anyway is not a harmless
+    # extra: the legend's colour swatches come out as blank grey blocks, and
+    # any codes that do survive are noise in the middle of a question.
+    #
+    # So the escape codes are for a real terminal, where Forge's own commands
+    # are run directly and they work. In the client, the symbols, the frames
+    # and the words carry every meaning on their own, which rule R11 has
+    # required from the beginning precisely so this case would not be a loss.
+    if os.environ.get("CLAUDECODE"):
+        return False
+
     return sys.stdout.isatty()
 
 
@@ -186,6 +203,8 @@ ACTION = "→"      # your turn — Forge has stopped and is waiting for you
 # Every one of these renders wider than its Unicode class claims, so the frame
 # has to be told. `⚖️` and `⚠️` carry a variation selector, which is zero-width
 # and must not be counted twice.
+BAR = "▌"        # a detail you cannot undo, on its own vertical
+
 SYMBOLS = (MARK, TEACH, WEIGH, STAR, COST, RECORDED, BLOCKED, ACTION)
 
 def _width() -> int:
@@ -252,6 +271,58 @@ def banner(project: str | None = None, version: str | None = None) -> str:
     return "\n".join(lines)
 
 
+# What each symbol means, in the words the user is shown. Used when colour is
+# not arriving, which inside Claude Code is always.
+SYMBOL_MEANINGS: tuple[tuple[str, str], ...] = (
+    (MARK, "Forge itself. If a block carries this, the plugin is talking"),
+    (TEACH, "what the decision means, before the options"),
+    (WEIGH, "the options, weighed against each other"),
+    (STAR, "what Forge recommends, and why"),
+    (COST, "what that recommendation costs you"),
+    (BAR, "a detail you cannot undo later"),
+    (ACTION, "your turn. Forge has stopped and is waiting"),
+    (RECORDED, "decided and written down"),
+    (BLOCKED, "Forge stopped this, and says what would unblock it"),
+)
+
+
+def _symbol_legend() -> str:
+    """The key, for a screen that gets no colour.
+
+    Not a fallback with something missing. Inside Claude Code the colour never
+    arrives, so teaching six colours there would be teaching a scheme the user
+    cannot use, and printing swatches would put nine grey blocks on the screen.
+
+    The symbols were always the ones carrying the meaning, because rule R11
+    required that colour never be the only signal. This is that rule collecting
+    on its promise.
+    """
+    rows = ["", f"  {DIM}Every block Forge prints is marked. Here is the set:{RESET}", ""]
+
+    width = max(visible_width(symbol) for symbol, _ in SYMBOL_MEANINGS)
+    lead = 4 + width + 2
+    room = max(20, WIDTH - lead - 4)
+
+    for symbol, meaning in SYMBOL_MEANINGS:
+        pad = " " * (width - visible_width(symbol))
+        wrapped = _wrap(meaning, room, "") or [""]
+        rows.append(f"    {symbol}{pad}  {DIM}{wrapped[0]}{RESET}")
+        for extra in wrapped[1:]:
+            rows.append(f"{' ' * lead}{DIM}{extra}{RESET}")
+
+    rows.append("")
+    for line in _wrap(
+        "A single-ruled frame is Forge talking. A double-ruled one means it has "
+        "stopped and the next move is yours.",
+        WIDTH - 10,
+        "",
+    ):
+        rows.append(f"    {FAINT}{line}{RESET}")
+    rows.append("")
+
+    return "\n" + box(rows, title=f"{AMBER}{BOLD}{MARK} How to read Forge{RESET}") + "\n"
+
+
 def legend() -> str:
     """The colour key, shown once at setup (rule R11).
 
@@ -264,6 +335,9 @@ def legend() -> str:
     already reading carefully. It is also the reason every colour here is
     printed *in* its own colour: the sample is the explanation.
     """
+    if not _ON:
+        return _symbol_legend()
+
     rows = ["", f"  {DIM}Forge uses six colours. Each one means one thing:{RESET}", ""]
 
     # Sized from the terminal, not from a guess. A description longer than the
@@ -418,9 +492,6 @@ ASK_KINDS = {
     "answer": "in your own words, there is no wrong wording",
     "fix": "run the line above, then say done",
 }
-
-BAR = "▌"  # the left bar on a detail that must not be skimmed past
-
 
 def _spoken_letters(letters: list[str]) -> str:
     """"A, B, or C" — the options named the way the user will say them back.
