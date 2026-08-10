@@ -52,7 +52,7 @@ def forge(project: str) -> Path:
 
 def test_each_job_gets_its_intended_model() -> None:
     assert choose_model("teaching")["model"] == "claude-fable-5"
-    assert choose_model("building")["model"] == "claude-opus-4-8"
+    assert choose_model("building")["model"] == "claude-opus-5"
     assert choose_model("structuring")["model"] == "claude-haiku-4-5"
 
 
@@ -63,8 +63,8 @@ def test_the_choice_explains_itself() -> None:
 
 def test_a_missing_model_falls_back(forge: Path) -> None:
     """Decision 003: nobody is blocked because of their plan."""
-    result = choose_model("teaching", available=["claude-opus-4-8", "claude-haiku-4-5"])
-    assert result["model"] == "claude-opus-4-8"
+    result = choose_model("teaching", available=["claude-opus-5", "claude-haiku-4-5"])
+    assert result["model"] == "claude-opus-5"
     assert result["fell_back"] is True
 
 
@@ -369,7 +369,7 @@ def test_the_stage_tool_names_the_skills_and_the_model() -> None:
     answer = srv.skills_for_stage("building")
     assert "forge-coding-standards" in answer["skills"]
     assert answer["agent"] == "builder"
-    assert answer["model"] == "claude-opus-4-8"
+    assert answer["model"] == "claude-opus-5"
 
 
 def test_an_unknown_stage_returns_an_error_rather_than_raising() -> None:

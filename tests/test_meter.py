@@ -163,12 +163,12 @@ def test_usage_is_split_by_model_and_subagents_are_visible(
     write_session(
         logs,
         project,
-        turn_record("m1", model="claude-opus-4-8", fresh=100, output=0, cache_read=0),
+        turn_record("m1", model="claude-opus-5", fresh=100, output=0, cache_read=0),
         turn_record("m2", model="claude-haiku-4-5", fresh=10, output=0, cache_read=0, sidechain=True),
     )
 
     usage = fm.measure(project)
-    assert usage.by_model == {"claude-opus-4-8": 100, "claude-haiku-4-5": 10}
+    assert usage.by_model == {"claude-opus-5": 100, "claude-haiku-4-5": 10}
     assert usage.subagent_turns == 1
 
 

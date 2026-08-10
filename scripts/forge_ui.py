@@ -1020,7 +1020,7 @@ def _demo() -> None:
         "tell me to write it anyway (you will be asked to confirm)",
     ]))
     print(recorded("B, a login service", ".claude/forge/decisions/007-how-people-log-in.md"))
-    print(working("Opus 4.8", "is now writing it…"))
+    print(working("Opus 5", "is now writing it…"))
     print()
 
 

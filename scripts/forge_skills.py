@@ -132,9 +132,9 @@ class Agent:
 
 AGENTS: tuple[Agent, ...] = (
     Agent("planner", "planning", "claude-fable-5", "teaches, questions, and compiles phases"),
-    Agent("builder", "building", "claude-opus-4-8", "writes the code for a recorded decision"),
+    Agent("builder", "building", "claude-opus-5", "writes the code for a recorded decision"),
     Agent("structurer", "structuring", "claude-haiku-4-5", "turns free text into a decision record"),
-    Agent("review-fixer", "fixing", "claude-opus-4-8", "applies what the reviewers found"),
+    Agent("review-fixer", "fixing", "claude-opus-5", "applies what the reviewers found"),
 )
 
 AGENTS_BY_NAME: dict[str, Agent] = {agent.name: agent for agent in AGENTS}

@@ -73,11 +73,11 @@ server = MCPServer(
 # include it. Stored as an ordered list rather than written into the code, so a
 # newer model is one line to add (decision 003).
 ROUTING: dict[str, list[str]] = {
-    "teaching": ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
-    "planning": ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5"],
-    "building": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+    "teaching": ["claude-fable-5", "claude-opus-5", "claude-sonnet-5"],
+    "planning": ["claude-fable-5", "claude-opus-5", "claude-sonnet-5"],
+    "building": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
     "structuring": ["claude-haiku-4-5", "claude-sonnet-5"],
-    "fixing": ["claude-opus-4-8", "claude-sonnet-5"],
+    "fixing": ["claude-opus-5", "claude-sonnet-5"],
 }
 
 JOB_REASONS = {

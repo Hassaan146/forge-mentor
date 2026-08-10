@@ -136,7 +136,7 @@ def test_options_list_every_choice() -> None:
 
 def test_working_line_names_the_model() -> None:
     """Makes the multi-model design visible instead of hidden plumbing."""
-    assert "Opus 4.8" in plain(ui.working("Opus 4.8", "is writing it"))
+    assert "Opus 5" in plain(ui.working("Opus 5", "is writing it"))
 
 
 def test_teaching_block_keeps_every_line() -> None:

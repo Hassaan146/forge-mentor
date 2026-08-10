@@ -1,7 +1,7 @@
 ---
 name: builder
 description: Writes the code for a decision that has already been recorded. Use after a decision exists in .claude/forge/decisions/, never before.
-model: claude-opus-4-8
+model: claude-opus-5
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 

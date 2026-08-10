@@ -105,7 +105,7 @@ Follow these rules for every question:
 - **Teach first.** Concept, then a short example, then why it matters here.
 - **Plain language** (R1). Users may be non-technical. No jargon unless their
   answers show they want it.
-- **Name real specifics** (R2). "Fable 5 teaches, Opus 4.8 writes" — never
+- **Name real specifics** (R2). "Fable 5 teaches, Opus 5 writes" — never
   "the best-fit model per job".
 - **Compact and boxed** (R10). A short title, two lines of explanation, options
   as one line each, one line of recommendation, one line against it, then the

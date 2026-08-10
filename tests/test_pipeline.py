@@ -295,7 +295,7 @@ def test_a_build_step_runs_on_the_coding_model_with_the_standards(forge: Path) -
     ready_to_build(forge)
     step = pl.next_step(forge)
 
-    assert step.model == "claude-opus-4-8"
+    assert step.model == "claude-opus-5"
     assert "forge-coding-standards" in step.skills
 
 

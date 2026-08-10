@@ -1,7 +1,7 @@
 ---
 name: review-fixer
 description: Applies what CodeRabbit and Sourcery found on a pull request. Use after fetch_review has written .claude/forge/reviews/pr-<n>.md.
-model: claude-opus-4-8
+model: claude-opus-5
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 

@@ -45,7 +45,7 @@ teaching voice, the coding standards, the security floor, the explain-back gate.
 They are the product. The wider library is installed separately at setup.
 
 **Subagents** (`agents/`) split the work across models — planner on Fable 5,
-builder on Opus 4.8, structurer on Haiku 4.5, review-fixer on Opus 4.8. The
+builder on Opus 5, structurer on Haiku 4.5, review-fixer on Opus 5. The
 subagent file is authoritative, because Claude Code reads it at dispatch.
 
 ---

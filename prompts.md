@@ -19,8 +19,8 @@ Decision 002 sends different work to different models, so a single-model log wou
 |---|---|
 | the question | `claude-fable-5` |
 | the record | `claude-haiku-4-5` |
-| the code | `claude-opus-4-8` |
-| the review fixes | `claude-opus-4-8` |
+| the code | `claude-opus-5` |
+| the review fixes | `claude-opus-5` |
 
 ---
 

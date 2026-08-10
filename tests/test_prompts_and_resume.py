@@ -76,7 +76,7 @@ def test_the_log_says_which_model_did_what(project: Path, forge: Path) -> None:
     decide(forge, "which backend", "FastAPI", "small")
     text = fp.render(__import__("forge_explain").collect(forge))
 
-    assert "claude-fable-5" in text and "claude-opus-4-8" in text
+    assert "claude-fable-5" in text and "claude-opus-5" in text
     assert "claude-haiku-4-5" in text
 
 
