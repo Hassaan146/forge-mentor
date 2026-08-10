@@ -123,15 +123,28 @@ def test_the_same_version_says_nothing(plugin: Path, monkeypatch) -> None:
     assert up.check(plugin) is None
 
 
-def test_the_notice_says_what_to_run_and_that_notes_are_safe(plugin: Path, monkeypatch) -> None:
-    """The two things anybody wants to know before updating anything."""
+def test_the_notice_offers_to_do_it_rather_than_handing_over_commands(
+    plugin: Path, monkeypatch
+) -> None:
+    """The user has Claude Code open and Claude Code has a shell.
+
+    Handing someone two commands to retype is work the tool could have done, and
+    getting the order wrong is the loop that cost an afternoon: the second reads
+    the local catalogue, the first is what refreshes it.
+    """
     answers(monkeypatch, "1.1.0")
     text = up.report(plugin)
 
     assert "1.0.0" in text and "1.1.0" in text
-    assert "claude plugin update" in text, "and it is a command that exists"
-    assert "restart" in text.lower()
+    assert "update it for you" in text
     assert "untouched" in text, "their decisions live in the project, not the plugin"
+
+
+def test_the_commands_are_available_in_the_order_they_must_run() -> None:
+    """Whoever runs them needs both, and the order is not interchangeable."""
+    assert up.UPDATE_COMMANDS[0].startswith("claude plugin marketplace update")
+    assert up.UPDATE_COMMANDS[1] == up.UPDATE_COMMAND
+    assert "forge@forge-marketplace" in up.UPDATE_COMMAND
 
 
 def test_the_notice_is_framed_like_everything_else(plugin: Path, monkeypatch) -> None:

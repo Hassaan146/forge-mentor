@@ -317,11 +317,19 @@ def notice(update: Update) -> str:
         ],
         symbol=ui.COST,
     ) + ui.action(
-        UPDATE_COMMAND,
-        hint="then restart Claude Code. Hooks and the engine register at startup, "
-        "so a reload is not enough",
-        kind="fix",
+        "Shall I update it for you now?",
+        hint="yes and I will run both commands, then tell you when to restart",
+        kind="confirm",
     )
+
+
+# The pair, in order. The second reads the local catalogue and the first is what
+# refreshes it, so running the second alone finds nothing and reports success:
+# the loop that cost this project an afternoon.
+UPDATE_COMMANDS = (
+    "claude plugin marketplace update forge-marketplace",
+    UPDATE_COMMAND,
+)
 
 
 def report(plugin_root: Path, *, force: bool = False) -> str:

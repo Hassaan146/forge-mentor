@@ -165,6 +165,31 @@ Two rules that are not negotiable:
   makes the repository public", "every account will have to sign up again". As
   sentence four of a paragraph it is read past; on its own bar it is not.
 
+## Then let them click it
+
+After the block is printed, put the same choice through **AskUserQuestion**. The
+block teaches; the widget collects. Both, every time, in that order.
+
+Why both. The widget is drawn by Claude Code itself, so it arrives in colour and
+the options are selectable rather than typed, which is the only interactive
+control available here. What it cannot do is teach: there is no room in it for
+two lines of concept, a weighed option list, a recommendation with its reasoning
+and the cost of taking it. Using it alone is what produced a bare menu with no
+teaching, which the user objected to on sight and was right to.
+
+- `header` is the decision in one or two words: `Stack`, `Storage`, `Sign-in`.
+- Each `label` is the option's own label from the block, so the two line up.
+- Each `description` is its consequence, the same line the block showed.
+- **Do not preselect the recommendation.** List it first and say "(recommended)"
+  in its label, but leave the choice unmade. A preselected answer is one the
+  user can accept without reading, and a decision nobody made is exactly what
+  this product exists to prevent.
+- The user can always type instead. "Other" is there, free text still works, and
+  an answer in their own words is worth more than a letter.
+
+If `AskUserQuestion` is unavailable, the block already ended in its own **YOUR
+TURN** frame asking for a letter. Nothing is lost; do not mention the widget.
+
 ## The foundation — ask exactly what the sequence gives you
 
 **Do not invent the questions.** Call `foundation_question` and ask the one it returns, in the

@@ -26,8 +26,13 @@ itself. Nobody asked how it works.
 ## Two different answers, and they are not interchangeable
 
 **"An update is out."** A newer version exists on GitHub and is not on this
-machine. Two commands, in this order, because the second one checks the local
-catalogue and the first is what refreshes it:
+machine. **Ask, then run it yourself.** Do not hand the user two commands to
+type: they have Claude Code open, you have a shell, and the whole point of the
+notice is to save them the trip.
+
+On yes, run both, in this order, because the second reads the local catalogue
+and the first is what refreshes it. Run the second alone and it finds nothing,
+reports success, and changes nothing, which is the loop this exists to end:
 
 ```bash
 claude plugin marketplace update forge-marketplace
@@ -36,6 +41,12 @@ claude plugin marketplace update forge-marketplace
 ```bash
 claude plugin update forge@forge-marketplace
 ```
+
+Then say the version that landed and that a restart is what loads it. On no,
+say "fine, it will keep" in one line and carry on. Do not ask twice in a
+session, and never update without being told to: swapping the tool underneath a
+session that is mid-decision is how you get half of one version and half of
+another.
 
 **"It is downloaded, this session is running the old one."** The update already
 worked. Nothing needs downloading again, and running the update command a second

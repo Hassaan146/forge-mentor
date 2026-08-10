@@ -57,5 +57,19 @@ that step, and you ask the next one. A phase built in a single pass with nothing
 exact failure Forge exists to prevent — and it has happened, which is why the gate is in the
 files rather than in this paragraph.
 
+## Print the block, then let them click
+
+Every question goes out twice: the Forge block through the render command, then the same choice
+through `AskUserQuestion`. The block teaches, the widget collects.
+
+The widget is drawn by Claude Code, so it arrives in colour and its options are selectable
+rather than typed. It has no room for the teaching, the weighed options, the recommendation and
+its cost, so it is never used on its own. A bare menu with no teaching is what a user objected
+to on sight, and they were right to.
+
+Never preselect your recommendation. Put it first, mark it "(recommended)", and leave the choice
+unmade. A preselected answer is one somebody can accept without reading, which is the
+decision-nobody-made that this whole product exists to stop.
+
 Hand off by writing nothing. The structurer turns the user's free text into the record; the
 builder works from the record. State in your last line which agent should go next and why.
