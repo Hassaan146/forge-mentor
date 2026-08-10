@@ -317,3 +317,95 @@ def test_the_switch_turns_the_gate_off_too(plugin: Path, monkeypatch) -> None:
     monkeypatch.setenv("FORGE_NO_UPDATE_CHECK", "1")
     answers(monkeypatch, "1.1.0")
     assert up.gate("/forge:start", plugin) == ""
+
+
+# --------------------------------------------------------------------------
+# downloaded, but not yet running
+# --------------------------------------------------------------------------
+
+
+def cache_with(tmp_path: Path, *versions: str, running: str) -> Path:
+    """A plugin cache holding several versions, with one of them running."""
+    for version in versions:
+        (tmp_path / version / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+        (tmp_path / version / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": "forge",
+                    "version": version,
+                    "repository": "https://github.com/Hassaan146/forge-mentor",
+                }
+            ),
+            encoding="utf-8",
+        )
+    return tmp_path / running
+
+
+def test_a_newer_version_on_disk_is_a_pending_restart(tmp_path: Path) -> None:
+    """The state that cost four sessions.
+
+    `claude plugin update` writes the new version into the cache and changes
+    nothing about the running process. The update succeeds, the user carries on,
+    and every symptom they were updating to fix is still in front of them.
+    """
+    root = cache_with(tmp_path, "1.2.1", "1.3.0", "1.4.0", running="1.3.0")
+    waiting = up.pending_restart(root)
+
+    assert waiting is not None
+    assert (waiting.installed, waiting.latest) == ("1.3.0", "1.4.0")
+
+
+def test_running_the_newest_downloaded_version_is_not(tmp_path: Path) -> None:
+    root = cache_with(tmp_path, "1.2.1", "1.3.0", "1.4.0", running="1.4.0")
+    assert up.pending_restart(root) is None
+
+
+def test_the_restart_notice_says_it_costs_nothing(tmp_path: Path) -> None:
+    """The reason people put a restart off is not knowing what it will lose."""
+    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
+    text = up.report(root)
+
+    assert "1.3.0" in text and "1.4.0" in text
+    assert "Nothing is lost" in text
+    assert "startup" in text, "and why updating alone did not work"
+    assert "/forge:status" in text, "and how to pick the thread back up"
+
+
+def test_a_pending_restart_outranks_the_version_check(tmp_path: Path, monkeypatch) -> None:
+    """Telling them to download what they already have is worse than silence.
+
+    They run the update command, it reports success, and nothing changes.
+    """
+    answers(monkeypatch, "9.9.9")
+    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
+
+    assert "downloaded" in up.report(root)
+    assert "9.9.9" not in up.report(root)
+
+
+def test_a_pending_restart_needs_no_network(tmp_path: Path, monkeypatch) -> None:
+    """So it can run on every session and every command without costing one."""
+    offline(monkeypatch)
+    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
+
+    assert up.pending_restart(root) is not None
+    assert up.report(root) != ""
+
+
+def test_a_clone_is_not_a_version_directory(tmp_path: Path) -> None:
+    """Run from a checkout there are no sibling versions, and no restart to ask for."""
+    root = tmp_path / "forge-mentor"
+    (root / ".claude-plugin").mkdir(parents=True)
+    (root / ".claude-plugin" / "plugin.json").write_text('{"version": "1.4.0"}', "utf-8")
+
+    assert up.pending_restart(root) is None
+
+
+def test_the_gate_holds_forge_start_on_a_pending_restart(tmp_path: Path) -> None:
+    """It is the more urgent of the two: the update is done, one restart is left."""
+    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
+    held = up.gate("/forge:start", root)
+
+    assert "already downloaded" in held
+    assert "Quit Claude Code" in held
+    assert "anyway" in held

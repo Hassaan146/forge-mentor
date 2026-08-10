@@ -197,6 +197,70 @@ def disabled() -> bool:
     return bool(os.environ.get("FORGE_NO_UPDATE_CHECK"))
 
 
+# --------------------------------------------------------------------------
+# downloaded, but not yet running
+# --------------------------------------------------------------------------
+
+
+def downloaded_versions(plugin_root: Path) -> list[str]:
+    """Every version of Forge sitting in the plugin cache beside this one.
+
+    The cache keeps one directory per version, named for it, so the siblings of
+    the running copy are the whole set. Read from the filesystem rather than
+    from the install record, because the record says what was installed and the
+    directories say what is actually there.
+    """
+    try:
+        siblings = [p.name for p in plugin_root.parent.iterdir() if p.is_dir()]
+    except OSError:
+        return []
+    return sorted([name for name in siblings if _VERSION.match(name)], key=_as_numbers)
+
+
+def pending_restart(plugin_root: Path) -> Update | None:
+    """A newer Forge is on disk, and this session is still running the old one.
+
+    **This is the state that cost four sessions.** `claude plugin update` puts
+    the new version in the cache and changes nothing about the running process:
+    hooks, the engine and the command table were all read at startup and keep
+    pointing at the directory they were loaded from. So the update succeeds, the
+    user carries on, and every symptom they were updating to fix is still there.
+
+    Nothing about it needs the network, so unlike the version check this can run
+    on every session and every Forge command without costing anything.
+    """
+    running = plugin_root.name
+    if not _VERSION.match(running):
+        return None  # running from a clone, not from the versioned cache
+
+    available = downloaded_versions(plugin_root)
+    newest = available[-1] if available else ""
+    if newest and is_newer(newest, running):
+        _, _, url = repository_of(plugin_root)
+        return Update(installed=running, latest=newest, repository=url)
+    return None
+
+
+def restart_notice(update: Update) -> str:
+    """What to do, and what it costs, which is nothing."""
+    import forge_ui as ui
+
+    return ui.note(
+        f"Forge {update.latest} is downloaded, this session is running {update.installed}",
+        [
+            "A session reads its hooks and its engine once, at startup, so this "
+            "one keeps the old ones until you open a new one.",
+            "Nothing is lost by restarting. Your decisions live in the project, "
+            "not in the plugin.",
+        ],
+        symbol=ui.COST,
+    ) + ui.action(
+        "Quit Claude Code completely, then open it again",
+        hint="then /forge:status to see where you are, and carry on from there",
+        kind="fix",
+    )
+
+
 def check(plugin_root: Path, *, force: bool = False) -> Update | None:
     """Is there a newer version? None means no, or do not know, or not now."""
     if disabled():
@@ -261,7 +325,17 @@ def notice(update: Update) -> str:
 
 
 def report(plugin_root: Path, *, force: bool = False) -> str:
-    """The notice, or nothing at all. Nothing is the common case."""
+    """The notice, or nothing at all. Nothing is the common case.
+
+    A pending restart is checked first and wins. If a newer Forge is already on
+    disk, telling the user to download it again is worse than saying nothing:
+    they run the update command, it reports success, and every symptom stays
+    exactly where it was.
+    """
+    waiting = pending_restart(plugin_root)
+    if waiting is not None:
+        return restart_notice(waiting)
+
     found = check(plugin_root, force=force)
     return notice(found) if found else ""
 
@@ -293,6 +367,23 @@ def gate(prompt: str, plugin_root: Path) -> str:
         return ""
     if any(word in text for word in OVERRIDE):
         return ""
+
+    # A downloaded-but-not-loaded version comes first, and needs no network.
+    # It is also the more urgent of the two: the user has already done the
+    # updating, and one restart is between them and the version they asked for.
+    waiting = pending_restart(plugin_root)
+    if waiting is not None:
+        return (
+            f"Forge {waiting.latest} is already downloaded. This session is still "
+            f"running {waiting.installed}.\n\n"
+            "    Quit Claude Code completely, then open it again.\n\n"
+            "Hooks, the engine and the commands are read once at startup, so this "
+            "session keeps the old ones however many times you update. That is why "
+            "the change you are looking for has not appeared.\n\n"
+            "Nothing is lost. Your decisions live in the project, so reopening puts "
+            "you back exactly here, and /forge:status will say where that is.\n"
+            'To carry on regardless, say it again with "anyway".'
+        )
 
     found = check(plugin_root)
     if found is None:
