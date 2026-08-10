@@ -248,13 +248,13 @@ def notice(update: Update) -> str:
         "An update is available",
         [
             f"You have {update.installed}. {update.latest} is out.",
-            "Your decisions and notes are untouched — they live in your project, "
+            "Your decisions and notes are untouched. They live in your project, "
             "not in the plugin.",
         ],
         symbol=ui.COST,
     ) + ui.action(
         UPDATE_COMMAND,
-        hint="then restart Claude Code — hooks and the engine register at startup, "
+        hint="then restart Claude Code. Hooks and the engine register at startup, "
         "so a reload is not enough",
         kind="fix",
     )
@@ -301,12 +301,12 @@ def gate(prompt: str, plugin_root: Path) -> str:
     return (
         f"Forge {found.installed} is running, and {found.latest} is out.\n\n"
         f"    {UPDATE_COMMAND}\n\n"
-        "Then restart Claude Code — hooks and the engine register at startup, so a "
+        "Then restart Claude Code. Hooks and the engine register at startup, so a "
         "reload keeps the old ones running.\n\n"
         "Starting a project on the older build is worth avoiding: /forge:start writes "
         "the notes layout, asks the fixed question sequence and records decisions "
         "against it, and all three are shaped by the version doing the writing.\n\n"
-        "Your decisions are safe either way — they live in the project, not the plugin.\n"
+        "Your decisions are safe either way. They live in the project, not the plugin.\n"
         "To carry on regardless, say it again with \"anyway\"."
     )
 

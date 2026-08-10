@@ -144,11 +144,11 @@ def paint(colour: str, text: str, *, bold: bool = False) -> str:
 # for `legend()`, for the setup explanation, and for the MCP `color_legend`
 # tool — so the product cannot describe its own colours two different ways.
 MEANINGS: tuple[tuple[str, str, str], ...] = (
-    ("Forge", "AMBER", "Forge itself — if it is this colour, the plugin is talking"),
+    ("Forge", "AMBER", "Forge itself, if it is this colour, the plugin is talking"),
     ("Information", "BLUE", "teaching, explanations, file paths"),
-    ("Good", "GREEN", "it worked — decided, recorded, passed, recommended"),
+    ("Good", "GREEN", "it worked, decided, recorded, passed, recommended"),
     ("Your turn", "YELLOW", "you have to act, or there is a cost to weigh"),
-    ("Stopped", "RED", "something is wrong and Forge stopped — errors, blocks"),
+    ("Stopped", "RED", "something is wrong and Forge stopped, errors, blocks"),
     ("Working", "PURPLE", "which AI is doing the current job"),
 )
 
@@ -296,7 +296,7 @@ def legend() -> str:
 
     rows.append("")
     for line in _wrap(
-        "Colour is never the only signal — every line reads the same without it. "
+        "Colour is never the only signal. Every line reads the same without it. "
         "Set NO_COLOR=1 to turn it off.",
         WIDTH - 10,
         "",
@@ -415,7 +415,7 @@ def rule(char: str = "─") -> str:
 ASK_KINDS = {
     "choose": "one letter, or say it in your own words",
     "confirm": "type yes to go ahead, or no to stop",
-    "answer": "in your own words — there is no wrong wording",
+    "answer": "in your own words, there is no wrong wording",
     "fix": "run the line above, then say done",
 }
 
@@ -471,7 +471,7 @@ def confirm(what: str) -> str:
 
 def choose(letters: str = "A, B, or C", question: str = "") -> str:
     """A pick-one gate. `letters` is whatever the options actually were."""
-    return action(question or f"Your call — {letters}?", kind="choose")
+    return action(question or f"Your call: {letters}?", kind="choose")
 
 
 # --------------------------------------------------------------------------
@@ -632,6 +632,35 @@ def _option_lines(items: list[tuple[str, str, str]]) -> list[str]:
 
 MAX_NOTE_LINES = 3
 
+# Rule R10 says two lines of explanation. It was a sentence in a document, so
+# the first foundation question shipped with eleven: three paragraphs about how
+# to describe an idea, in front of someone who only wanted to describe theirs.
+# Long teaching is not more teaching. It is the thing people skip, and skipping
+# it is how they arrive at the options without the concept.
+#
+# Three rather than two, because a concept plus its consequence is sometimes
+# genuinely two sentences and the third catches the overflow. Anything past it
+# belongs in the decision record, which is where someone looks in a month.
+MAX_MEANS_LINES = 3
+
+
+def _teaching_lines(means: list[str]) -> list[str]:
+    """Wrap the teaching, then stop at the cap.
+
+    Wrapped as well as capped: these arrive as hand-broken strings, so a line
+    longer than the frame ran straight through the right border and took the
+    box with it. Nothing outside this module was measuring them.
+    """
+    out: list[str] = []
+    for line in means:
+        if not line.strip():
+            continue
+        for wrapped in _wrap(line, WIDTH - 8, "    "):
+            out.append(wrapped)
+            if len(out) == MAX_MEANS_LINES:
+                return out
+    return out
+
 
 def note(
     heading: str,
@@ -718,7 +747,7 @@ def decision(
 
     if means:
         body += ["", f"  {BLUE}{BOLD}{TEACH} What this means{RESET}"]
-        body += [f"    {line}" for line in means]
+        body += _teaching_lines(means)
 
     if choices:
         body += ["", f"  {AMBER}{BOLD}{WEIGH} Options{RESET}"]
@@ -749,7 +778,7 @@ def decision(
     # weight as the option above it.
     letters = _spoken_letters([letter for letter, _, _ in choices]) if choices else ""
     if not ask:
-        ask = f"Your call — {letters}?" if letters else "Your call"
+        ask = f"Your call: {letters}?" if letters else "Your call"
     return "\n" + box(body, title=label) + "\n" + action(
         ask, kind="choose" if choices else "answer"
     )
@@ -919,7 +948,7 @@ def _demo() -> None:
         "answer the open question, or",
         "tell me to write it anyway (you will be asked to confirm)",
     ]))
-    print(recorded("B — a login service", ".claude/forge/decisions/007-how-people-log-in.md"))
+    print(recorded("B, a login service", ".claude/forge/decisions/007-how-people-log-in.md"))
     print(working("Opus 4.8", "is now writing it…"))
     print()
 

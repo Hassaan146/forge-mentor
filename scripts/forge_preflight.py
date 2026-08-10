@@ -120,7 +120,7 @@ def run() -> list[Check]:
         Check(
             "the mcp package",
             has_mcp,
-            "the engine cannot start without it — every Forge tool would be missing",
+            "the engine cannot start without it, every Forge tool would be missing",
             fix=f'"{sys.executable}" -m pip install "mcp>=2.0.0,<3"',
             fatal=True,
         )
@@ -179,7 +179,7 @@ def report(checks: list[Check] | None = None) -> str:
     missing = [c for c in checks if not c.ok]
     blocking = [c for c in missing if c.fatal]
 
-    lines = ["", f"  {ui.AMBER}{ui.BOLD}{ui.MARK} Forge — is this machine ready?{ui.NC}", ""]
+    lines = ["", f"  {ui.AMBER}{ui.BOLD}{ui.MARK} Forge, is this machine ready?{ui.NC}", ""]
     for check in checks:
         if check.ok:
             mark, ink, symbol = "ok", ui.GREEN, ui.RECORDED
@@ -200,7 +200,7 @@ def report(checks: list[Check] | None = None) -> str:
             f"  {ui.RED}{ui.BOLD}Forge cannot run yet.{ui.NC}",
             "",
             f"  {ui.DIM}The hooks would still block writes, but the engine that records{ui.NC}",
-            f"  {ui.DIM}your decisions would be missing — so Forge would stop a write and{ui.NC}",
+            f"  {ui.DIM}your decisions would be missing, so Forge would stop a write and{ui.NC}",
             f"  {ui.DIM}then be unable to record the decision that unblocks it.{ui.NC}",
             "",
         ]
@@ -208,7 +208,7 @@ def report(checks: list[Check] | None = None) -> str:
             body, title=f"{ui.RED}{ui.BOLD}{ui.BLOCKED} NOT READY{ui.NC}", edge=ui.RED
         ) + ui.action(
             "Run the fix lines marked MISSING above.",
-            hint="then run this check again — it has to come back Ready before Forge starts",
+            hint="then run this check again, it has to come back Ready before Forge starts",
         )
 
     if missing:

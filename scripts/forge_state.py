@@ -1,4 +1,4 @@
-"""Forge Mentor — the state layer.
+"""Forge Mentor, the state layer.
 
 Everything Forge knows lives in `.claude/forge/` inside the user's own
 repository, committed with the code. There is no database and no hidden state.
@@ -7,7 +7,7 @@ Design constraints this module exists to satisfy:
 
   decision 001  both files are readable documents with a strict labelled
                 header. A hand edit may break them, so a broken file must
-                say exactly what is wrong — never guess.
+                say exactly what is wrong, never guess.
   decision 011  a fresh session on another account must be able to read
                 these files and carry on. That requires in-flight state,
                 not only finished decisions.
@@ -84,7 +84,7 @@ class StateError(Exception):
 
 
 def _repo_relative(path: Path) -> str:
-    """Show a short path — absolute paths in error text are noise."""
+    """Show a short path, absolute paths in error text are noise."""
     text = path.as_posix()
     marker = f"/{FORGE_DIR}/"
     if marker in text:
@@ -147,7 +147,7 @@ class Progress:
     """Where the project is right now.
 
     Note on `open_question`: decision 018 moved the authority for this out of
-    the progress file and into the decision records themselves — a question is
+    the progress file and into the decision records themselves, a question is
     a record with `status: open`. The field is kept only as a readable summary
     for a person opening this file, and is written from the computed value. The
     governor and `resume_line` both take the real answer as an argument, so a
@@ -249,7 +249,7 @@ def _known_status(value: str, path: Path) -> str:
 
     Anything else was accepted and stored as-is. Since `open_question` only
     treats "open" as pending, a record reading `status: pending` counted as
-    settled — and the governor then allowed code past a decision nobody had
+    settled, and the governor then allowed code past a decision nobody had
     made. A typo in a hand-edited file was enough to switch the product's one
     guarantee off, silently.
     """
@@ -402,7 +402,7 @@ def open_question(forge_dir: Path) -> Decision | None:
     open question is *derived* from the folder rather than stored in a mutable
     field that two branches would fight over.
 
-    If several are open — which merging two branches can produce — the lowest
+    If several are open, which merging two branches can produce, the lowest
     id wins, so the older question is settled first.
     """
     openers = [d for d in list_decisions(forge_dir) if d.status.strip().lower() == STATUS_OPEN]
@@ -440,7 +440,7 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
 
     Decision 018 accepts that two branches can both take the same id, so an id
     is not a unique handle. Answering the first match meant the wrong record
-    could be filled in — and then the second one could never be answered at
+    could be filled in, and then the second one could never be answered at
     all, because the first was no longer open. Where an id is ambiguous the
     open one is the only sensible target; where more than one is open, Forge
     stops rather than guessing which the user meant.
@@ -459,7 +459,7 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
     for decision in still_open or matches:
         if decision.status.strip().lower() != STATUS_OPEN:
             raise StateError(
-                f"Decision {decision_id:03d} is not open — it is {decision.status!r}.",
+                f"Decision {decision_id:03d} is not open, it is {decision.status!r}.",
                 forge_dir / DECISIONS / decision.filename(),
                 repair="answer the open question instead",
             )
@@ -483,7 +483,7 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
 
     **Unreadable state blocks.** This used to swallow the error and carry on,
     so a damaged or missing progress file with no decision open came out as
-    "writes allowed" — Forge could not tell whether a question was open and
+    "writes allowed", Forge could not tell whether a question was open and
     said yes anyway. Decision 004 is explicit that the safety path fails
     closed, and this is the safety path.
     """
@@ -556,7 +556,7 @@ def find_forge_dir(start: Path) -> Path | None:
 
     The walk upward is **bounded**, and that bound is the point. An unbounded
     search finds a stray notes folder in a home directory and silently activates
-    Forge in every project on the machine — the opposite of decision 014,
+    Forge in every project on the machine, the opposite of decision 014,
     which says Forge acts only where it was invited.
 
     The boundary is the repository root, because decision 016 puts `.claude/forge/`
@@ -600,7 +600,7 @@ def is_ignored_by_git(path: Path) -> bool:
     compose across files, the global config and the exclude file, and a
     reimplementation would be wrong in exactly the cases that matter.
 
-    This exists because `.claude/` is commonly ignored — it usually holds
+    This exists because `.claude/` is commonly ignored, it usually holds
     machine-local settings, so excluding the whole folder is an ordinary thing
     for a project to do. Harmless until Forge's memory is inside it.
     """
@@ -640,15 +640,15 @@ def refuse_if_ignored(forge: Path) -> None:
     knows git will discard are not memory, and the user would not find out
     until they switched machine and found an empty project.
 
-    Forge cannot fix this from inside its own folder either — git will not
-    re-include a file whose parent directory is excluded — so the only thing it
+    Forge cannot fix this from inside its own folder either, git will not
+    re-include a file whose parent directory is excluded, so the only thing it
     can usefully do is say which line to change.
     """
     if not is_ignored_by_git(forge):
         return
     raise StateError(
         f"git is ignoring {FORGE_DIR}, so Forge's notes would never be committed.\n"
-        "  Your decisions are meant to travel with the code — without that, a new\n"
+        "  Your decisions are meant to travel with the code, without that, a new\n"
         "  machine or account opens an empty project.",
         forge,
         repair=(
@@ -677,7 +677,7 @@ def init(project_root: Path, total_questions: int = 0) -> Path:
         body=(
             "# Where we are\n\n"
             "Forge writes this file. You can read it, and you can fix it by hand if\n"
-            "it breaks — the labelled section at the top is what the tool relies on.\n"
+            "it breaks, the labelled section at the top is what the tool relies on.\n"
         ),
     ).write(forge)
     return forge

@@ -615,3 +615,29 @@ def test_the_command_prints_colour_where_a_retyped_block_would_not() -> None:
     )
     assert "\033[" in out, "the command emits real escape codes"
     assert "A, B, or C?" in out
+
+
+# --------------------------------------------------------------------------
+# short, and staying short
+# --------------------------------------------------------------------------
+
+
+def test_the_teaching_is_capped() -> None:
+    """Rule R10 says two lines of explanation, and it was a sentence in a doc.
+
+    The first foundation question shipped with eleven: three paragraphs on how
+    to describe an idea, in front of someone who only wanted to describe theirs.
+    Long teaching is not more teaching, it is the part people skip.
+    """
+    out = plain(ui.decision("t", means=[f"line {n}" for n in range(1, 10)]))
+
+    assert "line 1" in out
+    assert "line 4" not in out, "past the cap it belongs in the decision record"
+
+
+def test_a_long_teaching_line_cannot_break_the_frame() -> None:
+    """They arrive as hand-broken strings, so nothing was measuring them."""
+    out = ui.decision("t", means=["a sentence that keeps going and going " * 4])
+    framed = [ln for ln in out.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the frame went ragged"

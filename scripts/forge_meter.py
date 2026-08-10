@@ -385,7 +385,7 @@ def render(usage: Usage) -> str:
     """The meter, as a person reads it."""
     if not usage.available:
         return (
-            f"\n  {ui.DIM}Usage unavailable — {usage.reason}{ui.RESET}\n"
+            f"\n  {ui.DIM}Usage unavailable, {usage.reason}{ui.RESET}\n"
             f"  {ui.DIM}Nothing else is affected.{ui.RESET}\n"
         )
 

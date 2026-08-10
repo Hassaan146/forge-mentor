@@ -26,7 +26,7 @@ requires a human to authorise it. So Forge *detects* which reviewers are
 installed and *guides* the user through the missing ones once.
 
 **Findings land in a file, not an inbox.** Reviews are written to
-`.claude/forge/reviews/pr-<n>.md` — committed with the code, readable months later,
+`.claude/forge/reviews/pr-<n>.md`, committed with the code, readable months later,
 and available to a session on another machine (decision 011). An email would
 be none of those things. A workflow in the repository keeps that file current
 without anyone having to ask (decision 026).
@@ -54,7 +54,7 @@ REVIEWS_DIR = "reviews"
 #
 # **Anchored, and that is the point.** These patterns decide whose comments
 # become findings and whether a step is allowed to close. A substring match
-# meant any public account containing the word — `coderabbit-fan` — could post
+# meant any public account containing the word — `coderabbit-fan`, could post
 # a comment that Forge would file as a reviewer finding, and could satisfy the
 # "has this repository been reviewed?" check on its own. The repository is
 # public (decision 007), so registering such an account is trivial. Only the
@@ -498,7 +498,7 @@ The review step needs {names}, and {verb} not on this repository yet.
 {steps}
 Both are free on public repositories.
 
-You will not be asked to sign in again — Forge reads the findings through the
+You will not be asked to sign in again, Forge reads the findings through the
 GitHub access it already has.
 
 To review the pull requests that are already open, comment on each one:
@@ -540,7 +540,7 @@ def check_setup(project: Path) -> dict[str, object]:
         return {
             "ready": False,
             "reason": "This project has no GitHub remote yet.",
-            "guide": "Connect a repository first — run /forge:start.",
+            "guide": "Connect a repository first, run /forge:start.",
         }
 
     token = github_token()
@@ -738,7 +738,7 @@ def fetch(repo: str, pr: int, token: str | None = None) -> Review:
             review.reviewers.append(who)
         overall = overall_feedback(entry.get("body", ""))
         if overall:
-            summaries.append(f"**{who}** — {overall}")
+            summaries.append(f"**{who}**, {overall}")
 
     for finding in review.findings:
         if finding.reviewer not in review.reviewers:
@@ -782,7 +782,7 @@ def to_markdown(review: Review, repo: str = "") -> str:
         f"fetched: {datetime.now().isoformat(timespec='seconds')}",
         "---",
         "",
-        f"# Review — pull request #{review.pr}",
+        f"# Review, pull request #{review.pr}",
         "",
     ]
     if review.title:
@@ -797,7 +797,7 @@ def to_markdown(review: Review, repo: str = "") -> str:
             lines += [
                 f"{_count(len(review.stale_findings), 'finding')} "
                 f"{'sits' if len(review.stale_findings) == 1 else 'sit'} against code "
-                "that has changed since — "
+                "that has changed since. "
                 "read them below before calling this step done (decision 031).",
                 "",
             ]
@@ -837,7 +837,7 @@ def to_markdown(review: Review, repo: str = "") -> str:
             f"{_count(len(review.stale_findings), 'finding')} "
             f"{'points' if len(review.stale_findings) == 1 else 'point'} at files "
             "edited after they were "
-            "written. **That does not mean they are fixed** — it means nobody can tell from "
+            "written. **That does not mean they are fixed**, it means nobody can tell from "
             "the pull request alone, so each needs reading against the file as it is now "
             "(decision 031). Most of this project's real bugs were reported against an "
             "earlier commit and were entirely valid.",
@@ -850,7 +850,7 @@ def to_markdown(review: Review, repo: str = "") -> str:
         lines += ["## Already addressed", ""]
         for finding in review.resolved_findings:
             lines.append(
-                f"- `{finding.path}:{finding.line}` — {finding.title} _({finding.reviewer})_"
+                f"- `{finding.path}:{finding.line}`, {finding.title} _({finding.reviewer})_"
             )
         lines.append("")
 
@@ -895,7 +895,7 @@ def _finding_block(finding: Finding) -> list[str]:
         f"review:{finding.reviewer}:{finding.path}", clean_body(finding.body)
     )
     return [
-        f"### `{finding.path}:{finding.line}` — {finding.severity} _({finding.reviewer})_",
+        f"### `{finding.path}:{finding.line}`, {finding.severity} _({finding.reviewer})_",
         "",
         *([f"thread: {finding.thread_id}", ""] if finding.thread_id else []),
         body,

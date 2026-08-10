@@ -1,23 +1,23 @@
-"""Forge Mentor — the loop itself.
+"""Forge Mentor, the loop itself.
 
 Phases 3 to 7 built the parts: state, the governor, the engine, the skills and
 the subagents. This is what puts them in order, and it is the product.
 
-**Two loops.** The foundation loop runs once at the start — interrogate the
+**Two loops.** The foundation loop runs once at the start, interrogate the
 blast-radius decisions, then challenge the resulting plan with a premortem and
 a redteam, then compile the phases. The build loop then runs per step, over and
 over: teach, decide, write, gate, explain back.
 
 **Where a stage comes from.** Never from a model deciding what feels next. The
-stage is a function of what is on disk — is a question open, has the plan been
-challenged, did the tests pass — so two sessions reading the same `.claude/forge/`
+stage is a function of what is on disk, is a question open, has the plan been
+challenged, did the tests pass, so two sessions reading the same `.claude/forge/`
 reach the same answer, and a session that resumes on another machine lands
 exactly where the last one stopped (decision 011).
 
 **The three modes** (decision 030) change one thing: how much Forge decides on
 its own. Auto answers furniture-level questions itself and records them like
 any other decision. It never answers a blast-radius one, and the governor rule
-holds in all three — a mode that turned that off would not be a faster Forge,
+holds in all three, a mode that turned that off would not be a faster Forge,
 it would be plain Claude Code with a banner.
 """
 
@@ -58,7 +58,7 @@ class Stage(str, Enum):
     PLANNING = "planning"
     # The step's own question, asked inside a phase. Separate from
     # INTERROGATION because the foundation runs once and this runs before every
-    # step — reporting both as "interrogation" made a live build look like it
+    # step, reporting both as "interrogation" made a live build look like it
     # had gone back to the beginning.
     STEP_DECISION = "step-decision"
     BUILDING = "building"
@@ -70,7 +70,7 @@ class Stage(str, Enum):
 # The foundation loop, in order. Runs once, before any code exists.
 FOUNDATION = (Stage.INTERROGATION, Stage.CHALLENGE, Stage.PLANNING)
 
-# The build loop, in order. Runs per step, repeatedly — and it opens with a
+# The build loop, in order. Runs per step, repeatedly, and it opens with a
 # question, which is the whole point of it. A loop starting at BUILDING is a
 # loop that writes code nobody was asked about.
 BUILD = (Stage.STEP_DECISION, Stage.BUILDING, Stage.REVIEW_FIX, Stage.TEACH_BACK)
@@ -83,7 +83,7 @@ class PipelineError(Exception):
 
 
 # --------------------------------------------------------------------------
-# blast radius — the only thing Auto is allowed to decide for you
+# blast radius, the only thing Auto is allowed to decide for you
 # --------------------------------------------------------------------------
 
 # A decision other work gets built on top of. Auto never answers one of these:
@@ -91,7 +91,7 @@ class PipelineError(Exception):
 # around. The list is deliberately about *consequence*, not about topic.
 # Each ends in \w* so a plural or a participle still matches. Written the long
 # way after "payments", "secrets" and "log in" all slipped through a first
-# draft that assumed the singular and one word — the failure mode being that
+# draft that assumed the singular and one word, the failure mode being that
 # Auto silently answers a question about payments, which is precisely the class
 # this list exists to protect.
 LOAD_BEARING = (
@@ -127,7 +127,7 @@ def should_ask(question: str, mode: Mode) -> bool:
     """Does this question go to the user, or does Forge answer it?
 
     A blank question always goes to the user. There is nothing in it to
-    classify, and "I cannot tell" must never resolve to "Forge decides" — that
+    classify, and "I cannot tell" must never resolve to "Forge decides", that
     is the one direction where being wrong costs a decision the user never
     made. The first version returned False, and the test asserting it was
     named for the safe behaviour while asserting the unsafe one.
@@ -201,7 +201,7 @@ def set_mode(forge_dir: Path, wanted: str | Mode) -> Mode:
 
 
 # --------------------------------------------------------------------------
-# what happens next — read from disk, never decided by a model
+# what happens next, read from disk, never decided by a model
 # --------------------------------------------------------------------------
 
 
@@ -254,7 +254,7 @@ def next_step(forge_dir: Path) -> Step:
     """What happens next, worked out from what is on disk.
 
     The order is fixed and the inputs are files, so this is the same answer in
-    any session on any machine — which is what makes resuming work at all.
+    any session on any machine, which is what makes resuming work at all.
     """
     current = mode(forge_dir)
 
@@ -267,9 +267,9 @@ def next_step(forge_dir: Path) -> Step:
             Stage.INTERROGATION if not planned(forge_dir) else Stage.BUILDING,
             skills_stage=Stage.INTERROGATION,
             why=(
-                f"{pending.question} — waiting for your answer"
+                f"{pending.question}, waiting for your answer"
                 if asks
-                else f"{pending.question} — small enough for Forge to settle and record"
+                else f"{pending.question}, small enough for Forge to settle and record"
             ),
             asks_user=asks,
             blocked=True,
@@ -277,7 +277,7 @@ def next_step(forge_dir: Path) -> Step:
         )
 
     # A project with no decisions at all has not started, so the first step is
-    # to ask — not to challenge a plan that does not exist yet. The first
+    # to ask, not to challenge a plan that does not exist yet. The first
     # version fell straight to CHALLENGE on a fresh directory and INTERROGATION
     # was only ever reached once a question was already open, which meant the
     # stage that opens the first question could never be the one suggested.
@@ -286,7 +286,7 @@ def next_step(forge_dir: Path) -> Step:
         done, total = ff.position(forge_dir)
         return _step(
             Stage.INTERROGATION,
-            why=f"{pending_foundation.question} — {done + 1} of {total}",
+            why=f"{pending_foundation.question}, {done + 1} of {total}",
             asks_user=True,
             question=pending_foundation.question,
         )
@@ -294,7 +294,7 @@ def next_step(forge_dir: Path) -> Step:
     if not challenge_done(forge_dir):
         return _step(
             Stage.CHALLENGE,
-            why="the plan has not been challenged yet — premortem and redteam before any code",
+            why="the plan has not been challenged yet, premortem and redteam before any code",
             asks_user=False,
         )
 
@@ -313,18 +313,18 @@ def next_step(forge_dir: Path) -> Step:
     if progress.gate_attempts:
         return _step(
             Stage.REVIEW_FIX,
-            why=f"the gate has failed {progress.gate_attempts} time(s) — fix before building on",
+            why=f"the gate has failed {progress.gate_attempts} time(s), fix before building on",
             asks_user=False,
         )
 
     # A step whose code is written and whose gate has passed is not finished:
     # decision 009 needs the user to say it back. Without this the loop
-    # returned to BUILDING and the teaching gate — the product's whole claim —
+    # returned to BUILDING and the teaching gate, the product's whole claim —
     # was never reached by the state machine at all.
     if progress.current_step and not progress.next_action:
         return _step(
             Stage.TEACH_BACK,
-            why=f"{progress.current_step} is built and green — say it back before it closes",
+            why=f"{progress.current_step} is built and green, say it back before it closes",
             asks_user=True,
         )
 
@@ -342,7 +342,7 @@ def next_step(forge_dir: Path) -> Step:
         )
 
     # The plan is shown whole before any of it is built. Separate from
-    # PLANNING because the phases already exist here — what is missing is the
+    # PLANNING because the phases already exist here, what is missing is the
     # user having seen them, which is a question rather than a compile.
     if gap is not None and gap.kind == "unapproved":
         return _step(
@@ -358,9 +358,9 @@ def next_step(forge_dir: Path) -> Step:
         return _step(
             Stage.STEP_DECISION,
             why=(
-                f"{gap.reason} — waiting for your answer"
+                f"{gap.reason}, waiting for your answer"
                 if asks
-                else f"{gap.reason} — small enough for Forge to settle and record"
+                else f"{gap.reason}, small enough for Forge to settle and record"
             ),
             asks_user=asks,
             blocked=True,
@@ -371,14 +371,14 @@ def next_step(forge_dir: Path) -> Step:
     if step is None:
         return _step(
             Stage.BUILDING,
-            why="every phase is finished — nothing is left to build",
+            why="every phase is finished, nothing is left to build",
             asks_user=False,
         )
 
     return _step(
         Stage.BUILDING,
         why=(
-            f"step {step.number} of phase {step.phase} is decided — build that, and "
+            f"step {step.number} of phase {step.phase} is decided, build that, and "
             "only that"
         ),
         asks_user=False,

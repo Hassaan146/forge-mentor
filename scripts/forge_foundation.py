@@ -54,19 +54,14 @@ class Question:
 INTENT = Question(
     key="intent",
     question="What's the idea?",
-    subtitle="in your own words — the five questions after this all follow from it",
+    subtitle="in your own words, the five questions after this all follow from it",
+    # Two lines, per rule R10. This shipped as three paragraphs of advice on how
+    # to describe an idea, in front of someone who only wanted to describe
+    # theirs. The reasoning behind the question belongs in this comment and in
+    # the decision record, not on the screen.
     means=(
-        "Describe it the way you would to a friend, not the way you would write",
-        'a specification. "A to-do app for myself" is a complete answer. So is',
-        "a paragraph about a business you are trying to start.",
-        "",
-        "Useful if you have it: who it is for, and what it should do on the",
-        "first day it works. Leave out anything you have not settled — that is",
-        "what the next five questions are for.",
-        "",
-        "Nothing is chosen yet, and there is nothing to pick from. Every option",
-        "Forge could offer here would already assume something about your idea,",
-        "and a menu narrows what you were about to say.",
+        "Say it the way you would to a friend, not the way you would write a spec.",
+        '"A to-do app for myself" is a complete answer.',
     ),
     # No options, deliberately. It is the only genuinely open question, and the
     # one the other five are asked inside: a recommendation about storage or
@@ -76,38 +71,18 @@ INTENT = Question(
 STACK = Question(
     key="stack",
     question="What are you building this with?",
-    subtitle="the first decision — everything below is built on top of it",
+    subtitle="the first decision, everything below is built on top of it",
     means=(
-        "This settles three things at once, because they do not separate cleanly:",
-        "the language, the framework, and where the code actually runs.",
-        "Picking one narrows the others, so they are chosen together as a shape",
-        "rather than as three words.",
+        "Language, framework and where the code runs, settled together.",
+        "They do not separate cleanly: picking one narrows the others.",
     ),
+    # One line each, per rule R10. These ran to three lines apiece, which turns
+    # a menu into a page and buries the thing being compared: the consequence.
     options=(
-        (
-            "A",
-            "Browser only",
-            "HTML, CSS and JavaScript in the page. No server, nothing to deploy, "
-            "and the data lives in the browser",
-        ),
-        (
-            "B",
-            "Browser + small API",
-            "a front end plus a thin server you own. Data lives in a database; "
-            "more moving parts, but the data is yours",
-        ),
-        (
-            "C",
-            "Python service",
-            "FastAPI or Django with a database behind it. No front end unless you "
-            "add one; strongest for logic and data",
-        ),
-        (
-            "D",
-            "Command line tool",
-            "a script or CLI on your own machine. Fastest to build, nothing to "
-            "host, no users but you",
-        ),
+        ("A", "Browser only", "no server, nothing to deploy, data lives in the browser"),
+        ("B", "Browser + small API", "a thin server you own; more parts, the data is yours"),
+        ("C", "Python service", "FastAPI or Django and a database; strongest for logic"),
+        ("D", "Command line tool", "a script on your machine; fastest, no users but you"),
     ),
 )
 
@@ -116,10 +91,8 @@ DATA = Question(
     question="What is stored, and what happens if it is lost?",
     subtitle="decides the data model, backups, and how much a mistake costs",
     means=(
-        "Two questions that are really one. Where data lives decides how it is",
-        "written and read; what its loss would cost decides how hard you work to",
-        "prevent that. Answer the second honestly and the first often settles",
-        "itself.",
+        "Where the data lives decides how it is written and read.",
+        "What losing it would cost decides how hard you work to prevent that.",
     ),
     # No options: they depend entirely on the stack, and offering a fixed list
     # here is what put browser-only storage in front of a project that had not
@@ -131,9 +104,8 @@ PEOPLE = Question(
     question="Is there more than one person using this?",
     subtitle="decides accounts, sign-in, and who can see what",
     means=(
-        "If it is only ever you, there is nothing to build here and Forge will",
-        "not invent it. The moment a second person exists, two things follow:",
-        "proving who someone is, and deciding what they are allowed to see.",
+        "Only ever you? Then there is nothing to build here, and Forge will not invent it.",
+        "A second person means proving who they are, and deciding what they may see.",
     ),
     skip_when=("cli-single-user",),
 )
@@ -143,9 +115,8 @@ DELIVERY = Question(
     question="Where does this run when you are not running it?",
     subtitle="decides hosting, configuration, and how a change reaches people",
     means=(
-        "A project that only ever runs on your machine has no answer here, and",
-        "that is a legitimate answer. If other people use it, something has to",
-        "hold it up when your laptop is shut.",
+        "Only on your own machine is a legitimate answer.",
+        "If other people use it, something has to hold it up when your laptop shuts.",
     ),
     skip_when=("cli-single-user",),
 )
@@ -153,12 +124,10 @@ DELIVERY = Question(
 DONE = Question(
     key="done",
     question="What does 'finished' mean for a step in this project?",
-    subtitle="decides the gate — what has to be true before work moves on",
+    subtitle="decides the gate, what has to be true before work moves on",
     means=(
-        "Forge already requires tests to pass and a clean review (decision 009).",
-        "What varies by project is how much of that is proportionate: a weekend",
-        "tool and a service handling other people's money do not deserve the same",
-        "bar, and pretending otherwise makes the gate theatre.",
+        "Passing tests and a clean review are already required (decision 009).",
+        "What varies is the bar: a weekend tool and a payments service are not the same.",
     ),
 )
 

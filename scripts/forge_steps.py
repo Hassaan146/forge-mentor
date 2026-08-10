@@ -1,9 +1,9 @@
-"""Forge Mentor — the build loop's unit of work.
+"""Forge Mentor, the build loop's unit of work.
 
 **The hole this closes.** The governor's rule was "is a question open", and
 decision 034 added "is the foundation answered". Both are true exactly once, at
 the start. After the sixth foundation answer, `writes_allowed` returned True
-and stayed True — so Forge asked six questions, compiled the phases, and then
+and stayed True, so Forge asked six questions, compiled the phases, and then
 wrote an entire application without asking anything again. On a real run it
 produced `app.js`, `db.js`, `index.html` and `style.css` in one turn. Every
 line of it was allowed, and the product looked like it was working.
@@ -21,7 +21,7 @@ record names it, and the write gate reads both. Nothing here trusts a model to
 remember the rule.
 
 **What this cannot do.** The governor sees a file path, not an intention. Once
-the current step is decided, writes are allowed until it is ticked off — so a
+the current step is decided, writes are allowed until it is ticked off, so a
 builder that ignores its brief can still write more than the step asked for.
 What it cannot do is build a phase nobody has been asked about, which is the
 failure that actually happened.
@@ -38,7 +38,7 @@ import forge_state as fs
 PHASES = "phases"
 STEPS_HEADING = "## Steps"
 
-# `1. text`, `- text`, `- [ ] text`, `- [x] text` — a step list written by a
+# `1. text`, `- text`, `- [ ] text`, `- [x] text`, a step list written by a
 # planner, a user, or by hand, and all four shapes read the same. The tick box
 # is what "built" means; a list without one is a list of steps nobody has
 # started.
@@ -96,7 +96,7 @@ class Phase:
         return self.done or self.built > 0
 
     def state(self) -> str:
-        """`done`, `now`, or `later` — the word that carries it without colour."""
+        """`done`, `now`, or `later`, the word that carries it without colour."""
         if self.done:
             return "done"
         if self.built or self.steps:
@@ -108,9 +108,9 @@ class Phase:
 class Gap:
     """Why code cannot be written yet, and what would close it."""
 
-    # "unplanned"  — no phases, or this phase has no steps
-    # "unapproved" — the plan exists but the user has not seen it whole
-    # "undecided"  — this step has no recorded decision
+    # "unplanned":  no phases at all, or this phase has no step list
+    # "unapproved": the plan exists but the user has not seen it whole
+    # "undecided":  this step has no recorded decision
     kind: str
     phase: int
     reason: str
@@ -119,7 +119,7 @@ class Gap:
 
 # What a decision writes in `affects` to say the user has seen the whole plan.
 # A marker rather than a phase number, because it is a decision about all of
-# them at once — and the point of it is that no phase is built before the user
+# them at once, and the point of it is that no phase is built before the user
 # knows what the other four are.
 PLAN_MARKER = "plan-accepted"
 
@@ -162,7 +162,7 @@ def read_steps(path: Path, phase: int) -> list[Step]:
     """The step list from one phase file, in the order it is written.
 
     Only the lines under `## Steps` count. A phase file has other lists in it —
-    deliverables, done-when — and treating those as steps would ask the user to
+    deliverables, done-when, and treating those as steps would ask the user to
     decide a heading.
     """
     try:
@@ -199,7 +199,7 @@ def read_steps(path: Path, phase: int) -> list[Step]:
 def decided_markers(forge_dir: Path) -> set[str]:
     """Every step marker that already has a decided record against it.
 
-    Read from `affects`, which is part of the record's fingerprint — so a step
+    Read from `affects`, which is part of the record's fingerprint, so a step
     cannot be marked decided by editing a file the chain would then reject.
     """
     found: set[str] = set()
@@ -229,14 +229,14 @@ def plan_accepted(forge_dir: Path) -> bool:
 
 
 def roadmap(forge_dir: Path) -> list[Phase]:
-    """The whole plan, in order — every phase, not just the current one."""
+    """The whole plan, in order, every phase, not just the current one."""
     out: list[Phase] = []
     for number, path, header in phase_files(forge_dir):
         if header.get("unreadable"):
             out.append(
                 Phase(
                     number=number,
-                    title=f"{path.name} — unreadable",
+                    title=f"{path.name}, unreadable",
                     delivers="",
                     status="broken",
                 )
@@ -281,7 +281,7 @@ def current(forge_dir: Path) -> Step | None:
 def next_gap(forge_dir: Path) -> Gap | None:
     """What is standing between this project and its next line of code.
 
-    Returns None only when the current step has been decided — which is the
+    Returns None only when the current step has been decided, which is the
     single condition under which the builder is allowed to run.
     """
     files = phase_files(forge_dir)
@@ -289,7 +289,7 @@ def next_gap(forge_dir: Path) -> Gap | None:
         # No phases at all, which is the state the real failure ran in: the
         # project that wrote a whole application unasked had six decisions, a
         # progress file describing five phases in prose, and no `phases/`
-        # directory. `planned()` was False and the pipeline said so — but the
+        # directory. `planned()` was False and the pipeline said so, but the
         # write gate never asked, so the builder ran anyway.
         return Gap(
             kind="unplanned",
@@ -303,7 +303,7 @@ def next_gap(forge_dir: Path) -> Gap | None:
 
     # A phase file that cannot be read comes first, ahead of everything below.
     # There is no showing the user a plan Forge cannot read, and no skipping
-    # the broken one — skipping it would silently build the phase after it in
+    # the broken one, skipping it would silently build the phase after it in
     # its place.
     for number, path, header in files:
         if header.get("unreadable"):
@@ -319,7 +319,7 @@ def next_gap(forge_dir: Path) -> Gap | None:
     # The whole plan is shown before any of it is built. This gate is here
     # rather than in the planner's brief for the same reason as every other
     # one: a run compiled five phases, built the first, and asked the user
-    # about the second only once the first was finished — so the shape of the
+    # about the second only once the first was finished, so the shape of the
     # project arrived in instalments, and the decision that set it was made
     # before the user could see what it committed them to.
     if not plan_accepted(forge_dir):
@@ -347,7 +347,7 @@ def next_gap(forge_dir: Path) -> Gap | None:
                 phase=number,
                 reason=(
                     f"{title} has not been broken into steps yet. A phase is not "
-                    "something to build in one go — it is a list of steps, and each "
+                    "something to build in one go, it is a list of steps, and each "
                     "one is a decision before it is code."
                 ),
             )
@@ -407,7 +407,7 @@ def compile_phases(forge_dir: Path, phases: list[tuple[str, str]]) -> list[Phase
     """Write the whole plan at once: every phase, before any of them is built.
 
     **All of them, deliberately.** Compiling one phase at a time is how a plan
-    becomes a surprise delivered in instalments — the user answers a question
+    becomes a surprise delivered in instalments, the user answers a question
     about testing in phase two having never been told there was a phase four,
     and the answer to the first question quietly set the shape of all of them.
 
@@ -442,7 +442,7 @@ def compile_phases(forge_dir: Path, phases: list[tuple[str, str]]) -> list[Phase
                 "status": "planned",
             }
         )
-        body += f"\n# Phase {number} — {title}\n\n{delivers}\n"
+        body += f"\n# Phase {number}, {title}\n\n{delivers}\n"
         (folder / f"{number}-{slug}.md").write_text(body, encoding="utf-8")
 
     return roadmap(forge_dir)
@@ -453,7 +453,7 @@ def write_steps(forge_dir: Path, phase: int, texts: list[str]) -> list[Step]:
 
     **Refuses to overwrite work.** Once any step of a phase is built or decided,
     rewriting the list would silently detach those records from the steps they
-    were recorded against — the decision would still exist and nothing would
+    were recorded against, the decision would still exist and nothing would
     point at it. Add to the end instead, or edit the file by hand and repair
     the chain.
     """
@@ -507,7 +507,7 @@ def mark_built(forge_dir: Path, phase: int, number: int) -> Step:
     """Tick a step off, once its code is written and its gate has passed.
 
     This is what moves the loop on. Until it is called the current step stays
-    the current step, so the next question is never asked — which is a stall,
+    the current step, so the next question is never asked, which is a stall,
     and a stall is the right failure here. The alternative is a loop that
     advances on nothing but a model's say-so, which is the behaviour this whole
     module exists to remove.

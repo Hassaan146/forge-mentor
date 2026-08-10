@@ -132,3 +132,27 @@ def test_every_question_teaches_before_it_asks(forge: Path) -> None:
     for question in ff.FOUNDATION:
         assert question.means, f"{question.key} asks without explaining"
         assert question.subtitle, f"{question.key} does not say what it decides"
+
+
+def test_no_question_teaches_for_longer_than_the_cap() -> None:
+    """Rule R10, checked at the source rather than only at the renderer.
+
+    The renderer truncates, so a question with eleven lines of teaching would
+    still look fine on screen while silently losing nine of them. Better that
+    the text is short than that it is cut.
+    """
+    import forge_ui as ui
+
+    for question in ff.FOUNDATION:
+        assert len(question.means) <= ui.MAX_MEANS_LINES, (
+            f"{question.key} teaches in {len(question.means)} lines"
+        )
+
+
+def test_nothing_the_user_reads_uses_an_em_dash() -> None:
+    """The user asked for none, and that covers what Forge prints."""
+    for question in ff.FOUNDATION:
+        for text in (question.question, question.subtitle, *question.means):
+            assert "\u2014" not in text, f"{question.key}: {text}"
+        for _letter, label, note in question.options:
+            assert "\u2014" not in label and "\u2014" not in note, question.key

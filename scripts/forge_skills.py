@@ -302,7 +302,7 @@ def install_library(
     if folder.exists() and any(folder.iterdir()):
         raise SkillError(
             f"{folder} already exists but holds no skills. Forge will not "
-            "overwrite it — move or delete it, then run setup again."
+            "overwrite it. Move or delete it, then run setup again."
         )
 
     folder.parent.mkdir(parents=True, exist_ok=True)

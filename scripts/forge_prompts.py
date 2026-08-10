@@ -96,12 +96,12 @@ def render(entries: list[fe.Explained], project: str = "") -> str:
             }
         ).rstrip("\n"),
         "",
-        f"# Prompts — {project or 'this project'}",
+        f"# Prompts, {project or 'this project'}",
         "",
         "Generated from the decision records, not written afterwards. Each entry is what "
         "Forge actually asked and what was actually answered, recorded at the time.",
         "",
-        "Anything credential-shaped is blanked before it is written here — this file sits "
+        "Anything credential-shaped is blanked before it is written here. This file sits "
         "in the project root and the repository may be public. The full text is always in "
         "`.claude/forge/decisions/`.",
         "",

@@ -1,4 +1,4 @@
-"""Forge Mentor — putting a request together so the cache can do its job.
+"""Forge Mentor, putting a request together so the cache can do its job.
 
 A model caches a request by its *prefix*. Everything up to the first byte that
 differs from last time is reused cheaply; from that byte onward it is paid for
@@ -6,15 +6,15 @@ again. So the order of the pieces decides the bill: stable things first,
 changing things last. Get it backwards and the cache never hits once.
 
 The failure this module exists to catch is quiet. Nothing errors, nothing looks
-wrong — a timestamp, a session id, or a re-sorted dictionary slips into the
+wrong, a timestamp, a session id, or a re-sorted dictionary slips into the
 frozen part of the prompt, the prefix changes on every call, and the cache
 silently stops working. The only symptom is the bill, and on a subscription
 there is no bill to notice.
 
 So the prefix is fingerprinted and the fingerprint is remembered. When it moves,
 Forge says so and names the block that moved. And blocks declared frozen are
-scanned for the things that are known to move — a date, a clock time, a uuid, a
-run of digits long enough to be an id — because the cheapest time to catch a
+scanned for the things that are known to move, a date, a clock time, a uuid, a
+run of digits long enough to be an id, because the cheapest time to catch a
 cache killer is before it is sent.
 
 Ordering here, measurement in `forge_meter`. The meter's `cache_saving` figure
@@ -41,7 +41,7 @@ CHARS_PER_TOKEN = 4
 class Tier(IntEnum):
     """How often a block changes. Lower goes earlier in the request."""
 
-    FROZEN = 0  # the contract and the skills — identical every call
+    FROZEN = 0  # the contract and the skills, identical every call
     SLOW = 1  # decisions already recorded; grows, never rewrites
     VOLATILE = 2  # this step, this file, this question
 
@@ -111,7 +111,7 @@ def _kill_risks(block: Block) -> list[str]:
 
     Both frozen *and* slow blocks are scanned. Only the volatile tier sits
     outside the prefix, so a date in a slow block costs exactly as much as a
-    date in a frozen one — the first draft checked frozen alone and would have
+    date in a frozen one, the first draft checked frozen alone and would have
     missed half the cases it exists to catch.
     """
     if block.tier is Tier.VOLATILE:
@@ -192,7 +192,7 @@ def remember_prefix(forge_dir: Path, assembly: Assembly) -> None:
         "# The cached part of each request\n\n"
         "The fingerprint above covers everything sent before the changing part of a\n"
         "request. While it holds still, the model reuses that text instead of reading\n"
-        "it again. When it moves, Forge says so — a moving prefix means the cache is\n"
+        "it again. When it moves, Forge says so, a moving prefix means the cache is\n"
         "not working, and nothing else reports that.\n"
     )
     try:

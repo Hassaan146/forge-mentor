@@ -80,7 +80,7 @@ class Integrity(str, Enum):
             Integrity.VERIFIED: "written by Forge and unchanged since",
             Integrity.MODIFIED: "the text changed after it was written",
             Integrity.CHAIN_BROKEN: "a record was inserted, removed, or reordered",
-            Integrity.UNSIGNED: "hand-written — readable, but not treated as an approval",
+            Integrity.UNSIGNED: "hand-written, readable, but not treated as an approval",
         }[self]
 
 

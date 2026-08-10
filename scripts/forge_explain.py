@@ -140,7 +140,7 @@ def render(entries: list[Explained], project: str = "") -> str:
         lines += [
             "No decisions have been recorded yet, so there is nothing to explain.",
             "",
-            "This file fills itself in as you answer questions — it is assembled from",
+            "This file fills itself in as you answer questions, it is assembled from",
             "your decision records, never written separately.",
             "",
         ]
@@ -155,7 +155,7 @@ def render(entries: list[Explained], project: str = "") -> str:
             else ".\n"
         ),
         "Read in the order they were decided, because each one was made knowing the",
-        "ones above it — which is not the order the files are listed in.",
+        "ones above it, which is not the order the files are listed in.",
         "",
         "---",
         "",

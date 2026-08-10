@@ -157,7 +157,7 @@ def push(
 
     if plan.secrets:
         raise PushError(
-            "Stopped: these look like credential files and would be published — "
+            "Stopped: these look like credential files and would be published, "
             + ", ".join(plan.secrets)
             + ".\nThis is the one rule no setting turns off. Remove them from the "
             "commit, and treat any that already left as leaked."

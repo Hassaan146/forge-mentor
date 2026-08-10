@@ -1,4 +1,4 @@
-"""Forge Mentor — chain repair.
+"""Forge Mentor, chain repair.
 
 Implements decisions 022 and 023: when a record has been altered or a plan
 added afterwards, Forge warns, stops, and restores the record from its
@@ -6,7 +6,7 @@ committed version.
 
 **Why repair rather than only refuse.** Decision 021 chose to detect rather
 than prevent, because refusing outright could strand a user behind one damaged
-old record (challenge finding H1). Repair removes that objection — enforcement
+old record (challenge finding H1). Repair removes that objection, enforcement
 is safe when the fix is automatic.
 
 **Where the correct version comes from.** Git. Decision 005 commits on every
@@ -15,7 +15,7 @@ reversed into text; the commit history is the only real source, and it is
 already there.
 
 **What is never done.** Nothing is deleted. A forged record with no earlier
-version cannot be restored, so it is moved to `.claude/forge/quarantine/` — the chain
+version cannot be restored, so it is moved to `.claude/forge/quarantine/`, the chain
 becomes whole, the evidence survives, and nothing is destroyed.
 """
 
@@ -39,15 +39,15 @@ QUARANTINE = "quarantine"
 class Remedy(str, Enum):
     """What can be done about a record that does not verify."""
 
-    RESTORE = "restore"       # a committed version exists — put it back
-    QUARANTINE = "quarantine" # never committed — move it aside
+    RESTORE = "restore"       # a committed version exists, put it back
+    QUARANTINE = "quarantine" # never committed, move it aside
     NONE = "none"             # nothing wrong
 
     @property
     def description(self) -> str:
         return {
             Remedy.RESTORE: "restore the committed version",
-            Remedy.QUARANTINE: "move aside — this record was never committed",
+            Remedy.QUARANTINE: "move aside, this record was never committed",
             Remedy.NONE: "nothing to do",
         }[self]
 
@@ -62,16 +62,16 @@ class Problem:
     remedy: Remedy
 
     def describe(self) -> str:
-        """Plain words, per rule R1 — the user may not be technical."""
+        """Plain words, per rule R1, the user may not be technical."""
         return (
-            f"Decision {self.decision_id:03d} — {self.integrity.explanation}.\n"
+            f"Decision {self.decision_id:03d}, {self.integrity.explanation}.\n"
             f"  file:   {self.path.name}\n"
             f"  remedy: {self.remedy.description}"
         )
 
 
 # --------------------------------------------------------------------------
-# git — the source of the correct version
+# git, the source of the correct version
 # --------------------------------------------------------------------------
 
 
@@ -151,7 +151,7 @@ def restore(problem: Problem, repo: Path, forge_dir: Path) -> bool:
 
     **The current file is quarantined first.** This module's whole promise is
     that nothing is ever destroyed, and `quarantine` honoured it while this
-    function did not — it wrote the committed text straight over whatever was
+    function did not, it wrote the committed text straight over whatever was
     there. What it overwrote is exactly the thing worth keeping: either
     evidence of tampering, or an edit the user made and had not committed yet.
     Neither is recoverable once it is gone.
@@ -186,7 +186,7 @@ def quarantine(problem: Problem, forge_dir: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
 
     # The timestamp alone is not unique: two records quarantined in the same
-    # second would collide and the first would be overwritten — destroying the
+    # second would collide and the first would be overwritten, destroying the
     # evidence this function exists to preserve. A counter guarantees a free name.
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     destination = folder / f"{stamp}-{problem.path.name}"
@@ -230,7 +230,7 @@ def verify_after_repair(forge_dir: Path) -> bool:
 
 
 # --------------------------------------------------------------------------
-# the chain file — decision 023
+# the chain file, decision 023
 # --------------------------------------------------------------------------
 
 
@@ -246,7 +246,7 @@ def write_chain(forge_dir: Path) -> Path:
     """
     path = forge_dir / CHAIN_FILE
     lines = [
-        "# Forge decision chain — generated, do not edit",
+        "# Forge decision chain, generated, do not edit",
         "# Each line: <id> <status> <fingerprint> <links-to>",
         "",
     ]
@@ -269,7 +269,7 @@ def _make_read_only(path: Path) -> None:
     try:
         path.chmod(path.stat().st_mode & ~stat.S_IWRITE & ~stat.S_IWGRP & ~stat.S_IWOTH)
     except OSError:
-        pass  # best effort by design — never fail because of a permission flag
+        pass  # best effort by design, never fail because of a permission flag
 
 
 def _make_writable(path: Path) -> None:

@@ -175,7 +175,7 @@ def run_tests(project: Path) -> tuple[bool, str]:
             timeout=TEST_TIMEOUT,
         )
     except FileNotFoundError:
-        return True, "pytest is not installed — gate skipped"
+        return True, "pytest is not installed, gate skipped"
     except subprocess.TimeoutExpired:
         return False, f"the tests ran past {TEST_TIMEOUT // 60} minutes and were stopped"
 
@@ -246,7 +246,7 @@ def main() -> None:
 
     if problems:
         deny(
-            "The decision history has been altered — committing would make that "
+            "The decision history has been altered. Committing would make that "
             "permanent and push it to everyone else.\n"
             + "\n".join(f"  {p.describe()}" for p in problems)
             + "\n\n  Repair it first, then commit."
