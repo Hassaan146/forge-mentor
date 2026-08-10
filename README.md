@@ -78,8 +78,22 @@ If you are already in a Claude Code session and see a `>` prompt, use these:
 
 Bare `/plugin` opens the panel, which is also where you **enable or disable** an
 installed plugin. Worth knowing where that switch is: a disabled plugin is still
-installed and still the right version, and it loads nothing at all — no hooks, no
+installed and still the right version, and it loads nothing at all, no hooks, no
 engine, no `/forge:*` commands. It looks exactly like a plugin that is not working.
+
+**Updating from a session is one command, not two:**
+
+```
+/plugin marketplace update forge-marketplace
+```
+
+Refreshing the marketplace downloads the new plugin with it. It reports
+"1 plugin bumped", and the bump *is* the download.
+
+**There is no `/plugin update <name>`.** Claude Code reads `/plugin` as the plugin
+browser and opens it, arguments and all, so running it looks like nothing happened
+while you stare at a list of every plugin in the catalogue. The slash commands do
+not mirror the CLI one for one.
 
 ### In a normal terminal — the `claude` CLI
 
@@ -92,6 +106,17 @@ claude plugin marketplace add Hassaan146/forge-marketplace
 
 ```bash
 claude plugin install forge@forge-marketplace
+```
+
+Updating here **is** two commands, in this order, because the second reads the
+catalogue that the first refreshes:
+
+```bash
+claude plugin marketplace update forge-marketplace
+```
+
+```bash
+claude plugin update forge@forge-marketplace
 ```
 
 The CLI can do a few things the slash commands cannot, and these are the ones worth
