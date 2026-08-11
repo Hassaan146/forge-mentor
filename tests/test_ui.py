@@ -706,7 +706,7 @@ def test_the_fence_leaves_the_drawing_alone() -> None:
     out = ui.render_from(
         {"kind": "decision", "title": "t", "means": ["a line"], "done": 2, "total": 6}
     )
-    inside = out.split("```")[1]
+    inside = ANSI.sub("", out.split("```")[1])
 
     framed = [ln for ln in inside.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
     assert len({ui.visible_width(ln) for ln in framed}) == 1, "the box is still square"
@@ -768,3 +768,35 @@ def test_a_terminal_still_gets_the_box() -> None:
         "print(ui.render_from({'kind': 'action', 'ask': 'A, B, or C?'}))"
     )
     assert "╔" in out, "where escape codes work, the frame is still drawn"
+
+
+def test_the_fence_is_tagged_ansi_and_keeps_the_codes() -> None:
+    """The one combination the previous four attempts each missed half of.
+
+    Retyped ANSI is stripped. ANSI through a command is stripped. A block
+    through a command is collapsed. A markdown block loses the box. An `ansi`
+    fence keeps the drawing and hands the codes to the client to interpret.
+    """
+    out = ui.render_from({"kind": "decision", "title": "t", "choices": [["A", "one", "x"]]})
+
+    assert out.startswith("```ansi")
+    assert "\033[" in out, "the codes are in there for the client to act on"
+    assert "┌" in out and "YOUR TURN" in out, "and the drawing is untouched"
+
+
+def test_the_palette_is_put_back_after_drawing() -> None:
+    """It rebinds module globals, so leaving it on would colour the hooks too."""
+    before = ui._ON
+    ui.render_from({"kind": "action", "ask": "go?"})
+    assert ui._ON is before
+
+
+def test_a_renderer_that_shows_codes_raw_has_a_way_out(monkeypatch) -> None:
+    """I cannot test every client, and a screen of `[38;5;215m` is worse than
+    no colour at all."""
+    monkeypatch.setenv("FORGE_PLAIN_FENCE", "1")
+    out = ui.render_from({"kind": "decision", "title": "t"})
+
+    assert out.startswith("```\n"), "a plain fence, no language tag"
+    assert "\033[" not in out
+    assert "┌" in out, "and the box is still the box"

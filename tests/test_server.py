@@ -537,12 +537,14 @@ def test_the_legend_returns_the_meanings_as_data_too() -> None:
         "AMBER", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE",
     }
 
-    if ui._ON:
-        for meaning in answer["meanings"]:
-            assert meaning["name"] in answer["block"]
-    else:
-        for symbol, _ in ui.SYMBOL_MEANINGS:
-            assert symbol in answer["block"]
+    # The block teaches whichever key the destination can actually use. In a
+    # terminal, and inside an `ansi` fence where the client interprets the
+    # codes, that is the six colours. Where the codes would show raw it is the
+    # nine symbols instead.
+    for meaning in answer["meanings"]:
+        assert meaning["name"] in answer["block"]
+    if not ui._ON:
+        assert answer["block"].startswith("```ansi"), "fenced, codes left in"
 
 
 def test_a_follow_up_can_carry_an_important_line_and_a_separate_ask() -> None:

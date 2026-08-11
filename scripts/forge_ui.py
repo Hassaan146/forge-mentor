@@ -112,6 +112,37 @@ def _c(code: str) -> str:
     return code if _ON else ""
 
 
+# Every colour, whether or not this process is emitting them. Kept so a block
+# can be drawn in colour for a destination that wants the codes even though the
+# process itself would not print them: see the `ansi` fence in `render_from`.
+_CODES = {
+    "AMBER": "\033[38;5;215m",
+    "BLUE": "\033[38;5;75m",
+    "GREEN": "\033[38;5;114m",
+    "YELLOW": "\033[38;5;221m",
+    "RED": "\033[38;5;203m",
+    "PURPLE": "\033[38;5;177m",
+    "DIM": "\033[38;5;245m",
+    "FAINT": "\033[38;5;240m",
+    "BOLD": "\033[1m",
+    "RESET": "\033[0m",
+}
+
+
+def _apply_colour(on: bool) -> None:
+    """Turn the palette on or off for the whole module.
+
+    The builders read these as module constants, so switching the palette means
+    rebinding them rather than threading a flag through fifteen functions. Used
+    only by `render_from`, and always put back.
+    """
+    globals()["_ON"] = on
+    for name, code in _CODES.items():
+        globals()[name] = code if on else ""
+    globals()["CYAN"] = globals()["BLUE"]
+    globals()["NC"] = globals()["RESET"]
+
+
 # --------------------------------------------------------------------------
 # the palette — six meanings, one colour each (rule R11)
 # --------------------------------------------------------------------------
@@ -1238,7 +1269,24 @@ def render_from(payload: dict) -> str:
     # draws its own container around it. The symbols and the frame carry the
     # meaning, which is what rule R11 has required from the start.
     if not _ON and kind != "banner":
-        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+        # An `ansi` fence: the box drawn exactly as it is, with the escape
+        # codes left in for the client to interpret. It is the one combination
+        # that gives both things, and the previous four attempts each gave one.
+        #
+        # `FORGE_PLAIN_FENCE=1` drops back to a fence with no codes in it, for
+        # a renderer that shows them raw rather than acting on them. That switch
+        # exists because I cannot test every client, and a screen full of
+        # `[38;5;215m` is worse than no colour at all.
+        if os.environ.get("FORGE_PLAIN_FENCE"):
+            return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+
+        was_on = _ON
+        try:
+            _apply_colour(True)
+            drawn = _plain_block(payload).strip("\n")
+        finally:
+            _apply_colour(was_on)
+        return "```ansi\n" + drawn + "\n```"
 
     if kind == "legend":
         return legend()
