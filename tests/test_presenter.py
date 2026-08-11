@@ -92,9 +92,13 @@ def test_an_open_question_asked_as_prose_is_refused(project: Path) -> None:
     answer = stop(project, "So, how do you want people to log in? Let me know.")
 
     assert blocked(answer)
-    assert "asked as prose" in answer["reason"]
     assert "forge_ui.py" in answer["reason"], "and it names the command to run"
     assert "render" in answer["reason"]
+
+    # Short, because Claude Code shows a Stop hook's reason on screen. A
+    # fourteen-line correction with a JSON example in it arrived looking like
+    # the plugin had crashed, in the middle of a user's first run.
+    assert len(answer["reason"].splitlines()) <= 2
 
 
 def test_a_framed_question_passes(project: Path) -> None:
@@ -126,7 +130,8 @@ def test_a_frame_buried_in_prose_is_still_refused(project: Path) -> None:
     answer = stop(project, wall + "\n  ┌──┐\n  │x │\n  └──┘")
 
     assert blocked(answer)
-    assert "loose prose" in answer["reason"]
+    assert "lines of prose" in answer["reason"]
+    assert len(answer["reason"].splitlines()) <= 2
 
 
 def test_a_short_lead_in_is_allowed(project: Path) -> None:

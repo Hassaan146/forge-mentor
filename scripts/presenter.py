@@ -62,6 +62,10 @@ def block(reason: str) -> None:
 # Printing it through this command puts it on the same channel as the banner.
 RENDER_COMMAND = "forge_ui.py"
 
+# Named once, in the shortest form that is still runnable. `start.md` carries
+# the full payload shape and the assistant has already read it.
+RENDER_HINT = 'python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render'
+
 
 def rendered_by_command(transcript: Path) -> bool:
     """Did this turn print a block through the render command?
@@ -184,34 +188,21 @@ def main() -> None:
         if not said.strip():
             allow()
 
+        # Short, because the user reads this too. It is addressed to the
+        # assistant, but Claude Code shows a Stop hook's reason on screen, so a
+        # fourteen-line correction with a JSON example in it arrives looking
+        # like the plugin has crashed. The detail belongs in `start.md`, which
+        # the assistant has already read; this only has to name the fix.
         if not is_framed(said):
             block(
-                "A question is open and it was asked as prose.\n"
-                f"  Open: {pending.question}\n"
-                "Forge never asks in plain text. An unframed paragraph is "
-                "indistinguishable from ordinary chat, so the user cannot tell "
-                "which of the two is bound by Forge's rules (decision 035).\n"
-                "  -> print it with the render command, which is what puts the "
-                "block on screen in colour:\n"
-                '     python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render '
-                "<<'JSON'\n"
-                '     {\"kind\": \"decision\", \"title\": \"...\", \"choices\": '
-                '[[\"A\", \"...\", \"...\"]]}\n'
-                "     JSON\n"
-                "  Do not paste the block into your reply instead. Retyped, it "
-                "loses every colour on the way through markdown."
+                f"Ask it with the render command, not in prose: {RENDER_HINT}"
             )
 
         if loose_lines(said) > MAX_LOOSE_LINES:
             block(
-                f"The frame is there, but {loose_lines(said)} lines of loose prose "
-                f"are around it (the limit is {MAX_LOOSE_LINES}).\n"
-                "Rule R10: a question is a short title, two lines of explanation, "
-                "one line per option, one recommendation, one cost. Everything else "
-                "belongs in the decision record, where someone will look for it in "
-                "a month.\n"
-                "  → move it into the block, or into the record, and say the rest "
-                "with fewer words."
+                f"{loose_lines(said)} lines of prose around the block "
+                f"(rule R10 allows {MAX_LOOSE_LINES}). Move the rest into the "
+                "block or the decision record."
             )
     except Exception:
         # Never wedge a session over presentation. The governor can afford to

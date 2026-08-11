@@ -871,6 +871,30 @@ def foundation_question(project: str) -> dict[str, Any]:
     if question is None:
         return {"finished": True, "answered": done, "total": total}
 
+    # The command, already built. Composing it was left to the caller, and a
+    # caller that forgets writes the question as prose, gets refused by the
+    # presenter hook, and the user watches a correction go past that reads like
+    # a crash. Handing over something runnable removes the step where that
+    # happens.
+    import json as _json
+
+    payload = {
+        "kind": "decision",
+        "number": done + 1,
+        "title": question.question,
+        "subtitle": question.subtitle,
+        "means": list(question.means),
+        "choices": [list(o) for o in question.options],
+        "done": done,
+        "total": total,
+        "stage": "foundation",
+    }
+    command = (
+        'python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render <<\'JSON\'\n'
+        + _json.dumps(payload, indent=1)
+        + "\nJSON"
+    )
+
     return {
         "finished": False,
         "key": question.key,
@@ -880,6 +904,12 @@ def foundation_question(project: str) -> dict[str, Any]:
         "choices": [list(o) for o in question.options],
         "answered": done,
         "total": total,
+        "render": command,
+        "next": (
+            "Run `render` exactly as given, before saying anything. Add the "
+            "recommendation and its cost to the payload where the question has "
+            "options. Do not retype the block into your reply."
+        ),
     }
 
 

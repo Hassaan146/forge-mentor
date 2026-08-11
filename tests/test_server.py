@@ -702,3 +702,41 @@ def test_nothing_is_built_until_the_user_has_seen_the_whole_plan(
 
 def test_the_roadmap_needs_a_plan_to_show(project: str) -> None:
     assert "error" in call(srv.show_roadmap)(project)
+
+
+def test_the_foundation_question_hands_over_a_runnable_command(project: str) -> None:
+    """Composing it was the caller's job, and a caller that forgets is refused.
+
+    The presenter hook catches a question asked as prose, but the user watches
+    that correction go past and it reads like a crash. Handing over something
+    runnable removes the step where it happens.
+    """
+    answer = call(srv.foundation_question)(project)
+
+    assert "forge_ui.py" in answer["render"] and " render " in answer["render"]
+    assert "What's the idea?" in answer["render"]
+    assert answer["render"].rstrip().endswith("JSON")
+    assert "before saying anything" in answer["next"]
+
+
+def test_the_command_it_hands_over_actually_renders(project: str) -> None:
+    """A command nobody has watched run is the other half of this week's lesson."""
+    import json
+    import subprocess
+
+    answer = call(srv.foundation_question)(project)
+    payload = answer["render"].split("<<'JSON'\n", 1)[1].rsplit("\nJSON", 1)[0]
+
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    done = subprocess.run(
+        [sys.executable, str(scripts / "forge_ui.py"), "render"],
+        input=payload,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert "What's the idea?" in done.stdout
+    assert "┌" in done.stdout, "and it comes out framed"
+    json.loads(payload)
