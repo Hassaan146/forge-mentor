@@ -744,23 +744,13 @@ def test_a_terminal_still_gets_the_box() -> None:
     assert "╔" in out, "where escape codes work, the frame is still drawn"
 
 
-def test_the_block_is_a_fenced_box() -> None:
-    """Seven shapes tried, each checked against a real screen.
+def test_the_plain_fence_is_still_available_behind_a_switch(monkeypatch) -> None:
+    """The drawn box with no colour, for a client with no highlighter."""
+    monkeypatch.setenv("FORGE_PLAIN_FENCE", "1")
+    out = ui.render_from({"kind": "decision", "number": 3, "title": "t"})
 
-    ANSI retyped is stripped. ANSI by command is stripped. A block by command is
-    collapsed and never shown. Loose markdown gets colour and loses the box. A
-    plain fence keeps the box and loses the colour. An ```ansi fence prints the
-    codes raw. A table is the only arrangement where the box and the colour come
-    from the same place: the client draws the border and colours the contents.
-    """
-    out = ui.render_from(
-        {"kind": "decision", "number": 3, "title": "t", "choices": [["A", "one", "x"]]}
-    )
-
-    assert out.startswith("```\n"), "fenced, so nothing reflows the drawing"
-    assert "\033[" not in out, "no escape codes; this surface prints them raw"
-    assert "┌" in out and "└" in out, "and the box is a box"
-    assert "DECISION 003" in out and "YOUR TURN" in out
+    assert out.startswith("```\n"), "no language tag, nothing to highlight"
+    assert "┌" in out and "└" in out, "and the box is drawn"
 
 
 def test_the_table_is_still_available_behind_a_switch(monkeypatch) -> None:
@@ -868,3 +858,81 @@ def test_the_cap_still_drops_whole_sentences_past_three() -> None:
 
     assert "Sentence number 3." in out
     assert "Sentence number 4." not in out, "past the cap it belongs in the record"
+
+
+# --------------------------------------------------------------------------
+# the client colours it, because the client has a highlighter
+# --------------------------------------------------------------------------
+
+
+def test_the_block_is_a_diff_fence_so_the_client_colours_it() -> None:
+    """Nine attempts, and this is the one that stopped carrying the colour.
+
+    Claude Code bundles highlight.js: hljs-addition, hljs-deletion, hljs-meta
+    and hljs-comment are all in the binary. A fence in a language it knows is
+    tokenised and painted at the far end. `ansi` failed only because
+    highlight.js has no such language, not because fences cannot be coloured.
+    """
+    out = ui.render_from(
+        {
+            "kind": "decision",
+            "number": 3,
+            "title": "t",
+            "choices": [["A", "one", "x"]],
+            "against": "a cost",
+        }
+    )
+
+    assert out.startswith("```diff"), "a language the highlighter knows"
+    assert "\033[" not in out, "the colour is applied there, not carried there"
+
+
+def test_every_marker_sits_in_column_zero() -> None:
+    """highlight.js anchors them with `^`.
+
+    A left border in front of a `+` makes it an ordinary line, which is why the
+    drawn border is gone and the fence is the container.
+    """
+    out = ui.render_from(
+        {
+            "kind": "decision",
+            "title": "t",
+            "subtitle": "sub",
+            "choices": [["A", "one", "x"], ["B", "two", "y"]],
+            "against": "a cost",
+            "done": 1,
+            "total": 6,
+        }
+    )
+    body = out.split("```diff\n", 1)[1].rsplit("\n```", 1)[0].splitlines()
+
+    for marker, meaning in (("+", "an option"), ("-", "a cost"), ("#", "quiet detail")):
+        marked = [line for line in body if line.startswith(marker)]
+        assert marked, f"nothing carries {marker} for {meaning}"
+
+    rules = [line for line in body if line.startswith("@@")]
+    assert len(rules) == 2, "a rule opens the block and one opens the turn"
+    assert rules[0].rstrip().endswith("@@"), "and each one closes"
+
+
+def test_the_markers_carry_forge_meanings_not_version_control_ones() -> None:
+    """Options are things you can pick, so they are additions. The cost is the
+    one line rule R11 paints yellow, so it is a deletion."""
+    out = ui.render_from(
+        {
+            "kind": "decision",
+            "title": "t",
+            "choices": [["A", "Front end only", "no server"]],
+            "against": "the data stays on this machine",
+            "important_lines": ["This cannot be undone."],
+        }
+    )
+
+    assert "+   A  Front end only" in out
+    assert any(
+        line.startswith("- ") and "the data stays on this machine" in line
+        for line in out.splitlines()
+    )
+    assert any(
+        line.startswith("- ") and "cannot be undone" in line for line in out.splitlines()
+    )

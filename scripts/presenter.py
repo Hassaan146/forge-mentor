@@ -170,22 +170,28 @@ MARKS = "⚒💡⚖★⚠✅⛔→▌"
 def _starts_the_block(line: str) -> bool:
     """Is this the line where Forge's own block begins?
 
-    Three shapes, because the block is drawn differently depending on what the
-    destination can render, and the hook has to recognise all of them:
+    Four shapes, because the block is drawn to suit the destination and the
+    hook has to recognise every one of them:
 
       * a frame character, in a terminal that takes escape codes
+      * `@@ … @@`, the rule of a `diff` fence, which is what the client's own
+        highlighter colours
       * a symbol on a markdown heading
-      * a symbol in a table row, which is how the client is asked to draw the
-        border itself
+      * a symbol in a table row
 
-    The table was missed on the first pass and would have refused every
-    question, which is what a cross-check is for.
+    Each new presentation has had to be added here, and twice it was forgotten
+    and refused every question the render tools produced. The check has to be
+    updated in the same breath as the drawing, which is the lesson of decision
+    045 and the reason this list is spelled out rather than inferred.
     """
     if any(char in FRAMES for char in line):
         return True
 
-    start = line.lstrip()[:1]
-    return start in {"#", "|"} and any(mark in line for mark in MARKS)
+    stripped = line.lstrip()
+    if stripped.startswith("@@") and any(mark in line for mark in MARKS):
+        return True
+
+    return stripped[:1] in {"#", "|"} and any(mark in line for mark in MARKS)
 
 
 def is_framed(text: str) -> bool:

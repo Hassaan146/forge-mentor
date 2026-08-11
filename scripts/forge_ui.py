@@ -1223,6 +1223,134 @@ def _plain_block(payload: dict) -> str:
     )
 
 
+def _diff_block(payload: dict) -> str:
+    """The block as a `diff` fence, which the client's highlighter colours.
+
+    **Why this works where five other things did not.** Claude Code bundles
+    highlight.js: `hljs-addition`, `hljs-deletion`, `hljs-meta` and
+    `hljs-comment` are all in the binary. A fenced block with a language it
+    knows gets tokenised and coloured by the client itself, so the colour is
+    applied at the far end rather than carried there. `ansi` failed because
+    highlight.js has no such language, not because fences cannot be coloured.
+
+    **The markers carry the meanings.** They are not decoration borrowed from
+    version control:
+
+      `@@ … @@`   Forge's own chrome, the heading and the turn marker
+      `+`         an option, a thing you can pick
+      `-`         what it costs you, the line R11 paints yellow
+      `#`         quiet detail, the subtitle and the progress
+
+    Every one of them has to sit in column zero, because highlight.js anchors
+    them with `^`. That is why the left border is gone: a `│` in front of a
+    `+` makes it an ordinary line. The fence draws the container instead, and
+    the rules above and below close it.
+    """
+    kind = str(payload.get("kind", "")).strip().lower()
+    rule = "─" * 58
+
+    def head(text: str) -> str:
+        return f"@@ {text} {rule[: max(4, 62 - len(text))]}@@"
+
+    if kind == "action":
+        hint = str(payload.get("hint") or "") or ASK_KINDS.get(
+            str(payload.get("ask_kind", "answer")), ""
+        )
+        out = [head(f"{ACTION} YOUR TURN"), "", f"  {payload.get('ask', '')}"]
+        if hint:
+            out.append(f"# {hint}")
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "note":
+        out = [head(f"{payload.get('symbol') or MARK} {payload.get('heading', '')}"), ""]
+        out += [
+            f"  {line}"
+            for line in (payload.get("lines") or [])
+            if str(line).strip()
+        ][:MAX_NOTE_LINES]
+        out += [f"- {BAR} {line}" for line in payload.get("important_lines") or []]
+        if payload.get("ask"):
+            out += ["", head(f"{ACTION} YOUR TURN"), "", f"  {payload['ask']}"]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "legend":
+        out = [head(f"{MARK} How to read Forge"), ""]
+        out += [f"  {symbol}  {meaning}" for symbol, meaning in SYMBOL_MEANINGS]
+        out += ["", "# A `→ YOUR TURN` rule means Forge has stopped and is waiting."]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "roadmap":
+        out = [head(f"{MARK} {payload.get('title', 'THE PLAN')}"), ""]
+        for phase in payload.get("phases") or []:
+            steps = list(phase.get("steps") or [])
+            built = int(phase.get("built") or 0)
+            state = str(phase.get("state", "later"))
+            count = f"{built}/{len(steps)} steps" if steps else "no steps yet"
+            marker = "+" if state == "done" else (" " if state == "now" else "#")
+            out.append(
+                f"{marker} {phase.get('number', '')}  {phase.get('title', '')}"
+                f"   {count} · {state}"
+            )
+            out.append(f"#     {phase.get('delivers', '')}")
+            if state == "now":
+                for position, step in enumerate(steps, start=1):
+                    tick = RECORDED if step.get("built") else "·"
+                    out.append(f"    {tick} {position}. {step.get('text', '')}")
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind != "decision":
+        raise ValueError(
+            f"Unknown block kind {kind!r}. "
+            "Use one of: decision, note, action, legend, roadmap, banner."
+        )
+
+    number = payload.get("number")
+    title = f"{MARK} FORGE" + (f" · DECISION {int(number):03d}" if number else "")
+
+    out = [head(title), "", f"  {payload.get('title', '')}"]
+    if payload.get("subtitle"):
+        out.append(f"# {payload['subtitle']}")
+
+    means = [line for line in (payload.get("means") or []) if str(line).strip()]
+    if means:
+        out += ["", f"  {TEACH} What this means"]
+        for line in means[:MAX_MEANS_LINES]:
+            out += [f"    {wrapped}" for wrapped in _wrap(line, 62, "")]
+
+    choices = payload.get("choices") or []
+    if choices:
+        out += ["", f"  {WEIGH} Options"]
+        width = max(len(str(c[1])) for c in choices)
+        for choice in choices:
+            letter, label, note_text = (list(choice) + ["", "", ""])[:3]
+            out.append(f"+   {letter}  {str(label).ljust(width)}   {note_text}")
+
+    recommend = payload.get("recommend")
+    if recommend:
+        pick, why = (list(recommend) + ["", ""])[:2]
+        out += ["", f"  {STAR} Recommended  {pick}"]
+        out += [f"      {wrapped}" for wrapped in _wrap(str(why), 60, "")]
+    if payload.get("against"):
+        out += [f"- {COST} Against it: {line}" for line in _wrap(str(payload["against"]), 60, "")]
+
+    for line in payload.get("important_lines") or []:
+        out += [f"- {BAR} {wrapped}" for wrapped in _wrap(str(line), 60, "")]
+
+    total = int(payload.get("total") or 0)
+    if total:
+        stage = f" · {payload['stage']}" if payload.get("stage") else ""
+        out += ["", f"# {int(payload.get('done') or 0)} of ~{total}{stage}"]
+
+    letters = _spoken_letters([str(c[0]) for c in choices]) if choices else ""
+    ask = str(payload.get("ask") or "") or (
+        f"Your call: {letters}?" if letters else "Your call"
+    )
+    hint = ASK_KINDS["choose" if choices else "answer"]
+    out += ["", head(f"{ACTION} YOUR TURN"), "", f"  {ask}", f"# {hint}"]
+
+    return "```diff\n" + "\n".join(out) + "\n```"
+
+
 def _boxed_markdown(payload: dict) -> str:
     """The block as a one-column table, so the client draws the box.
 
@@ -1429,13 +1557,17 @@ def render_from(payload: dict) -> str:
         if os.environ.get("FORGE_TABLE"):
             return _boxed_markdown(payload)
 
-        # **The plain fence, and this is where it stops.** Eight arrangements,
-        # every one checked against a real screen, and this is the one that
-        # reads as a single object with a boundary. No colour reaches it, and
-        # rule R11 has required from the first day that colour is never the only
-        # signal precisely so that costs nothing: the symbols and the frame
-        # carry every meaning.
-        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+        # `FORGE_PLAIN_FENCE=1` gives the drawn box with no colour at all, for
+        # a client with no highlighter.
+        if os.environ.get("FORGE_PLAIN_FENCE"):
+            return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+
+        # **A `diff` fence, which the client itself colours.** Claude Code
+        # bundles highlight.js, so a fence in a language it knows is tokenised
+        # and painted at the far end rather than carried there. That is the one
+        # thing eight earlier attempts all missed: the colour does not have to
+        # survive the trip if the destination applies it.
+        return _diff_block(payload)
 
     if kind == "legend":
         return legend()
