@@ -747,20 +747,21 @@ MAX_MEANS_LINES = 3
 
 
 def _teaching_lines(means: list[str]) -> list[str]:
-    """Wrap the teaching, then stop at the cap.
+    """Take at most three sentences, then wrap each of them whole.
 
-    Wrapped as well as capped: these arrive as hand-broken strings, so a line
-    longer than the frame ran straight through the right border and took the
-    box with it. Nothing outside this module was measuring them.
+    **The cap counts sentences, not rows on the screen.** Counting rows meant a
+    sentence could be cut wherever the wrap happened to fall, and one of them
+    came out as "Changing it in week three is" with the "not." gone. That does
+    not shorten the teaching, it reverses it. A cap that can invert a sentence
+    is worse than no cap.
+
+    Wrapped as well, because these arrive as hand-broken strings: a line longer
+    than the frame ran straight through the right border and took the box with
+    it, and nothing outside this module was measuring them.
     """
     out: list[str] = []
-    for line in means:
-        if not line.strip():
-            continue
-        for wrapped in _wrap(line, WIDTH - 8, "    "):
-            out.append(wrapped)
-            if len(out) == MAX_MEANS_LINES:
-                return out
+    for line in [line for line in means if line.strip()][:MAX_MEANS_LINES]:
+        out += _wrap(line, WIDTH - 8, "    ")
     return out
 
 
@@ -1265,7 +1266,7 @@ def _boxed_markdown(payload: dict) -> str:
     if kind == "legend":
         return table(
             f"{MARK} **How to read Forge**",
-            [f"{symbol} &nbsp; {meaning}" for symbol, meaning in SYMBOL_MEANINGS],
+            [f"{symbol}  {meaning}" for symbol, meaning in SYMBOL_MEANINGS],
         )
 
     if kind == "roadmap":
@@ -1280,11 +1281,11 @@ def _boxed_markdown(payload: dict) -> str:
                 f"{mark} `{phase.get('number', '')}` **{phase.get('title', '')}** "
                 f"· {count} · {state}"
             )
-            rows.append(f"&nbsp;&nbsp;&nbsp; {phase.get('delivers', '')}")
+            rows.append(f"{phase.get('delivers', '')}")
             if state == "now":
                 for position, step in enumerate(steps, start=1):
                     tick = RECORDED if step.get("built") else "·"
-                    rows.append(f"&nbsp;&nbsp;&nbsp; {tick} {position}. {step.get('text', '')}")
+                    rows.append(f"{tick} {position}. {step.get('text', '')}")
         return table(f"{MARK} **{payload.get('title', 'THE PLAN')}**", rows)
 
     if kind != "decision":
@@ -1305,19 +1306,19 @@ def _boxed_markdown(payload: dict) -> str:
     means = [line for line in (payload.get("means") or []) if str(line).strip()]
     if means:
         rows.append(f"{TEACH} **What this means**")
-        rows += [f"&nbsp;&nbsp; {line}" for line in means]
+        rows += [f"{line}" for line in means]
 
     choices = payload.get("choices") or []
     if choices:
         rows.append(f"{WEIGH} **Options**")
         for choice in choices:
             letter, label, note_text = (list(choice) + ["", "", ""])[:3]
-            rows.append(f"&nbsp;&nbsp; `{letter}` &nbsp; **{label}** &nbsp; {note_text}")
+            rows.append(f"`{letter}`  **{label}**  {note_text}")
 
     recommend = payload.get("recommend")
     if recommend:
         pick, why = (list(recommend) + ["", ""])[:2]
-        rows.append(f"{STAR} **Recommended: {pick}** &nbsp; {why}")
+        rows.append(f"{STAR} **Recommended: {pick}**  {why}")
     if payload.get("against"):
         rows.append(f"{COST} **Against it:** {payload['against']}")
 
@@ -1419,15 +1420,22 @@ def render_from(payload: dict) -> str:
                 _apply_colour(was_on)
             return "```ansi\n" + drawn + "\n```"
 
-        # `FORGE_PLAIN_FENCE=1` gives the drawn box with no colour: the safe
-        # one, for any renderer that does not do tables.
-        if os.environ.get("FORGE_PLAIN_FENCE"):
-            return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+        # `FORGE_TABLE=1` renders it as a one-column table instead. That was
+        # tried as the default and was worse in two ways this renderer decides
+        # rather than the author: it draws a border after **every row**, so one
+        # block arrives as a stack of boxes, and it prints `&nbsp;` literally,
+        # so indentation came out as the entity itself. Kept because another
+        # client may do both properly.
+        if os.environ.get("FORGE_TABLE"):
+            return _boxed_markdown(payload)
 
-        # A table. The client draws the border and colours the contents, which
-        # is the only arrangement where the box and the colour come from the
-        # same place. Everything else made them fight.
-        return _boxed_markdown(payload)
+        # **The plain fence, and this is where it stops.** Eight arrangements,
+        # every one checked against a real screen, and this is the one that
+        # reads as a single object with a boundary. No colour reaches it, and
+        # rule R11 has required from the first day that colour is never the only
+        # signal precisely so that costs nothing: the symbols and the frame
+        # carry every meaning.
+        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
 
     if kind == "legend":
         return legend()

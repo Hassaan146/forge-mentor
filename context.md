@@ -159,14 +159,14 @@ Tests:
 python -m pytest
 ```
 
-723 tests, ~88% coverage, no model calls anywhere in the suite.
+727 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 723 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (43 records, ids 1 to 44; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 727 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (45 records, ids 1 to 45; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 
@@ -192,7 +192,7 @@ reloading it: hooks and the engine register at startup.
 
 ## Reading order for the records
 
-`.claude/forge/decisions/` holds 43, oldest first. The load-bearing ones:
+`.claude/forge/decisions/` holds 45, oldest first. The load-bearing ones:
 
 | | |
 |---|---|
@@ -213,7 +213,8 @@ reloading it: hooks and the engine register at startup.
 | 041 | the stack options name the shape, not the technology |
 | 042 | Opus 5 writes the code, and 002 is amended rather than edited |
 | 043 | one file switches Forge off in a project, and deletes nothing |
-| 044 | the block is a table, so the client draws the box and colours it |
+| 044 | eight ways to get a block on screen, and why seven fail |
+| 045 | the fenced box ships, and it is monochrome, and that is final |
 | 040 | the plugin tells you when it is out of date |
 
 `.claude/forge/code-explained.md` is the generated version of all of them, and

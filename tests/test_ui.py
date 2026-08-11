@@ -744,7 +744,7 @@ def test_a_terminal_still_gets_the_box() -> None:
     assert "╔" in out, "where escape codes work, the frame is still drawn"
 
 
-def test_the_block_is_a_table_so_the_client_draws_the_box() -> None:
+def test_the_block_is_a_fenced_box() -> None:
     """Seven shapes tried, each checked against a real screen.
 
     ANSI retyped is stripped. ANSI by command is stripped. A block by command is
@@ -757,11 +757,24 @@ def test_the_block_is_a_table_so_the_client_draws_the_box() -> None:
         {"kind": "decision", "number": 3, "title": "t", "choices": [["A", "one", "x"]]}
     )
 
-    assert out.startswith("| "), "a table, drawn by the renderer"
-    assert "| :--- |" in out, "with a header rule, or it is not one"
-    assert "[" not in out, "no escape codes; this surface prints them raw"
-    assert "```" not in out, "and no fence, which is what killed the colour"
+    assert out.startswith("```\n"), "fenced, so nothing reflows the drawing"
+    assert "\033[" not in out, "no escape codes; this surface prints them raw"
+    assert "┌" in out and "└" in out, "and the box is a box"
     assert "DECISION 003" in out and "YOUR TURN" in out
+
+
+def test_the_table_is_still_available_behind_a_switch(monkeypatch) -> None:
+    """Tried as the default and beaten by the fence on this renderer.
+
+    It drew a border after every row, so one block arrived as a stack of boxes,
+    and it printed `&nbsp;` literally. Kept because another client may do both
+    properly.
+    """
+    monkeypatch.setenv("FORGE_TABLE", "1")
+    out = ui.render_from({"kind": "decision", "title": "t"})
+
+    assert out.startswith("| ") and "| :--- |" in out
+    assert "&nbsp;" not in out, "the entity was never rendered; it is gone"
 
 
 def test_every_kind_survives_the_table_route() -> None:
@@ -826,3 +839,32 @@ def test_a_renderer_that_shows_codes_raw_has_a_way_out(monkeypatch) -> None:
     assert out.startswith("```\n"), "a plain fence, no language tag"
     assert "\033[" not in out
     assert "┌" in out, "and the box is still the box"
+
+
+def test_the_teaching_cap_never_cuts_a_sentence_in_half() -> None:
+    """It counted rows on screen, and a wrap fell in the wrong place.
+
+    "Changing the shape now is cheap. Changing it in week three is not." came
+    out ending at "week three is". That does not shorten the teaching, it
+    reverses it, and a cap that can invert a sentence is worse than no cap.
+    """
+    long_pair = [
+        "This is the last thing between six decisions and the first line of code.",
+        "Changing the shape now is cheap. Changing it in week three is not.",
+    ]
+    # Borders stripped, then collapsed. The block wraps to the frame and every
+    # row carries a `|`, so asserting on the raw string would be testing where
+    # the line breaks and the borders fall rather than what it says.
+    drawn = plain(ui.decision("t", means=long_pair))
+    flat = " ".join(drawn.translate({ord(c): " " for c in "│║"}).split())
+
+    assert "week three is not." in flat, "the sentence arrived whole"
+    for sentence in long_pair:
+        assert sentence in flat
+
+
+def test_the_cap_still_drops_whole_sentences_past_three() -> None:
+    out = plain(ui.decision("t", means=[f"Sentence number {n}." for n in range(1, 8)]))
+
+    assert "Sentence number 3." in out
+    assert "Sentence number 4." not in out, "past the cap it belongs in the record"
