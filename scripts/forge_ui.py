@@ -1141,6 +1141,56 @@ def _md_roadmap(phases: list[dict], title: str) -> str:
     return "\n".join(out)
 
 
+def _plain_block(payload: dict) -> str:
+    """The drawn block, whatever the colour setting says.
+
+    `render_from` sends everything here when escape codes cannot arrive, so it
+    has to build the frame directly rather than going back through the branch
+    that chose this route.
+    """
+    kind = str(payload.get("kind", "")).strip().lower()
+
+    if kind == "legend":
+        return legend()
+    if kind == "roadmap":
+        return roadmap(list(payload.get("phases") or []), payload.get("title", "THE PLAN"))
+    if kind == "action":
+        return action(
+            str(payload.get("ask", "")),
+            str(payload.get("hint", "")),
+            kind=str(payload.get("ask_kind", "answer")),
+        )
+    if kind == "note":
+        return note(
+            str(payload.get("heading", "")),
+            list(payload.get("lines") or []),
+            symbol=str(payload.get("symbol", "")),
+            ask=str(payload.get("ask", "")),
+            important_lines=list(payload.get("important_lines") or []) or None,
+        )
+    if kind == "decision":
+        recommend = payload.get("recommend")
+        return decision(
+            str(payload.get("title", "")),
+            number=payload.get("number") or None,
+            subtitle=str(payload.get("subtitle", "")),
+            means=list(payload.get("means") or []) or None,
+            choices=[tuple(c) for c in (payload.get("choices") or [])] or None,
+            recommend=(tuple(recommend) if recommend else None),
+            against=str(payload.get("against", "")),
+            important_lines=list(payload.get("important_lines") or []) or None,
+            done=int(payload.get("done") or 0),
+            total=int(payload.get("total") or 0),
+            stage=str(payload.get("stage", "")),
+            ask=str(payload.get("ask", "")),
+        )
+
+    raise ValueError(
+        f"Unknown block kind {kind!r}. "
+        "Use one of: decision, note, action, legend, roadmap, banner."
+    )
+
+
 def as_markdown(payload: dict) -> str:
     """The block as markdown, for a client that colours markdown and not ANSI."""
     kind = str(payload.get("kind", "")).strip().lower()
@@ -1174,11 +1224,21 @@ def render_from(payload: dict) -> str:
     """
     kind = str(payload.get("kind", "")).strip().lower()
 
-    # Where escape codes cannot arrive, hand the client markdown and let it do
-    # the colouring. The banner is the exception: it is ASCII art, and there is
-    # no markdown for a logo.
+    # Where escape codes cannot arrive, the block goes inside a fence.
+    #
+    # **Loose markdown was the wrong trade.** It bought colour from the client's
+    # renderer and lost the box, and the box is the thing: a decision has to
+    # arrive as one object with a boundary, or it reads as the assistant
+    # chatting (decision 035). Rendered as headings and quotes it sprawled down
+    # the screen with nothing holding it together, which is worse than
+    # monochrome.
+    #
+    # A fence keeps every column exactly where it was drawn: no reflow, no
+    # markdown interpreting `---` as a rule or `*` as emphasis, and the client
+    # draws its own container around it. The symbols and the frame carry the
+    # meaning, which is what rule R11 has required from the start.
     if not _ON and kind != "banner":
-        return as_markdown(payload)
+        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
 
     if kind == "legend":
         return legend()

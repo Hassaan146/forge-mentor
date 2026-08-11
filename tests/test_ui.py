@@ -686,21 +686,33 @@ def test_a_long_teaching_line_cannot_break_the_frame() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_where_colour_cannot_arrive_the_block_is_markdown() -> None:
-    """Six requests for colour, and the honest answer stopped being "it cannot".
+def test_where_colour_cannot_arrive_the_block_is_fenced() -> None:
+    """Loose markdown bought colour and lost the box. That was the wrong trade.
 
-    Escape codes never reach the user inside Claude Code. Markdown is the one
-    thing that surface does colour, so the block is handed over as markdown and
-    the client does the drawing.
+    A decision has to arrive as one object with a boundary or it reads as the
+    assistant chatting (decision 035). Rendered as headings and quotes it
+    sprawled down the screen with nothing holding it together, which is worse
+    than monochrome. A fence keeps every column where it was drawn.
     """
     out = ui.render_from({"kind": "decision", "title": "t", "choices": [["A", "one", "first"]]})
 
-    assert out.startswith("### "), "a heading, which the client colours"
-    assert "┌" not in out, "no box, because the box is what could not be coloured"
-    assert "→ YOUR TURN" in out
+    assert out.startswith("```") and out.rstrip().endswith("```")
+    assert "┌" in out and "└" in out, "the box is back"
+    assert "YOUR TURN" in out
 
 
-def test_the_markdown_block_carries_everything_the_box_did() -> None:
+def test_the_fence_leaves_the_drawing_alone() -> None:
+    """No reflow, and no markdown reading `---` as a rule or `*` as emphasis."""
+    out = ui.render_from(
+        {"kind": "decision", "title": "t", "means": ["a line"], "done": 2, "total": 6}
+    )
+    inside = out.split("```")[1]
+
+    framed = [ln for ln in inside.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
+    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the box is still square"
+
+
+def test_the_markdown_renderer_still_carries_everything() -> None:
     out = ui.as_markdown(
         {
             "kind": "decision",

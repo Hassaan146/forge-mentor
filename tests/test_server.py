@@ -741,11 +741,10 @@ def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Pat
         assert block.strip(), "a render tool returned nothing"
         # Whichever presentation is right for the destination, it is one the
         # presenter hook recognises as Forge speaking.
-        # Whatever the presentation, the presenter hook has to see it as
-        # Forge speaking, and it looks for a symbol on a heading or a frame.
-        assert any(char in block for char in "┌╔") or any(
-            line.lstrip().startswith("#") and any(m in line for m in "⚒💡⚖★⚠✅⛔→▌")
-            for line in block.splitlines()
-        )
+        # One presentation decision, made in one place. Inside a client that
+        # strips escape codes the block arrives fenced so nothing reflows it;
+        # in a terminal it is the same drawing with colour in it. Either way
+        # the presenter hook has to see a frame.
+        assert any(char in block for char in "┌╔"), "every block is drawn"
         if not ui._ON:
-            assert "┌" not in block, "where colour cannot arrive, the box is not the answer"
+            assert block.startswith("```"), "and fenced where markdown would reflow it"
