@@ -331,3 +331,103 @@ def test_a_paused_project_gets_no_opinion_about_its_answers(project: Path) -> No
     (project / fs.FORGE_DIR / fs.PAUSED).write_text("paused\n", encoding="utf-8")
 
     assert not blocked(stop(project, "no frame here at all"))
+
+
+def test_a_tool_result_is_not_the_start_of_the_turn(project: Path) -> None:
+    """The bug a user hit on their first real run.
+
+    Claude Code writes a tool result as a `user` entry. Scanning back for the
+    turn boundary on `type == "user"` therefore stopped at the result of the
+    last tool call, one line in, and never reached the render command sitting
+    just above it. So Forge refused a turn that had done exactly what it asked.
+    """
+    ask(project)
+    path = project / "with-result.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "user", "message": {"content": "/forge:start"}}),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {
+                                        "command": 'python "$CLAUDE_PLUGIN_ROOT/'
+                                        "scripts/forge_ui.py\" render <<'JSON'\n{}\nJSON"
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ),
+                # This is what stopped the search. It is a result, not a person.
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {"type": "tool_result", "content": "the block"}
+                            ]
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": "The block above is the ask."}]},
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    answer = run(
+        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
+    )
+    assert not blocked(answer), "the render command ran; the search just could not see it"
+
+
+def test_a_real_user_message_still_ends_the_search(project: Path) -> None:
+    """Otherwise a render from three turns ago would excuse this one forever."""
+    ask(project)
+    path = project / "older.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {"command": 'forge_ui.py render <<JSON'},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                json.dumps({"type": "user", "message": {"content": "next question please"}}),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"content": [{"type": "text", "text": "so which is it?"}]},
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    answer = run(
+        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
+    )
+    assert blocked(answer), "that render belonged to the previous turn"

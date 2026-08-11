@@ -79,14 +79,22 @@ def rendered_by_command(transcript: Path) -> bool:
     except OSError:
         return False
 
-    for line in reversed(lines[-40:]):
+    for line in reversed(lines[-200:]):
         try:
             entry = json.loads(line)
         except ValueError:
             continue
-        if entry.get("type") == "user":
-            break  # back past the start of this turn
+
         content = (entry.get("message") or {}).get("content")
+
+        # **A tool result is written as a `user` entry**, which is why this
+        # found nothing. Breaking on `type == "user"` was meant to stop at the
+        # turn boundary; it stopped at the result of the last tool call
+        # instead, one line in, so the render command sitting just above it was
+        # never seen. The user's own message is the one carrying no tool result.
+        if entry.get("type") == "user" and not _is_tool_result(content):
+            break
+
         if not isinstance(content, list):
             continue
         for part in content:
@@ -96,6 +104,15 @@ def rendered_by_command(transcript: Path) -> bool:
             if RENDER_COMMAND in command and " render" in command:
                 return True
     return False
+
+
+def _is_tool_result(content: object) -> bool:
+    """Is this `user` entry a tool result rather than something a person typed?"""
+    if not isinstance(content, list):
+        return False
+    return any(
+        isinstance(part, dict) and part.get("type") == "tool_result" for part in content
+    )
 
 
 def last_assistant_text(transcript: Path) -> str:

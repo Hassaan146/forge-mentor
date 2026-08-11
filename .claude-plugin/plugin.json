@@ -1,7 +1,7 @@
 {
   "name": "forge",
   "displayName": "Forge Mentor",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Decide-then-code. Forge Mentor teaches every load-bearing decision, records your choice, and blocks code from moving past a decision you have not made yet.",
   "author": {
     "name": "Muhammad Hassaan",
