@@ -1346,7 +1346,9 @@ def _diff_block(payload: dict) -> str:
         f"Your call: {letters}?" if letters else "Your call"
     )
     hint = ASK_KINDS["choose" if choices else "answer"]
-    out += ["", head(f"{ACTION} YOUR TURN"), "", f"  {ask}", f"# {hint}"]
+    # A closing rule, so the block reads as shut rather than as trailing off.
+    # The opening one alone left it looking like the start of something.
+    out += ["", head(f"{ACTION} YOUR TURN"), "", f"  {ask}", f"# {hint}", "", f"@@{rule}@@"]
 
     return "```diff\n" + "\n".join(out) + "\n```"
 
