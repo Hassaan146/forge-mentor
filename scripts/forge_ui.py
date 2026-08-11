@@ -1559,17 +1559,21 @@ def render_from(payload: dict) -> str:
         if os.environ.get("FORGE_TABLE"):
             return _boxed_markdown(payload)
 
-        # `FORGE_PLAIN_FENCE=1` gives the drawn box with no colour at all, for
-        # a client with no highlighter.
-        if os.environ.get("FORGE_PLAIN_FENCE"):
-            return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+        # `FORGE_DIFF=1` gives the coloured version: a `diff` fence the client's
+        # own highlight.js paints. It costs the drawn border and shows `@@`,
+        # `+`, `-` and `#` in the text, because highlight.js anchors its line
+        # tokens at column zero. A `│` in front of a marker makes it an ordinary
+        # character, so the box and the colour cannot both be had. The markers
+        # are the colour.
+        if os.environ.get("FORGE_DIFF"):
+            return _diff_block(payload)
 
-        # **A `diff` fence, which the client itself colours.** Claude Code
-        # bundles highlight.js, so a fence in a language it knows is tokenised
-        # and painted at the far end rather than carried there. That is the one
-        # thing eight earlier attempts all missed: the colour does not have to
-        # survive the trip if the destination applies it.
-        return _diff_block(payload)
+        # **The drawn box, and no markers in the text.** Asked for first, asked
+        # for most, and chosen knowing what it costs: no colour reaches it.
+        # Rule R11 has required from the first day that colour is never the only
+        # signal, and this is the day that promise is collected. The eight
+        # symbols and the two frames carry every meaning on their own.
+        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
 
     if kind == "legend":
         return legend()

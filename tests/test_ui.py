@@ -865,14 +865,36 @@ def test_the_cap_still_drops_whole_sentences_past_three() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_block_is_a_diff_fence_so_the_client_colours_it() -> None:
+def test_the_block_is_a_drawn_box_with_no_markers_in_the_text() -> None:
+    """Asked for first, asked for most, and chosen knowing what it costs.
+
+    highlight.js anchors its line tokens at column zero, so a `|` border in
+    front of a marker makes it an ordinary character. The box and the colour
+    cannot both be had, and the box is the one that was wanted.
+    """
+    out = ui.render_from(
+        {"kind": "decision", "number": 7, "title": "t", "choices": [["A", "one", "x"]]}
+    )
+
+    assert out.startswith("```\n"), "no language tag, nothing to highlight"
+    assert "┌" in out and "└" in out, "and the box is drawn"
+    assert "@@" not in out and not any(
+        line.startswith(("+", "-", "#")) for line in out.splitlines()
+    ), "no markers anywhere in the text"
+
+
+def test_the_coloured_version_is_still_available_behind_a_switch(monkeypatch) -> None:
     """Nine attempts, and this is the one that stopped carrying the colour.
 
     Claude Code bundles highlight.js: hljs-addition, hljs-deletion, hljs-meta
     and hljs-comment are all in the binary. A fence in a language it knows is
     tokenised and painted at the far end. `ansi` failed only because
     highlight.js has no such language, not because fences cannot be coloured.
+
+    It is behind a switch rather than the default because it costs the drawn
+    border, and the border is what was asked for.
     """
+    monkeypatch.setenv("FORGE_DIFF", "1")
     out = ui.render_from(
         {
             "kind": "decision",
@@ -887,12 +909,13 @@ def test_the_block_is_a_diff_fence_so_the_client_colours_it() -> None:
     assert "\033[" not in out, "the colour is applied there, not carried there"
 
 
-def test_every_marker_sits_in_column_zero() -> None:
+def test_every_marker_sits_in_column_zero(monkeypatch) -> None:
     """highlight.js anchors them with `^`.
 
     A left border in front of a `+` makes it an ordinary line, which is why the
     drawn border is gone and the fence is the container.
     """
+    monkeypatch.setenv("FORGE_DIFF", "1")
     out = ui.render_from(
         {
             "kind": "decision",
@@ -917,9 +940,10 @@ def test_every_marker_sits_in_column_zero() -> None:
     assert body[-1].startswith("@@"), "the block ends shut, not trailing off"
 
 
-def test_the_markers_carry_forge_meanings_not_version_control_ones() -> None:
+def test_the_markers_carry_forge_meanings_not_version_control_ones(monkeypatch) -> None:
     """Options are things you can pick, so they are additions. The cost is the
     one line rule R11 paints yellow, so it is a deletion."""
+    monkeypatch.setenv("FORGE_DIFF", "1")
     out = ui.render_from(
         {
             "kind": "decision",
