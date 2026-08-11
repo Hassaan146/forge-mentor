@@ -92,8 +92,8 @@ def test_an_open_question_asked_as_prose_is_refused(project: Path) -> None:
     answer = stop(project, "So, how do you want people to log in? Let me know.")
 
     assert blocked(answer)
-    assert "forge_ui.py" in answer["reason"], "and it names the command to run"
-    assert "render" in answer["reason"]
+    assert "in your reply" in answer["reason"], "and it names where the block goes"
+    assert "collapsed" in answer["reason"], "and why a shell command will not do"
 
     # Short, because Claude Code shows a Stop hook's reason on screen. A
     # fourteen-line correction with a JSON example in it arrived looking like
@@ -251,49 +251,6 @@ def test_a_turn_that_only_called_tools_is_not_treated_as_speech(project: Path) -
     assert not blocked(answer), "it looked back to the turn that actually spoke"
 
 
-def test_a_block_printed_by_the_command_counts_as_framed(project: Path) -> None:
-    """The path that fixed the colours must not be the one that gets refused.
-
-    A block pasted into a reply loses every colour on the way through markdown.
-    Printed by the command it reaches the terminal intact, so the frame is on
-    screen even though the reply text has none.
-    """
-    ask(project)
-    path = project / "rendered.jsonl"
-    path.write_text(
-        json.dumps({"type": "user", "message": {"content": "go on"}})
-        + "\n"
-        + json.dumps(
-            {
-                "type": "assistant",
-                "message": {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "name": "Bash",
-                            "input": {
-                                "command": 'python "$CLAUDE_PLUGIN_ROOT/scripts/'
-                                "forge_ui.py\" render <<'JSON'\n{}\nJSON"
-                            },
-                        }
-                    ]
-                },
-            }
-        )
-        + "\n"
-        + json.dumps(
-            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Your call."}]}}
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    answer = run(
-        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
-    )
-    assert not blocked(answer)
-
-
 def test_an_unrelated_command_does_not_count_as_a_frame(project: Path) -> None:
     """Otherwise any turn that ran anything would pass."""
     ask(project)
@@ -331,66 +288,6 @@ def test_a_paused_project_gets_no_opinion_about_its_answers(project: Path) -> No
     (project / fs.FORGE_DIR / fs.PAUSED).write_text("paused\n", encoding="utf-8")
 
     assert not blocked(stop(project, "no frame here at all"))
-
-
-def test_a_tool_result_is_not_the_start_of_the_turn(project: Path) -> None:
-    """The bug a user hit on their first real run.
-
-    Claude Code writes a tool result as a `user` entry. Scanning back for the
-    turn boundary on `type == "user"` therefore stopped at the result of the
-    last tool call, one line in, and never reached the render command sitting
-    just above it. So Forge refused a turn that had done exactly what it asked.
-    """
-    ask(project)
-    path = project / "with-result.jsonl"
-    path.write_text(
-        "\n".join(
-            [
-                json.dumps({"type": "user", "message": {"content": "/forge:start"}}),
-                json.dumps(
-                    {
-                        "type": "assistant",
-                        "message": {
-                            "content": [
-                                {
-                                    "type": "tool_use",
-                                    "name": "Bash",
-                                    "input": {
-                                        "command": 'python "$CLAUDE_PLUGIN_ROOT/'
-                                        "scripts/forge_ui.py\" render <<'JSON'\n{}\nJSON"
-                                    },
-                                }
-                            ]
-                        },
-                    }
-                ),
-                # This is what stopped the search. It is a result, not a person.
-                json.dumps(
-                    {
-                        "type": "user",
-                        "message": {
-                            "content": [
-                                {"type": "tool_result", "content": "the block"}
-                            ]
-                        },
-                    }
-                ),
-                json.dumps(
-                    {
-                        "type": "assistant",
-                        "message": {"content": [{"type": "text", "text": "The block above is the ask."}]},
-                    }
-                ),
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    answer = run(
-        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
-    )
-    assert not blocked(answer), "the render command ran; the search just could not see it"
 
 
 def test_a_real_user_message_still_ends_the_search(project: Path) -> None:
@@ -473,3 +370,59 @@ def test_prose_is_counted_before_the_block_not_across_it(project: Path) -> None:
 
     wall = "\n".join([f"Some explanation, line {n}." for n in range(1, 12)])
     assert blocked(stop(project, f"{wall}\n### ⚒ FORGE · DECISION 001\n{body}"))
+
+
+def test_a_block_printed_by_a_shell_command_does_not_count(project: Path) -> None:
+    """This is the whole bug, as a test.
+
+    Claude Code collapses tool output into "ran 2 shell commands", so a block
+    printed that way never reaches the screen. Accepting it here put a bare
+    prose line in front of a user as question 3 of their real run, while the
+    block sat invisible behind a summary line.
+    """
+    ask(project)
+    path = project / "via-command.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "user", "message": {"content": "/forge:start"}}),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {"command": 'forge_ui.py render <<JSON'},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {"content": [{"type": "tool_result", "content": "block"}]},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "text", "text": "Question 3 of ~6. It's open."}
+                            ]
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    answer = run(
+        {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
+    )
+    assert blocked(answer), "the user saw one line of prose, not a block"

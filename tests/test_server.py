@@ -484,8 +484,13 @@ def test_a_decision_ends_in_the_action_frame_and_nothing_after_it() -> None:
     )["block"]
 
     assert "YOUR TURN" in block
-    assert "A, or B?" in block, "the frame names the letters that were offered"
-    assert block.rstrip().endswith("╝"), "the action frame is the last thing on screen"
+    assert "A, or B?" in block, "the ask names the letters that were offered"
+
+    # The presentation depends on where the block is going: a double-ruled
+    # frame where escape codes work, a heading where the client colours
+    # markdown instead. The ask being last is what matters either way.
+    tail = block.rstrip()
+    assert tail.endswith("╝") or "YOUR TURN" in tail.rsplit("---", 1)[-1]
 
 
 def test_a_detail_that_cannot_be_undone_gets_its_own_bar() -> None:
@@ -704,44 +709,43 @@ def test_the_roadmap_needs_a_plan_to_show(project: str) -> None:
     assert "error" in call(srv.show_roadmap)(project)
 
 
-def test_the_foundation_question_hands_over_a_runnable_command(project: str) -> None:
-    """Composing it was the caller's job, and a caller that forgets is refused.
 
-    The presenter hook catches a question asked as prose, but the user watches
-    that correction go past and it reads like a crash. Handing over something
-    runnable removes the step where it happens.
+def test_the_foundation_question_hands_over_the_block_itself(project: str) -> None:
+    """Not a command. Claude Code collapses tool output.
+
+    A block printed by a shell command never reaches the screen: the user is
+    shown "ran 2 shell commands" and, on a real run, one line of prose as
+    question 3 while the block sat invisible behind that summary.
     """
     answer = call(srv.foundation_question)(project)
 
-    assert "forge_ui.py" in answer["render"] and " render " in answer["render"]
-    assert "What's the idea?" in answer["render"]
-    assert answer["render"].rstrip().endswith("JSON")
-    assert "before saying anything" in answer["next"]
+    assert "block" in answer and "render" not in answer
+    assert "What's the idea?" in answer["block"]
+    assert "YOUR TURN" in answer["block"]
+    assert "into your reply verbatim" in answer["next"]
+    assert "collapsed" in answer["next"], "and why a command will not do"
 
 
-def test_the_command_it_hands_over_actually_renders(project: str) -> None:
-    """A command nobody has watched run is the other half of this week's lesson."""
-    import json
-    import subprocess
+def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Path) -> None:
+    """One presentation decision, made in one place, for every one of them."""
+    import forge_ui as ui
 
-    answer = call(srv.foundation_question)(project)
-    payload = answer["render"].split("<<'JSON'\n", 1)[1].rsplit("\nJSON", 1)[0]
+    blocks = [
+        call(srv.render_decision)("t", choices=[["A", "one", "first"]])["block"],
+        call(srv.render_note)("h", ["one"])["block"],
+        call(srv.render_action)("go?", kind="confirm")["block"],
+        call(srv.color_legend)()["block"],
+    ]
 
-    scripts = Path(__file__).resolve().parents[1] / "scripts"
-    done = subprocess.run(
-        [sys.executable, str(scripts / "forge_ui.py"), "render"],
-        input=payload,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    assert done.returncode == 0, done.stderr
-    assert "What's the idea?" in done.stdout
-
-    # Framed either way. In a terminal that is a box; where escape codes cannot
-    # arrive it is markdown the client colours, and the marks are what the
-    # presenter hook looks for in both.
-    assert "┌" in done.stdout or "⚒ FORGE" in done.stdout
-    assert "YOUR TURN" in done.stdout
-    json.loads(payload)
+    for block in blocks:
+        assert block.strip(), "a render tool returned nothing"
+        # Whichever presentation is right for the destination, it is one the
+        # presenter hook recognises as Forge speaking.
+        # Whatever the presentation, the presenter hook has to see it as
+        # Forge speaking, and it looks for a symbol on a heading or a frame.
+        assert any(char in block for char in "┌╔") or any(
+            line.lstrip().startswith("#") and any(m in line for m in "⚒💡⚖★⚠✅⛔→▌")
+            for line in block.splitlines()
+        )
+        if not ui._ON:
+            assert "┌" not in block, "where colour cannot arrive, the box is not the answer"

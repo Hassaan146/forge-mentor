@@ -130,39 +130,34 @@ to `none` once the answer is recorded. That field is what the governor reads to
 decide whether code may be written.
 
 
-## Never write the question yourself, and never retype the block
+## Never write the question yourself. Paste the block.
 
-Every question, every follow-up and every "type yes to continue" is **printed by
-the render command**, not written into your reply.
+Every question, every follow-up and every "type yes to continue" comes from a
+tool and goes into **your reply, verbatim**.
 
-```bash
-python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" render <<'JSON'
-{"kind": "decision", "number": 2, "title": "How should people log in?",
- "means": ["one line of teaching", "and a second"],
- "choices": [["A", "Email and password", "full control, most work"],
-             ["B", "A login service", "fast, less control"]],
- "recommend": ["B", "password safety comes free"],
- "against": "you depend on someone else's service",
- "important_lines": ["Moving off it later means every account signs up again."],
- "done": 1, "total": 6, "stage": "foundation"}
-JSON
-```
+| What you are doing | Tool | What to do with it |
+|---|---|---|
+| A foundation question | `foundation_question` | paste its `block` |
+| Any other decision | `render_decision` | paste its `block` |
+| A short follow-up | `render_note` | paste its `block` |
+| Yes/no, or A/B/C alone | `render_action` | paste its `block` |
+| The colour or symbol key | `color_legend` | paste its `block` |
+| The whole plan | `show_roadmap` | paste its `block` |
 
-`kind` is one of `decision`, `note`, `action`, `legend`, `roadmap`, `banner`.
+**Never print a block through a shell command.** Claude Code collapses tool
+output into "ran 2 shell commands", so a block printed that way never reaches
+the screen. That happened on a real run: the user was shown a single line of
+prose as question 3 while the block sat invisible behind a summary line. The
+render CLI exists for a terminal, not for this.
 
-**Why a command and not your own text.** Both were tried. A block pasted into a
-reply is rendered as markdown, and markdown does not know what an escape code is,
-so every colour is stripped on the last hop: correct at the source, invisible on
-the screen, and every test still passing. Printed by the command it goes out on
-the same channel as the banner, which arrives intact.
+**Paste it as the whole answer.** No line before it, no summary after it. The
+block already carries the question, the teaching, the options, the
+recommendation, what it costs, the progress and what kind of answer is wanted.
+Anything you add is a second, worse copy of something already on screen.
 
-So: run the command, then say nothing else, or one short line. Do not repeat the
-block in your reply. The user has already seen it, in colour, and a second
-monochrome copy underneath is worse than none.
-
-The MCP render tools (`render_decision`, `render_note`, `render_action`,
-`color_legend`, `show_roadmap`) still exist and still compose the same blocks.
-Use them when you need the text as data. When the user has to **see** it, print it.
+The block arrives in the presentation that suits where it is going: a framed box
+where escape codes work, markdown where the client colours markdown instead.
+Either way, paste it exactly as given and change nothing.
 
 Two rules that are not negotiable:
 

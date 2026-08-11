@@ -159,13 +159,18 @@ def last_assistant_text(transcript: Path) -> str:
 # it, and none of those lines carry a frame character. Looking only for the box
 # would refuse the presentation that exists because the box could not be
 # coloured.
-MARKDOWN_MARKS = ("⚒ FORGE", "→ YOUR TURN", "⚒ How to read Forge")
+#
+# The eight symbols of decision 035, plus the bar. Matched on a heading rather
+# than anywhere in the text, so a reply that merely mentions ⚒ in a sentence is
+# not mistaken for a block. Listing specific headings was tried first and missed
+# `render_note`, whose heading is whatever the note is called.
+MARKS = "⚒💡⚖★⚠✅⛔→▌"
 
 
 def _starts_the_block(line: str) -> bool:
-    return any(char in FRAMES for char in line) or any(
-        mark in line for mark in MARKDOWN_MARKS
-    )
+    if any(char in FRAMES for char in line):
+        return True
+    return line.lstrip().startswith("#") and any(mark in line for mark in MARKS)
 
 
 def is_framed(text: str) -> bool:
@@ -216,8 +221,14 @@ def main() -> None:
         if not transcript:
             allow()
 
-        if rendered_by_command(Path(transcript)):
-            allow()  # the frame is on screen, in colour, printed by the command
+        # **Running the render command is no longer proof of anything.** Claude
+        # Code collapses tool output into "ran 2 shell commands", so a block
+        # printed that way never reaches the screen. Accepting it here let a
+        # bare prose line through as question 3 of a real run while the block
+        # sat invisible behind a summary line.
+        #
+        # The block has to be in the reply itself, which is also the only place
+        # the client will colour it.
 
         said = last_assistant_text(Path(transcript))
         if not said.strip():
@@ -230,7 +241,10 @@ def main() -> None:
         # the assistant has already read; this only has to name the fix.
         if not is_framed(said):
             block(
-                f"Ask it with the render command, not in prose: {RENDER_HINT}"
+                "Put the block in your reply, not in a shell command. Tool output "
+                "is collapsed to 'ran N shell commands' and the user never sees "
+                "it. Call foundation_question or render_decision and paste the "
+                "`block` it returns, verbatim, as your whole answer."
             )
 
         if loose_lines(said) > MAX_LOOSE_LINES:

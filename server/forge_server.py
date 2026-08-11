@@ -830,19 +830,22 @@ def render_decision(
         return {"error": "Each choice needs three parts: letter, label, consequence."}
 
     return {
-        "block": ui.decision(
-            title,
-            number=number or None,
-            subtitle=subtitle,
-            means=means or None,
-            choices=triples or None,
-            recommend=(recommend_choice, recommend_reason) if recommend_choice else None,
-            against=against,
-            important_lines=list(important_lines or []) or None,
-            done=done,
-            total=total,
-            stage=stage,
-            ask=ask,
+        "block": ui.render_from(
+            {
+                "kind": "decision",
+                "title": title,
+                "number": number or None,
+                "subtitle": subtitle,
+                "means": means or [],
+                "choices": [list(c) for c in triples],
+                "recommend": [recommend_choice, recommend_reason] if recommend_choice else None,
+                "against": against,
+                "important_lines": list(important_lines or []),
+                "done": done,
+                "total": total,
+                "stage": stage,
+                "ask": ask,
+            }
         )
     }
 
@@ -871,12 +874,12 @@ def foundation_question(project: str) -> dict[str, Any]:
     if question is None:
         return {"finished": True, "answered": done, "total": total}
 
-    # The command, already built. Composing it was left to the caller, and a
-    # caller that forgets writes the question as prose, gets refused by the
-    # presenter hook, and the user watches a correction go past that reads like
-    # a crash. Handing over something runnable removes the step where that
-    # happens.
-    import json as _json
+    # The block itself, ready to paste. Not a command: Claude Code collapses
+    # tool output into "ran N shell commands", so a block printed by a command
+    # never reaches the screen. On a real run that put a bare prose line in
+    # front of the user as question 3 while the block sat invisible behind a
+    # summary line.
+    import forge_ui as ui
 
     payload = {
         "kind": "decision",
@@ -889,11 +892,6 @@ def foundation_question(project: str) -> dict[str, Any]:
         "total": total,
         "stage": "foundation",
     }
-    command = (
-        'python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render <<\'JSON\'\n'
-        + _json.dumps(payload, indent=1)
-        + "\nJSON"
-    )
 
     return {
         "finished": False,
@@ -904,11 +902,13 @@ def foundation_question(project: str) -> dict[str, Any]:
         "choices": [list(o) for o in question.options],
         "answered": done,
         "total": total,
-        "render": command,
+        "block": ui.render_from(payload),
         "next": (
-            "Run `render` exactly as given, before saying anything. Add the "
-            "recommendation and its cost to the payload where the question has "
-            "options. Do not retype the block into your reply."
+            "Paste `block` into your reply verbatim, as the whole answer. Do not "
+            "print it through a shell command: that output is collapsed and the "
+            "user never sees it. Do not summarise it or add a line before it "
+            "either; the block already says everything, including what kind of "
+            "answer is wanted."
         ),
     }
 
@@ -951,12 +951,15 @@ def render_note(
         return {"error": f"Unknown symbol {symbol!r}. Use one of: {', '.join(sorted(marks))}."}
 
     return {
-        "block": ui.note(
-            heading,
-            list(lines or []),
-            symbol=marks[symbol.strip().lower()],
-            ask=ask,
-            important_lines=list(important_lines or []) or None,
+        "block": ui.render_from(
+            {
+                "kind": "note",
+                "heading": heading,
+                "lines": list(lines or []),
+                "symbol": marks[symbol.strip().lower()],
+                "ask": ask,
+                "important_lines": list(important_lines or []),
+            }
         )
     }
 
@@ -1053,7 +1056,7 @@ def show_roadmap(project: str) -> dict[str, Any]:
     page = rm.write(forge, Path(project).name)
 
     return {
-        "block": ui.roadmap(view),
+        "block": ui.render_from({"kind": "roadmap", "phases": view}),
         "phases": view,
         "steps_built": built,
         "steps_total": total,
@@ -1210,7 +1213,11 @@ def render_action(ask: str, kind: str = "answer", hint: str = "") -> dict[str, A
     if not ask.strip():
         return {"error": "An action frame with nothing to act on is just a box."}
 
-    return {"block": ui.action(ask, hint, kind=kind.strip().lower())}
+    return {
+        "block": ui.render_from(
+            {"kind": "action", "ask": ask, "hint": hint, "ask_kind": kind.strip().lower()}
+        )
+    }
 
 
 @server.tool(
@@ -1227,7 +1234,7 @@ def color_legend() -> dict[str, Any]:
     import forge_ui as ui
 
     return {
-        "block": ui.legend(),
+        "block": ui.render_from({"kind": "legend"}),
         "meanings": [
             {"name": name, "colour": key, "means": means}
             for name, key, means in ui.MEANINGS
