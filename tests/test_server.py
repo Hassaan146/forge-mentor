@@ -738,5 +738,10 @@ def test_the_command_it_hands_over_actually_renders(project: str) -> None:
 
     assert done.returncode == 0, done.stderr
     assert "What's the idea?" in done.stdout
-    assert "┌" in done.stdout, "and it comes out framed"
+
+    # Framed either way. In a terminal that is a box; where escape codes cannot
+    # arrive it is markdown the client colours, and the marks are what the
+    # presenter hook looks for in both.
+    assert "┌" in done.stdout or "⚒ FORGE" in done.stdout
+    assert "YOUR TURN" in done.stdout
     json.loads(payload)

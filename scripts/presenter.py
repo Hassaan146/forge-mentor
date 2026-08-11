@@ -154,19 +154,37 @@ def last_assistant_text(transcript: Path) -> str:
     return ""
 
 
+# Forge speaking in markdown rather than in a box. Where escape codes cannot
+# arrive, the block is handed to the client as markdown so the client colours
+# it, and none of those lines carry a frame character. Looking only for the box
+# would refuse the presentation that exists because the box could not be
+# coloured.
+MARKDOWN_MARKS = ("⚒ FORGE", "→ YOUR TURN", "⚒ How to read Forge")
+
+
+def _starts_the_block(line: str) -> bool:
+    return any(char in FRAMES for char in line) or any(
+        mark in line for mark in MARKDOWN_MARKS
+    )
+
+
 def is_framed(text: str) -> bool:
-    return any(char in FRAMES for char in text)
+    return any(_starts_the_block(line) for line in text.splitlines())
 
 
 def loose_lines(text: str) -> int:
-    """Lines of prose outside any frame."""
-    return len(
-        [
-            line
-            for line in text.splitlines()
-            if line.strip() and not any(char in FRAMES for char in line)
-        ]
-    )
+    """Prose *before* the block, which is the lead-in rule R10 is about.
+
+    Counted up to the block rather than across the whole reply. Everything
+    after it is the block's own body, and in the markdown presentation that
+    body is ordinary lines with no frame character in them, so counting the
+    whole reply refused every question it was given.
+    """
+    lines = text.splitlines()
+    for position, line in enumerate(lines):
+        if _starts_the_block(line):
+            return len([earlier for earlier in lines[:position] if earlier.strip()])
+    return len([line for line in lines if line.strip()])
 
 
 def main() -> None:

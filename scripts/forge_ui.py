@@ -1024,6 +1024,142 @@ def _demo() -> None:
     print()
 
 
+# --------------------------------------------------------------------------
+# the same block, for a client that renders markdown instead of escape codes
+# --------------------------------------------------------------------------
+#
+# **Why a second renderer rather than a fallback.** Inside Claude Code the
+# escape codes never arrive: everything Forge prints reaches the user through a
+# markdown renderer, which drops them. The ASCII box survives that trip, but it
+# arrives entirely monochrome, and after six requests for colour the honest
+# answer stopped being "it cannot be done" and became "not that way".
+#
+# Markdown is the one thing that surface *does* colour. Headings, bold, code
+# spans and rules are all styled by the client, so the block can carry the same
+# information and come out in colour, drawn by the thing that is doing the
+# drawing. Same content, two presentations, chosen by where it is going. The
+# legend already worked this way for symbols against colours; this is the same
+# principle applied to the whole block.
+
+
+def _md_decision(payload: dict) -> str:
+    """A decision, as markdown the client will colour."""
+    number = payload.get("number")
+    done, total = int(payload.get("done") or 0), int(payload.get("total") or 0)
+
+    head = f"{MARK} FORGE"
+    if number:
+        head += f" · DECISION {int(number):03d}"
+
+    out = [f"### {head}", "", f"**{payload.get('title', '')}**"]
+    if payload.get("subtitle"):
+        out.append(f"*{payload['subtitle']}*")
+
+    means = [line for line in (payload.get("means") or []) if str(line).strip()]
+    if means:
+        out += ["", f"{TEACH} **What this means**", ""]
+        out += [f"> {line}" for line in means]
+
+    choices = payload.get("choices") or []
+    if choices:
+        out += ["", f"{WEIGH} **Options**", "", "| | | |", "|---|---|---|"]
+        for choice in choices:
+            letter, label, note = (list(choice) + ["", "", ""])[:3]
+            out.append(f"| `{letter}` | **{label}** | {note} |")
+
+    recommend = payload.get("recommend")
+    if recommend:
+        pick, why = (list(recommend) + ["", ""])[:2]
+        out += ["", f"{STAR} **Recommended: {pick}** · {why}"]
+    if payload.get("against"):
+        out.append(f"{COST} **Against it:** {payload['against']}")
+
+    for line in payload.get("important_lines") or []:
+        out += ["", f"> {BAR} **{line}**"]
+
+    if total:
+        stage = f" · {payload['stage']}" if payload.get("stage") else ""
+        out += ["", f"`{done} of ~{total}{stage}`"]
+
+    letters = _spoken_letters([str(c[0]) for c in choices]) if choices else ""
+    ask = str(payload.get("ask") or "") or (
+        f"Your call: {letters}?" if letters else "Your call"
+    )
+    hint = ASK_KINDS["choose" if choices else "answer"]
+
+    out += ["", "---", "", f"### {ACTION} YOUR TURN", "", f"**{ask}**", "", f"*{hint}*"]
+    return "\n".join(out)
+
+
+def _md_note(payload: dict) -> str:
+    lines = [line for line in (payload.get("lines") or []) if str(line).strip()]
+    out = [f"### {payload.get('symbol') or MARK} {payload.get('heading', '')}", ""]
+    out += [f"> {line}" for line in lines[:MAX_NOTE_LINES]]
+    for line in payload.get("important_lines") or []:
+        out += ["", f"> {BAR} **{line}**"]
+    if payload.get("ask"):
+        out += ["", "---", "", f"### {ACTION} YOUR TURN", "", f"**{payload['ask']}**"]
+    return "\n".join(out)
+
+
+def _md_action(payload: dict) -> str:
+    hint = str(payload.get("hint") or "") or ASK_KINDS.get(
+        str(payload.get("ask_kind", "answer")), ""
+    )
+    out = [f"### {ACTION} YOUR TURN", "", f"**{payload.get('ask', '')}**"]
+    if hint:
+        out += ["", f"*{hint}*"]
+    return "\n".join(out)
+
+
+def _md_legend() -> str:
+    out = [f"### {MARK} How to read Forge", "", "| | |", "|---|---|"]
+    out += [f"| {symbol} | {meaning} |" for symbol, meaning in SYMBOL_MEANINGS]
+    out += [
+        "",
+        "*A `### → YOUR TURN` heading means Forge has stopped and is waiting for you.*",
+    ]
+    return "\n".join(out)
+
+
+def _md_roadmap(phases: list[dict], title: str) -> str:
+    out = [f"### {MARK} {title}", "", "| | | | |", "|---|---|---|---|"]
+    for phase in phases:
+        steps = list(phase.get("steps") or [])
+        built = int(phase.get("built") or 0)
+        count = f"{built}/{len(steps)} steps" if steps else "not broken into steps yet"
+        state = str(phase.get("state", "later"))
+        mark = {"done": RECORDED, "now": MARK}.get(state, "·")
+        out.append(
+            f"| {mark} | `{phase.get('number', '')}` | **{phase.get('title', '')}** "
+            f"<br>{phase.get('delivers', '')} | {count} · {state} |"
+        )
+        if state == "now":
+            for position, step in enumerate(steps, start=1):
+                tick = RECORDED if step.get("built") else "·"
+                out.append(f"| | | {tick} {position}. {step.get('text', '')} | |")
+    return "\n".join(out)
+
+
+def as_markdown(payload: dict) -> str:
+    """The block as markdown, for a client that colours markdown and not ANSI."""
+    kind = str(payload.get("kind", "")).strip().lower()
+    if kind == "decision":
+        return _md_decision(payload)
+    if kind == "note":
+        return _md_note(payload)
+    if kind == "action":
+        return _md_action(payload)
+    if kind == "legend":
+        return _md_legend()
+    if kind == "roadmap":
+        return _md_roadmap(list(payload.get("phases") or []), payload.get("title", "THE PLAN"))
+    raise ValueError(
+        f"Unknown block kind {kind!r}. "
+        "Use one of: decision, note, action, legend, roadmap, banner."
+    )
+
+
 def render_from(payload: dict) -> str:
     """Build a block from a plain dict, so it can be printed by a command.
 
@@ -1037,6 +1173,12 @@ def render_from(payload: dict) -> str:
     banner, which is the one channel already known to reach a terminal intact.
     """
     kind = str(payload.get("kind", "")).strip().lower()
+
+    # Where escape codes cannot arrive, hand the client markdown and let it do
+    # the colouring. The banner is the exception: it is ASCII art, and there is
+    # no markdown for a logo.
+    if not _ON and kind != "banner":
+        return as_markdown(payload)
 
     if kind == "legend":
         return legend()

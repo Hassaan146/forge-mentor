@@ -679,3 +679,80 @@ def test_a_long_teaching_line_cannot_break_the_frame() -> None:
     framed = [ln for ln in out.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
 
     assert len({ui.visible_width(ln) for ln in framed}) == 1, "the frame went ragged"
+
+
+# --------------------------------------------------------------------------
+# the same block, for a client that colours markdown and not escape codes
+# --------------------------------------------------------------------------
+
+
+def test_where_colour_cannot_arrive_the_block_is_markdown() -> None:
+    """Six requests for colour, and the honest answer stopped being "it cannot".
+
+    Escape codes never reach the user inside Claude Code. Markdown is the one
+    thing that surface does colour, so the block is handed over as markdown and
+    the client does the drawing.
+    """
+    out = ui.render_from({"kind": "decision", "title": "t", "choices": [["A", "one", "first"]]})
+
+    assert out.startswith("### "), "a heading, which the client colours"
+    assert "┌" not in out, "no box, because the box is what could not be coloured"
+    assert "→ YOUR TURN" in out
+
+
+def test_the_markdown_block_carries_everything_the_box_did() -> None:
+    out = ui.as_markdown(
+        {
+            "kind": "decision",
+            "number": 2,
+            "title": "What are you building this with?",
+            "subtitle": "the first decision",
+            "means": ["a line of teaching"],
+            "choices": [["A", "Front end only", "no server"], ["B", "Back end only", "later"]],
+            "recommend": ["A", "nothing to host"],
+            "against": "the data stays here",
+            "important_lines": ["This cannot be undone."],
+            "done": 1,
+            "total": 6,
+            "stage": "foundation",
+        }
+    )
+
+    for expected in (
+        "DECISION 002",
+        "What are you building this with?",
+        "a line of teaching",
+        "**Front end only**",
+        "Recommended: A",
+        "Against it:",
+        "This cannot be undone.",
+        "1 of ~6",
+        "Your call: A, or B?",
+    ):
+        assert expected in out, f"the markdown block lost {expected!r}"
+
+
+def test_every_kind_survives_the_markdown_route() -> None:
+    for payload in (
+        {"kind": "decision", "title": "t"},
+        {"kind": "note", "heading": "h", "lines": ["one"], "ask": "yes?"},
+        {"kind": "action", "ask": "go?", "ask_kind": "confirm"},
+        {"kind": "legend"},
+        {"kind": "roadmap", "phases": [
+            {"number": 1, "title": "First", "delivers": "d", "state": "now", "built": 0,
+             "steps": [{"text": "s", "built": False}]}]},
+    ):
+        assert ui.as_markdown(payload).strip(), f"{payload['kind']} rendered nothing"
+
+
+def test_the_banner_stays_as_it_is() -> None:
+    """There is no markdown for a logo."""
+    assert "▄" in ui.render_from({"kind": "banner", "project": "todo"})
+
+
+def test_a_terminal_still_gets_the_box() -> None:
+    out = in_colour(
+        "import forge_ui as ui\n"
+        "print(ui.render_from({'kind': 'action', 'ask': 'A, B, or C?'}))"
+    )
+    assert "╔" in out, "where escape codes work, the frame is still drawn"

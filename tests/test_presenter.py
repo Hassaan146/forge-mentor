@@ -431,3 +431,45 @@ def test_a_real_user_message_still_ends_the_search(project: Path) -> None:
         {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
     )
     assert blocked(answer), "that render belonged to the previous turn"
+
+
+def test_the_markdown_presentation_counts_as_framed(project: Path) -> None:
+    """It exists because the box could not be coloured, so it must not be refused.
+
+    Inside Claude Code the escape codes never arrive, so the block is handed to
+    the client as markdown for the client to colour. None of those lines carry a
+    frame character.
+    """
+    ask(project)
+    block = "\n".join(
+        [
+            "### ⚒ FORGE · DECISION 001",
+            "",
+            "**What's the idea?**",
+            "",
+            "💡 **What this means**",
+            "> Say it the way you would to a friend.",
+            "",
+            "---",
+            "",
+            "### → YOUR TURN",
+            "",
+            "**Your call**",
+        ]
+    )
+    assert not blocked(stop(project, block))
+
+
+def test_prose_is_counted_before_the_block_not_across_it(project: Path) -> None:
+    """The rule is about the lead-in, not the block's own body.
+
+    Counting every line without a frame character refused every markdown
+    question it was ever given, because in that presentation there are none.
+    """
+    ask(project)
+    body = "\n".join([f"line {n} of the block body" for n in range(1, 15)])
+
+    assert not blocked(stop(project, f"### ⚒ FORGE · DECISION 001\n{body}"))
+
+    wall = "\n".join([f"Some explanation, line {n}." for n in range(1, 12)])
+    assert blocked(stop(project, f"{wall}\n### ⚒ FORGE · DECISION 001\n{body}"))
