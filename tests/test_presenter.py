@@ -426,3 +426,43 @@ def test_a_block_printed_by_a_shell_command_does_not_count(project: Path) -> Non
         {"hook_event_name": "Stop", "cwd": str(project), "transcript_path": str(path)}
     )
     assert blocked(answer), "the user saw one line of prose, not a block"
+
+
+def test_the_presenter_accepts_what_the_render_tools_actually_produce(project: Path) -> None:
+    """The cross-check that caught this before it shipped.
+
+    The hook looked for a symbol on a markdown heading. The block is drawn as a
+    table on this surface, which has no heading, so it would have refused every
+    question the tools produced. Written against the real output of each tool
+    rather than against a sample of what it is assumed to look like.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
+    import forge_server as srv
+
+    unwrap = lambda tool: getattr(tool, "fn", tool)  # noqa: E731
+    ask(project)
+
+    blocks = {
+        "foundation_question": unwrap(srv.foundation_question)(str(project))["block"],
+        "render_decision": unwrap(srv.render_decision)(
+            "t", choices=[["A", "one", "x"]]
+        )["block"],
+        "render_note": unwrap(srv.render_note)("h", ["one"])["block"],
+        "render_action": unwrap(srv.render_action)("go?", kind="confirm")["block"],
+        "color_legend": unwrap(srv.color_legend)()["block"],
+    }
+
+    for name, block in blocks.items():
+        assert not blocked(stop(project, block)), f"{name} would have been refused"
+
+
+def test_a_table_row_carrying_a_symbol_is_the_block(project: Path) -> None:
+    """The third shape. A frame, a heading, or a table row, and it must know all."""
+    ask(project)
+    table = "\n".join(["| ⚒ **FORGE** · **DECISION 001** |", "| :--- |", "| **What's the idea?** |"])
+    assert not blocked(stop(project, table))
+
+    plain_table = "\n".join(["| a | b |", "|---|---|", "| 1 | 2 |"])
+    assert blocked(stop(project, plain_table)), "any old table is not a Forge block"

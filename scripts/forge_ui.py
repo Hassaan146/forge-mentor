@@ -1222,6 +1222,126 @@ def _plain_block(payload: dict) -> str:
     )
 
 
+def _boxed_markdown(payload: dict) -> str:
+    """The block as a one-column table, so the client draws the box.
+
+    **The last untried shape, and the only one that can give both.** A fence
+    keeps the drawing and kills the colour. Loose markdown keeps the colour and
+    loses the boundary. A table is markdown the client both colours *and* draws
+    a border around, so the box comes from the renderer instead of from
+    characters it refuses to leave alone.
+
+    One line per row, and no `<br>`: raw HTML inside a cell is not something
+    every markdown renderer honours, and this has already cost enough round
+    trips to guesses about what a renderer will do.
+    """
+    kind = str(payload.get("kind", "")).strip().lower()
+
+    def table(title: str, rows: list[str]) -> str:
+        out = [f"| {title} |", "| :--- |"]
+        out += [f"| {row} |" for row in rows]
+        return "\n".join(out)
+
+    if kind == "action":
+        hint = str(payload.get("hint") or "") or ASK_KINDS.get(
+            str(payload.get("ask_kind", "answer")), ""
+        )
+        rows = [f"**{payload.get('ask', '')}**"] + ([f"*{hint}*"] if hint else [])
+        return table(f"{ACTION} **YOUR TURN**", rows)
+
+    if kind == "note":
+        rows = [str(line) for line in (payload.get("lines") or []) if str(line).strip()]
+        rows = rows[:MAX_NOTE_LINES]
+        rows += [f"{BAR} **{line}**" for line in payload.get("important_lines") or []]
+        block = table(
+            f"{payload.get('symbol') or MARK} **{payload.get('heading', '')}**", rows
+        )
+        if payload.get("ask"):
+            block += "\n\n" + _boxed_markdown(
+                {"kind": "action", "ask": payload["ask"], "ask_kind": "answer"}
+            )
+        return block
+
+    if kind == "legend":
+        return table(
+            f"{MARK} **How to read Forge**",
+            [f"{symbol} &nbsp; {meaning}" for symbol, meaning in SYMBOL_MEANINGS],
+        )
+
+    if kind == "roadmap":
+        rows = []
+        for phase in payload.get("phases") or []:
+            steps = list(phase.get("steps") or [])
+            built = int(phase.get("built") or 0)
+            state = str(phase.get("state", "later"))
+            mark = {"done": RECORDED, "now": MARK}.get(state, "·")
+            count = f"{built}/{len(steps)} steps" if steps else "no steps yet"
+            rows.append(
+                f"{mark} `{phase.get('number', '')}` **{phase.get('title', '')}** "
+                f"· {count} · {state}"
+            )
+            rows.append(f"&nbsp;&nbsp;&nbsp; {phase.get('delivers', '')}")
+            if state == "now":
+                for position, step in enumerate(steps, start=1):
+                    tick = RECORDED if step.get("built") else "·"
+                    rows.append(f"&nbsp;&nbsp;&nbsp; {tick} {position}. {step.get('text', '')}")
+        return table(f"{MARK} **{payload.get('title', 'THE PLAN')}**", rows)
+
+    if kind != "decision":
+        raise ValueError(
+            f"Unknown block kind {kind!r}. "
+            "Use one of: decision, note, action, legend, roadmap, banner."
+        )
+
+    number = payload.get("number")
+    head = f"{MARK} **FORGE**"
+    if number:
+        head += f" · **DECISION {int(number):03d}**"
+
+    rows = [f"**{payload.get('title', '')}**"]
+    if payload.get("subtitle"):
+        rows.append(f"*{payload['subtitle']}*")
+
+    means = [line for line in (payload.get("means") or []) if str(line).strip()]
+    if means:
+        rows.append(f"{TEACH} **What this means**")
+        rows += [f"&nbsp;&nbsp; {line}" for line in means]
+
+    choices = payload.get("choices") or []
+    if choices:
+        rows.append(f"{WEIGH} **Options**")
+        for choice in choices:
+            letter, label, note_text = (list(choice) + ["", "", ""])[:3]
+            rows.append(f"&nbsp;&nbsp; `{letter}` &nbsp; **{label}** &nbsp; {note_text}")
+
+    recommend = payload.get("recommend")
+    if recommend:
+        pick, why = (list(recommend) + ["", ""])[:2]
+        rows.append(f"{STAR} **Recommended: {pick}** &nbsp; {why}")
+    if payload.get("against"):
+        rows.append(f"{COST} **Against it:** {payload['against']}")
+
+    for line in payload.get("important_lines") or []:
+        rows.append(f"{BAR} **{line}**")
+
+    total = int(payload.get("total") or 0)
+    if total:
+        stage = f" · {payload['stage']}" if payload.get("stage") else ""
+        rows.append(f"`{int(payload.get('done') or 0)} of ~{total}{stage}`")
+
+    letters = _spoken_letters([str(c[0]) for c in choices]) if choices else ""
+    ask = str(payload.get("ask") or "") or (
+        f"Your call: {letters}?" if letters else "Your call"
+    )
+    return table(head, rows) + "\n\n" + _boxed_markdown(
+        {
+            "kind": "action",
+            "ask": ask,
+            "ask_kind": "choose" if choices else "answer",
+        }
+    )
+
+
 def as_markdown(payload: dict) -> str:
     """The block as markdown, for a client that colours markdown and not ANSI."""
     kind = str(payload.get("kind", "")).strip().lower()
@@ -1269,24 +1389,45 @@ def render_from(payload: dict) -> str:
     # draws its own container around it. The symbols and the frame carry the
     # meaning, which is what rule R11 has required from the start.
     if not _ON and kind != "banner":
-        # An `ansi` fence: the box drawn exactly as it is, with the escape
-        # codes left in for the client to interpret. It is the one combination
-        # that gives both things, and the previous four attempts each gave one.
+        # **A plain fence. This is settled, and here is the whole search.**
         #
-        # `FORGE_PLAIN_FENCE=1` drops back to a fence with no codes in it, for
-        # a renderer that shows them raw rather than acting on them. That switch
-        # exists because I cannot test every client, and a screen full of
-        # `[38;5;215m` is worse than no colour at all.
+        # Six ways to put a coloured block on screen in Claude Code, each
+        # verified against a real screenshot rather than reasoned about:
+        #
+        #   1. ANSI retyped into the reply     colour stripped by the renderer
+        #   2. ANSI printed by a command       colour stripped, same reason
+        #   3. a block printed by a command    never shown; tool output collapses
+        #   4. loose markdown                  colour arrives, the box is lost
+        #   5. an ```ansi fence                escape codes shown raw, unusable
+        #   6. a plain fence                   the box, exactly as drawn
+        #
+        # Five of the six trade away either the box or the message. The box is
+        # the one that was asked for first and asked for most, and rule R11 has
+        # required from the beginning that colour is never the only signal
+        # precisely so this case would cost nothing. The symbols and the frame
+        # carry every meaning.
+        #
+        # `FORGE_ANSI_FENCE=1` restores attempt 5 for a client that interprets
+        # those fences. Left in because the failure is per-client, not
+        # universal, and someone else's terminal may do better than this one.
+        if os.environ.get("FORGE_ANSI_FENCE"):
+            was_on = _ON
+            try:
+                _apply_colour(True)
+                drawn = _plain_block(payload).strip("\n")
+            finally:
+                _apply_colour(was_on)
+            return "```ansi\n" + drawn + "\n```"
+
+        # `FORGE_PLAIN_FENCE=1` gives the drawn box with no colour: the safe
+        # one, for any renderer that does not do tables.
         if os.environ.get("FORGE_PLAIN_FENCE"):
             return "```\n" + _plain_block(payload).strip("\n") + "\n```"
 
-        was_on = _ON
-        try:
-            _apply_colour(True)
-            drawn = _plain_block(payload).strip("\n")
-        finally:
-            _apply_colour(was_on)
-        return "```ansi\n" + drawn + "\n```"
+        # A table. The client draws the border and colours the contents, which
+        # is the only arrangement where the box and the colour come from the
+        # same place. Everything else made them fight.
+        return _boxed_markdown(payload)
 
     if kind == "legend":
         return legend()

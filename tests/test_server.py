@@ -489,8 +489,9 @@ def test_a_decision_ends_in_the_action_frame_and_nothing_after_it() -> None:
     # The presentation depends on where the block is going: a double-ruled
     # frame where escape codes work, a heading where the client colours
     # markdown instead. The ask being last is what matters either way.
-    tail = block.rstrip()
-    assert tail.endswith("╝") or "YOUR TURN" in tail.rsplit("---", 1)[-1]
+    # The ask is last whichever way the block is drawn: a double-ruled frame
+    # in a terminal, its own table where the client draws the border.
+    assert "YOUR TURN" in block.rstrip().splitlines()[-4:][0] or block.rstrip().endswith("╝")
 
 
 def test_a_detail_that_cannot_be_undone_gets_its_own_bar() -> None:
@@ -537,14 +538,16 @@ def test_the_legend_returns_the_meanings_as_data_too() -> None:
         "AMBER", "BLUE", "GREEN", "YELLOW", "RED", "PURPLE",
     }
 
-    # The block teaches whichever key the destination can actually use. In a
-    # terminal, and inside an `ansi` fence where the client interprets the
-    # codes, that is the six colours. Where the codes would show raw it is the
-    # nine symbols instead.
-    for meaning in answer["meanings"]:
-        assert meaning["name"] in answer["block"]
-    if not ui._ON:
-        assert answer["block"].startswith("```ansi"), "fenced, codes left in"
+    # The block teaches whichever key the destination can actually use: the six
+    # colours in a terminal, the nine symbols where no escape code survives.
+    # Teaching colours to someone who will never see one is worse than nothing.
+    if ui._ON:
+        for meaning in answer["meanings"]:
+            assert meaning["name"] in answer["block"]
+    else:
+        for symbol, _ in ui.SYMBOL_MEANINGS:
+            assert symbol in answer["block"]
+        assert answer["block"].startswith("| "), "a table, drawn by the client"
 
 
 def test_a_follow_up_can_carry_an_important_line_and_a_separate_ask() -> None:
@@ -747,6 +750,9 @@ def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Pat
         # strips escape codes the block arrives fenced so nothing reflows it;
         # in a terminal it is the same drawing with colour in it. Either way
         # the presenter hook has to see a frame.
-        assert any(char in block for char in "┌╔"), "every block is drawn"
-        if not ui._ON:
-            assert block.startswith("```"), "and fenced where markdown would reflow it"
+        # Drawn either way: box characters in a terminal, a table where the
+        # client draws the border and colours the contents.
+        if ui._ON:
+            assert any(char in block for char in "┌╔")
+        else:
+            assert block.startswith("| ") and "| :--- |" in block

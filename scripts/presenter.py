@@ -168,9 +168,24 @@ MARKS = "⚒💡⚖★⚠✅⛔→▌"
 
 
 def _starts_the_block(line: str) -> bool:
+    """Is this the line where Forge's own block begins?
+
+    Three shapes, because the block is drawn differently depending on what the
+    destination can render, and the hook has to recognise all of them:
+
+      * a frame character, in a terminal that takes escape codes
+      * a symbol on a markdown heading
+      * a symbol in a table row, which is how the client is asked to draw the
+        border itself
+
+    The table was missed on the first pass and would have refused every
+    question, which is what a cross-check is for.
+    """
     if any(char in FRAMES for char in line):
         return True
-    return line.lstrip().startswith("#") and any(mark in line for mark in MARKS)
+
+    start = line.lstrip()[:1]
+    return start in {"#", "|"} and any(mark in line for mark in MARKS)
 
 
 def is_framed(text: str) -> bool:

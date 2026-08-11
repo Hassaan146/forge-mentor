@@ -686,32 +686,6 @@ def test_a_long_teaching_line_cannot_break_the_frame() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_where_colour_cannot_arrive_the_block_is_fenced() -> None:
-    """Loose markdown bought colour and lost the box. That was the wrong trade.
-
-    A decision has to arrive as one object with a boundary or it reads as the
-    assistant chatting (decision 035). Rendered as headings and quotes it
-    sprawled down the screen with nothing holding it together, which is worse
-    than monochrome. A fence keeps every column where it was drawn.
-    """
-    out = ui.render_from({"kind": "decision", "title": "t", "choices": [["A", "one", "first"]]})
-
-    assert out.startswith("```") and out.rstrip().endswith("```")
-    assert "┌" in out and "└" in out, "the box is back"
-    assert "YOUR TURN" in out
-
-
-def test_the_fence_leaves_the_drawing_alone() -> None:
-    """No reflow, and no markdown reading `---` as a rule or `*` as emphasis."""
-    out = ui.render_from(
-        {"kind": "decision", "title": "t", "means": ["a line"], "done": 2, "total": 6}
-    )
-    inside = ANSI.sub("", out.split("```")[1])
-
-    framed = [ln for ln in inside.splitlines() if ln.strip()[:1] in {"┌", "│", "└"}]
-    assert len({ui.visible_width(ln) for ln in framed}) == 1, "the box is still square"
-
-
 def test_the_markdown_renderer_still_carries_everything() -> None:
     out = ui.as_markdown(
         {
@@ -770,18 +744,70 @@ def test_a_terminal_still_gets_the_box() -> None:
     assert "╔" in out, "where escape codes work, the frame is still drawn"
 
 
-def test_the_fence_is_tagged_ansi_and_keeps_the_codes() -> None:
-    """The one combination the previous four attempts each missed half of.
+def test_the_block_is_a_table_so_the_client_draws_the_box() -> None:
+    """Seven shapes tried, each checked against a real screen.
 
-    Retyped ANSI is stripped. ANSI through a command is stripped. A block
-    through a command is collapsed. A markdown block loses the box. An `ansi`
-    fence keeps the drawing and hands the codes to the client to interpret.
+    ANSI retyped is stripped. ANSI by command is stripped. A block by command is
+    collapsed and never shown. Loose markdown gets colour and loses the box. A
+    plain fence keeps the box and loses the colour. An ```ansi fence prints the
+    codes raw. A table is the only arrangement where the box and the colour come
+    from the same place: the client draws the border and colours the contents.
     """
-    out = ui.render_from({"kind": "decision", "title": "t", "choices": [["A", "one", "x"]]})
+    out = ui.render_from(
+        {"kind": "decision", "number": 3, "title": "t", "choices": [["A", "one", "x"]]}
+    )
 
-    assert out.startswith("```ansi")
-    assert "\033[" in out, "the codes are in there for the client to act on"
-    assert "┌" in out and "YOUR TURN" in out, "and the drawing is untouched"
+    assert out.startswith("| "), "a table, drawn by the renderer"
+    assert "| :--- |" in out, "with a header rule, or it is not one"
+    assert "[" not in out, "no escape codes; this surface prints them raw"
+    assert "```" not in out, "and no fence, which is what killed the colour"
+    assert "DECISION 003" in out and "YOUR TURN" in out
+
+
+def test_every_kind_survives_the_table_route() -> None:
+    for payload in (
+        {"kind": "decision", "title": "t"},
+        {"kind": "note", "heading": "h", "lines": ["one"], "ask": "yes?"},
+        {"kind": "action", "ask": "go?", "ask_kind": "confirm"},
+        {"kind": "legend"},
+        {"kind": "roadmap", "phases": [
+            {"number": 1, "title": "First", "delivers": "d", "state": "now", "built": 0,
+             "steps": [{"text": "s", "built": False}]}]},
+    ):
+        out = ui._boxed_markdown(payload)
+        assert out.startswith("| ") and "| :--- |" in out, payload["kind"]
+
+
+def test_a_decision_table_keeps_everything_the_box_had() -> None:
+    out = ui._boxed_markdown(
+        {
+            "kind": "decision",
+            "number": 2,
+            "title": "What are you building this with?",
+            "subtitle": "the first decision",
+            "means": ["a line of teaching"],
+            "choices": [["A", "Front end only", "no server"], ["B", "Back end only", "later"]],
+            "recommend": ["A", "nothing to host"],
+            "against": "the data stays here",
+            "important_lines": ["This cannot be undone."],
+            "done": 1,
+            "total": 6,
+            "stage": "foundation",
+        }
+    )
+
+    for expected in (
+        "DECISION 002",
+        "What are you building this with?",
+        "a line of teaching",
+        "**Front end only**",
+        "Recommended: A",
+        "Against it:",
+        "This cannot be undone.",
+        "1 of ~6",
+        "Your call: A, or B?",
+    ):
+        assert expected in out, f"the table lost {expected!r}"
 
 
 def test_the_palette_is_put_back_after_drawing() -> None:
