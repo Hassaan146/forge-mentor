@@ -911,8 +911,10 @@ def test_every_marker_sits_in_column_zero() -> None:
         assert marked, f"nothing carries {marker} for {meaning}"
 
     rules = [line for line in body if line.startswith("@@")]
-    assert len(rules) == 2, "a rule opens the block and one opens the turn"
-    assert rules[0].rstrip().endswith("@@"), "and each one closes"
+    assert len(rules) == 3, "one opens the block, one opens the turn, one shuts it"
+    for rule in rules:
+        assert rule.rstrip().endswith("@@"), "and every rule closes its own line"
+    assert body[-1].startswith("@@"), "the block ends shut, not trailing off"
 
 
 def test_the_markers_carry_forge_meanings_not_version_control_ones() -> None:
