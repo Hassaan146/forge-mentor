@@ -1223,6 +1223,151 @@ def _plain_block(payload: dict) -> str:
     )
 
 
+def _coloured_box(payload: dict) -> str:
+    """A drawn box whose left border is also the thing that colours the line.
+
+    **Both, finally, and the trick is that only column zero is anchored.**
+    highlight.js decides a diff line from its first character, and says nothing
+    about the rest. So the right border, the padding and every box rule after
+    column zero are free. What has to give is the left border character: it
+    becomes the marker.
+
+      `+`  green: the frame itself, and an option, a thing you can pick
+      `-`  red: what it costs, the line rule R11 paints yellow
+      `|`  default: ordinary content, no claim on the eye
+
+    That is why the earlier attempt lost the box. It put `+` where the border
+    should be *instead of* a border, rather than making the border do both jobs.
+    """
+    kind = str(payload.get("kind", "")).strip().lower()
+    inner = 74
+
+    def rule(title: str = "") -> str:
+        if not title:
+            return "+" + "-" * inner + "+"
+        return "+-- " + title + " " + "-" * max(3, inner - len(title) - 4) + "+"
+
+    def row(text: str = "", mark: str = "|") -> str:
+        return f"{mark}  {text.ljust(inner - 3)}|"
+
+    def wrapped(text: str, mark: str = "|", indent: str = "") -> list[str]:
+        return [row(indent + line, mark) for line in _wrap(text, inner - 6 - len(indent), "")]
+
+    out: list[str] = []
+
+    if kind in {"action", "note", "legend", "roadmap", "decision"}:
+        pass
+    else:
+        raise ValueError(
+            f"Unknown block kind {kind!r}. "
+            "Use one of: decision, note, action, legend, roadmap, banner."
+        )
+
+    if kind == "action":
+        hint = str(payload.get("hint") or "") or ASK_KINDS.get(
+            str(payload.get("ask_kind", "answer")), ""
+        )
+        out = [rule(f"{ACTION} YOUR TURN"), row()]
+        out += wrapped(str(payload.get("ask", "")))
+        if hint:
+            out += wrapped(hint)
+        out += [row(), rule()]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "note":
+        out = [rule(f"{payload.get('symbol') or MARK} {payload.get('heading', '')}"), row()]
+        for line in [ln for ln in (payload.get("lines") or []) if str(ln).strip()][
+            :MAX_NOTE_LINES
+        ]:
+            out += wrapped(str(line))
+        for line in payload.get("important_lines") or []:
+            out += wrapped(f"{BAR} {line}", "-")
+        out += [row(), rule()]
+        if payload.get("ask"):
+            out += ["", *_coloured_box(
+                {"kind": "action", "ask": payload["ask"], "ask_kind": "answer"}
+            ).split("\n")[1:-1]]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "legend":
+        out = [rule(f"{MARK} How to read Forge"), row()]
+        for symbol, meaning in SYMBOL_MEANINGS:
+            out += wrapped(f"{symbol}  {meaning}")
+        out += [row(), rule()]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "roadmap":
+        out = [rule(f"{MARK} {payload.get('title', 'THE PLAN')}"), row()]
+        for phase in payload.get("phases") or []:
+            steps = list(phase.get("steps") or [])
+            built = int(phase.get("built") or 0)
+            state = str(phase.get("state", "later"))
+            count = f"{built}/{len(steps)} steps" if steps else "no steps yet"
+            mark = "+" if state in {"done", "now"} else "|"
+            out += wrapped(
+                f"{phase.get('number', '')}  {phase.get('title', '')}   {count} · {state}", mark
+            )
+            out += wrapped(str(phase.get("delivers", "")), "|", "   ")
+            if state == "now":
+                for position, step in enumerate(steps, start=1):
+                    tick = RECORDED if step.get("built") else "·"
+                    out += wrapped(f"{tick} {position}. {step.get('text', '')}", "|", "   ")
+            out.append(row())
+        out.append(rule())
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    number = payload.get("number")
+    title = f"{MARK} FORGE" + (f" · DECISION {int(number):03d}" if number else "")
+    out = [rule(title), row()]
+    out += wrapped(str(payload.get("title", "")))
+    if payload.get("subtitle"):
+        out += wrapped(str(payload["subtitle"]))
+
+    means = [line for line in (payload.get("means") or []) if str(line).strip()]
+    if means:
+        out.append(row())
+        out += wrapped(f"{TEACH} What this means")
+        for line in means[:MAX_MEANS_LINES]:
+            out += wrapped(str(line), "|", "  ")
+
+    choices = payload.get("choices") or []
+    if choices:
+        out.append(row())
+        out += wrapped(f"{WEIGH} Options")
+        width = max(len(str(c[1])) for c in choices)
+        for choice in choices:
+            letter, label, note_text = (list(choice) + ["", "", ""])[:3]
+            out += wrapped(f"{letter}  {str(label).ljust(width)}   {note_text}", "+", "  ")
+
+    recommend = payload.get("recommend")
+    if recommend:
+        pick, why = (list(recommend) + ["", ""])[:2]
+        out.append(row())
+        out += wrapped(f"{STAR} Recommended  {pick}", "+")
+        out += wrapped(str(why), "+", "  ")
+    if payload.get("against"):
+        out += wrapped(f"{COST} Against it: {payload['against']}", "-", "  ")
+    for line in payload.get("important_lines") or []:
+        out += wrapped(f"{BAR} {line}", "-", "  ")
+
+    total = int(payload.get("total") or 0)
+    if total:
+        stage = f" · {payload['stage']}" if payload.get("stage") else ""
+        out += [row(), row(f"{int(payload.get('done') or 0)} of ~{total}{stage}")]
+
+    out += [row(), rule()]
+
+    letters = _spoken_letters([str(c[0]) for c in choices]) if choices else ""
+    ask = str(payload.get("ask") or "") or (
+        f"Your call: {letters}?" if letters else "Your call"
+    )
+    turn = _coloured_box(
+        {"kind": "action", "ask": ask, "ask_kind": "choose" if choices else "answer"}
+    ).split("\n")[1:-1]
+
+    return "```diff\n" + "\n".join(out) + "\n\n" + "\n".join(turn) + "\n```"
+
+
 def _diff_block(payload: dict) -> str:
     """The block as a `diff` fence, which the client's highlighter colours.
 
@@ -1568,12 +1713,17 @@ def render_from(payload: dict) -> str:
         if os.environ.get("FORGE_DIFF"):
             return _diff_block(payload)
 
-        # **The drawn box, and no markers in the text.** Asked for first, asked
-        # for most, and chosen knowing what it costs: no colour reaches it.
-        # Rule R11 has required from the first day that colour is never the only
-        # signal, and this is the day that promise is collected. The eight
-        # symbols and the two frames carry every meaning on their own.
-        return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+        # `FORGE_NO_COLOUR=1` gives the drawn box with no markers at all, for a
+        # client whose highlighter does not know `diff`.
+        if os.environ.get("FORGE_NO_COLOUR"):
+            return "```\n" + _plain_block(payload).strip("\n") + "\n```"
+
+        # **Both, and the trick is that only column zero is anchored.** The
+        # left border character is also the token that colours the line, so the
+        # box is drawn and the client paints it. Nine earlier attempts each gave
+        # up one of the two because they treated the marker and the border as
+        # competing for the same column instead of as the same thing.
+        return _coloured_box(payload)
 
     if kind == "legend":
         return legend()

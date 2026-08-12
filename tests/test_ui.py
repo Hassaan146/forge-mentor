@@ -744,15 +744,6 @@ def test_a_terminal_still_gets_the_box() -> None:
     assert "╔" in out, "where escape codes work, the frame is still drawn"
 
 
-def test_the_plain_fence_is_still_available_behind_a_switch(monkeypatch) -> None:
-    """The drawn box with no colour, for a client with no highlighter."""
-    monkeypatch.setenv("FORGE_PLAIN_FENCE", "1")
-    out = ui.render_from({"kind": "decision", "number": 3, "title": "t"})
-
-    assert out.startswith("```\n"), "no language tag, nothing to highlight"
-    assert "┌" in out and "└" in out, "and the box is drawn"
-
-
 def test_the_table_is_still_available_behind_a_switch(monkeypatch) -> None:
     """Tried as the default and beaten by the fence on this renderer.
 
@@ -820,17 +811,6 @@ def test_the_palette_is_put_back_after_drawing() -> None:
     assert ui._ON is before
 
 
-def test_a_renderer_that_shows_codes_raw_has_a_way_out(monkeypatch) -> None:
-    """I cannot test every client, and a screen of `[38;5;215m` is worse than
-    no colour at all."""
-    monkeypatch.setenv("FORGE_PLAIN_FENCE", "1")
-    out = ui.render_from({"kind": "decision", "title": "t"})
-
-    assert out.startswith("```\n"), "a plain fence, no language tag"
-    assert "\033[" not in out
-    assert "┌" in out, "and the box is still the box"
-
-
 def test_the_teaching_cap_never_cuts_a_sentence_in_half() -> None:
     """It counted rows on screen, and a wrap fell in the wrong place.
 
@@ -865,22 +845,43 @@ def test_the_cap_still_drops_whole_sentences_past_three() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_block_is_a_drawn_box_with_no_markers_in_the_text() -> None:
-    """Asked for first, asked for most, and chosen knowing what it costs.
+def test_the_box_is_drawn_and_the_left_border_is_what_colours_it() -> None:
+    """Both, and the trick is that only column zero is anchored.
 
-    highlight.js anchors its line tokens at column zero, so a `|` border in
-    front of a marker makes it an ordinary character. The box and the colour
-    cannot both be had, and the box is the one that was wanted.
+    highlight.js decides a diff line from its first character and says nothing
+    about the rest, so the right border and the padding are free. The left
+    border character has to *be* the marker rather than sit beside one. Nine
+    earlier attempts each gave up one of the two because they treated the
+    border and the marker as competing for the same column.
     """
     out = ui.render_from(
-        {"kind": "decision", "number": 7, "title": "t", "choices": [["A", "one", "x"]]}
+        {
+            "kind": "decision",
+            "number": 7,
+            "title": "t",
+            "choices": [["A", "one", "x"]],
+            "against": "a cost",
+        }
     )
+    body = out.split("```diff\n", 1)[1].rsplit("\n```", 1)[0].splitlines()
+
+    assert out.startswith("```diff"), "a language the highlighter knows"
+    for line in [ln for ln in body if ln.strip()]:
+        assert line[0] in "+-|", f"every line starts with a border: {line[:12]!r}"
+        assert line.rstrip()[-1] in "+|", f"and closes with one: {line[-12:]!r}"
+
+    assert any(line.startswith("+") for line in body), "the frame and the options are green"
+    assert any(line.startswith("-") for line in body), "and the cost is red"
+
+
+def test_the_uncoloured_box_is_available_for_a_client_without_a_highlighter(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FORGE_NO_COLOUR", "1")
+    out = ui.render_from({"kind": "decision", "number": 7, "title": "t"})
 
     assert out.startswith("```\n"), "no language tag, nothing to highlight"
-    assert "┌" in out and "└" in out, "and the box is drawn"
-    assert "@@" not in out and not any(
-        line.startswith(("+", "-", "#")) for line in out.splitlines()
-    ), "no markers anywhere in the text"
+    assert "┌" in out and "└" in out, "and the drawn box instead"
 
 
 def test_the_coloured_version_is_still_available_behind_a_switch(monkeypatch) -> None:

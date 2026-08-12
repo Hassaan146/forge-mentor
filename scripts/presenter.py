@@ -191,7 +191,12 @@ def _starts_the_block(line: str) -> bool:
     if stripped.startswith("@@") and any(mark in line for mark in MARKS):
         return True
 
-    return stripped[:1] in {"#", "|"} and any(mark in line for mark in MARKS)
+    # `+`, `-` and `|` are the ASCII border of the coloured box, where the left
+    # edge doubles as the token that colours the line. Missing them refused
+    # `render_note` and `render_action` outright, because their only framed
+    # lines start with `+`. Caught by cross-checking against the real output of
+    # every tool, which is the third time that check has earned its place.
+    return stripped[:1] in {"#", "|", "+", "-"} and any(mark in line for mark in MARKS)
 
 
 def is_framed(text: str) -> bool:

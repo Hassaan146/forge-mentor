@@ -544,7 +544,7 @@ def test_the_legend_returns_the_meanings_as_data_too() -> None:
     else:
         for symbol, _ in ui.SYMBOL_MEANINGS:
             assert symbol in answer["block"]
-        assert answer["block"].startswith("```\n"), "drawn, and fenced so it stays drawn"
+        assert answer["block"].startswith("```diff"), "drawn, and coloured by the client"
 
 
 def test_a_follow_up_can_carry_an_important_line_and_a_separate_ask() -> None:
@@ -741,9 +741,13 @@ def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Pat
 
     for block in blocks:
         assert block.strip(), "a render tool returned nothing"
-        # One presentation decision, made in one place: the same drawing every
-        # time, fenced where markdown would otherwise reflow it. Whichever it
-        # is, the presenter hook has to recognise it as Forge speaking.
-        assert any(char in block for char in "┌╔"), "every block is drawn"
-        if not ui._ON:
-            assert block.startswith("```\n"), "fenced, so nothing reflows it"
+        # One presentation decision, made in one place: box characters where
+        # escape codes work, an ASCII border that doubles as the colour token
+        # where the client has a highlighter.
+        if ui._ON:
+            assert any(char in block for char in "┌╔"), "every block is drawn"
+        else:
+            assert block.startswith("```diff"), "a language the highlighter knows"
+            body = block.split("```diff\n", 1)[1].rsplit("\n```", 1)[0]
+            for line in [ln for ln in body.splitlines() if ln.strip()]:
+                assert line[0] in "+-|", "every line carries a border"
