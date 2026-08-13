@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 import forge_state as fs
+from conftest import pass_lean
 import governor
 
 
@@ -84,7 +85,7 @@ def ready_to_build(forge) -> None:
     """
     import forge_foundation as ff
 
-    for question in ff.FOUNDATION:
+    while (question := ff.next_question(forge)) is not None:
         asked = fs.ask(forge, question.question)
         fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
@@ -99,6 +100,7 @@ def ready_to_build(forge) -> None:
     asked = fs.ask(forge, "Does this plan look right?", affects=st.PLAN_MARKER)
     fs.answer(forge, asked.id, "# Yes\n\n## Why\n\nlooks right\n")
 
+    pass_lean(forge)
     asked = fs.ask(forge, "phase 1 step 1", affects="phase-1.step-1")
     fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 

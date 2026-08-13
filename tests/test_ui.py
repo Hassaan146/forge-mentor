@@ -744,6 +744,54 @@ def test_a_terminal_still_gets_the_box() -> None:
     assert "╔" in out, "where escape codes work, the frame is still drawn"
 
 
+def test_an_option_and_its_consequence_stay_on_one_line() -> None:
+    """The user's report: the block is too narrow.
+
+    A menu of four options, each carrying the consequence that makes it a
+    choice rather than a word, was wrapping every one of them onto a second
+    line. Four options then read as eight lines, and the part that wrapped is
+    the part that matters.
+    """
+    out = ui.render_from(
+        {
+            "kind": "decision",
+            "title": "What are you building this with?",
+            "choices": [
+                ["B", "Back end only", "an API and a database now, screens added later"],
+            ],
+        }
+    )
+
+    carrying = [line for line in out.splitlines() if "Back end only" in line]
+    assert len(carrying) == 1
+    assert "screens added later" in carrying[0], "the consequence wrapped away"
+
+
+def test_the_width_can_be_narrowed_for_a_split_pane(monkeypatch) -> None:
+    monkeypatch.setenv("FORGE_BOX_WIDTH", "64")
+    assert ui._box_inner() == 64
+
+    monkeypatch.setenv("FORGE_BOX_WIDTH", "12")
+    assert ui._box_inner() == 56, "clamped, or it cannot hold an option"
+
+    monkeypatch.setenv("FORGE_BOX_WIDTH", "not a number")
+    assert ui._box_inner() == 92, "a bad value is not a reason to draw badly"
+
+
+def test_the_concept_is_on_screen_with_the_question() -> None:
+    """A user who remembers picking B has learned nothing worth carrying."""
+    payload = {
+        "kind": "decision",
+        "title": "What is stored, and what happens if it is lost?",
+        "concept": "where the information lives when the program is not running",
+    }
+
+    assert "Concept: where the information lives" in ui.render_from(payload)
+    assert "Concept: where the information lives" in plain(ui.decision(
+        payload["title"], concept=payload["concept"]
+    ))
+
+
 def test_the_table_is_still_available_behind_a_switch(monkeypatch) -> None:
     """Tried as the default and beaten by the fence on this renderer.
 

@@ -447,7 +447,12 @@ def test_the_presenter_accepts_what_the_render_tools_actually_produce(project: P
     blocks = {
         "foundation_question": unwrap(srv.foundation_question)(str(project))["block"],
         "render_decision": unwrap(srv.render_decision)(
-            "t", choices=[["A", "one", "x"]]
+            "t",
+            choices=[
+                ["A", "one", "the first cost"],
+                ["B", "two", "the second cost"],
+                ["C", "three", "the third cost"],
+            ],
         )["block"],
         "render_note": unwrap(srv.render_note)("h", ["one"])["block"],
         "render_action": unwrap(srv.render_action)("go?", kind="confirm")["block"],

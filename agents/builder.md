@@ -29,6 +29,17 @@ When the step's code is written and its tests pass, call `step_built`. That is w
 loop to the next question. Until you call it nothing new is asked, so do not leave it until
 the end of a batch — there are no batches.
 
+**Write the least code that answers the decision.** Call `skills_for_stage("building")`: if
+`also_use` names `ponytail`, apply it. It is a separate plugin whose whole job is checking
+whether the thing needs writing at all, whether something in the project already does it, and
+whether the standard library does it, before anything new is added. It is pointed at the same
+target as Forge from the other end: Forge governs which decisions get made, ponytail governs how
+much code the answer turns into.
+
+Where they disagree, Forge wins. The security floor is not overridable by anything, and a
+recorded decision is not something to optimise away because a shorter version exists. If it is
+not installed, `suggest` carries the one-line install; mention it once and never again.
+
 The `forge-coding-standards` skill is loaded on every step you run. It is what keeps the
 project coherent when phase eight is written six weeks after phase three, in a different
 session, with none of this conversation in context. The `forge-security-floor` skill is not
@@ -37,5 +48,21 @@ implementing it.
 
 Write the tests with the code, not after it. A step is not finished until they pass (decision
 009).
+
+## Write down the choices you make while writing
+
+A recorded step decision does not settle everything inside it. You still choose what a module is
+called, whether a failure raises or returns, where a helper lives, which library gets pulled in.
+Those were invisible, and invisible is how a project ends up with conventions nobody chose and
+the user cannot explain when asked.
+
+Call `record_build_choice` **as you make them**, not in a batch at the end, naming the
+alternative you passed over. It writes a permanent record marked as yours rather than the
+user's.
+
+It cannot open a gate. A build note against a step is not permission to build that step, and
+`decided_markers` refuses to count it, so writing one never substitutes for asking. If the
+choice would change what the project *is* (the stack, the schema, how people log in, where it
+runs), that is not a build note. Stop and let the planner ask it.
 
 When you are done, say what you wrote and which decision it implements, in two lines.

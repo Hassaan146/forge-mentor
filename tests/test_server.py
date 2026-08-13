@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 
 import forge_integrity as fi
 import forge_state as fs
+from conftest import pass_lean
 import forge_server as srv
 
 
@@ -32,6 +33,8 @@ record_override = call(srv.record_override)
 clear_override = call(srv.clear_override)
 check_history = call(srv.check_history)
 repair_history = call(srv.repair_history)
+resume = call(srv.resume)
+foundation_question = call(srv.foundation_question)
 
 
 @pytest.fixture()
@@ -117,9 +120,11 @@ def test_answering_unblocks_and_verifies(project: str, forge: Path) -> None:
 
     import forge_foundation as ff
 
-    for question in ff.FOUNDATION:
+    while (question := ff.next_question(forge)) is not None:
         pending = ask_question(project, question.question)
-        last = record_answer(project, pending["id"], "A", "because")
+        last = record_answer(
+            project, pending["id"], "A", "because", their_reason="it suits me"
+        )
 
     # And still blocked, which is the second half of the same lesson. The
     # foundation being answered says what is being built, not what the next
@@ -139,6 +144,7 @@ def test_answering_unblocks_and_verifies(project: str, forge: Path) -> None:
     pending = ask_question(project, "Does this plan look right?", affects=stp.PLAN_MARKER)
     record_answer(project, pending["id"], "yes", "looks right")
 
+    pass_lean(forge)
     pending = ask_question(project, "phase 1 step 1", affects="phase-1.step-1")
     last = record_answer(project, pending["id"], "A", "because")
 
@@ -201,6 +207,285 @@ def test_broken_notes_are_reported_rather_than_crashing(project: str, forge: Pat
     assert "fix:" in state["error"]
 
 
+def _answer(project: str, question: str, choice: str = "A") -> None:
+    asked = ask_question(project, question)
+    record_answer(project, asked["id"], choice, "because", their_reason="it suits me")
+
+
+def _answer_everything(project: str) -> None:
+    """Answer whatever the interrogation asks, until it stops asking.
+
+    Not a loop over the six. An answer can open further questions, and a fixed
+    loop leaves one of them open, so the gate stays shut for a reason the test
+    never mentions.
+    """
+    import forge_foundation as ff
+
+    forge = Path(project) / fs.FORGE_DIR
+    while (question := ff.next_question(forge)) is not None:
+        _answer(project, question.question)
+
+
+def test_resuming_hands_back_the_block_not_a_summary(project: str) -> None:
+    """The screen the user left, in the same shape they left it in.
+
+    A resumed session that says "decision 001 is still open" makes the user
+    reconstruct the question from a summary of it, which is exactly the work
+    keeping the notes on disk was meant to remove.
+    """
+    import forge_foundation as ff
+
+    ask_question(project, ff.INTENT.question)
+
+    picked_up = resume(project)
+    assert picked_up["open_question"] == ff.INTENT.question
+    assert picked_up["stage"] == "open-question"
+    assert picked_up["writes_blocked"] is True
+    assert ff.INTENT.question in picked_up["block"]
+
+    # The same block, byte for byte, as the one it was asked with. Redrawing it
+    # in a slightly different shape reads as a different question.
+    assert picked_up["block"] == foundation_question(project)["block"]
+
+
+def test_resuming_between_answers_asks_the_next_question(project: str) -> None:
+    """The gap between one answer and the next question is a resume point too.
+
+    Nothing is open here, and the foundation is not finished. Answering "carry
+    on with the build" would send the client at a governor that blocks every
+    write for a reason it has not been told.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a to-do app for myself")
+
+    picked_up = resume(project)
+    assert picked_up["open_question"] is None
+    assert picked_up["stage"] == "foundation"
+    assert ff.STACK.question in picked_up["block"]
+    assert "next_step" not in picked_up["next"]
+    assert (picked_up["answered"], picked_up["total"]) == (1, len(ff.FOUNDATION))
+
+
+def test_a_question_of_its_own_comes_back_whole(project: str) -> None:
+    """Not every open question is one of the six."""
+    ask_question(project, "how people log in")
+
+    picked_up = resume(project)
+    assert "how people log in" in picked_up["block"]
+    assert "how people log in" in picked_up["resume"]
+
+
+def test_resuming_a_finished_foundation_points_at_the_work(project: str, forge: Path) -> None:
+    _answer_everything(project)
+
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+
+    picked_up = resume(project)
+    assert picked_up["block"] == "", "there is nothing to put back on screen"
+    assert picked_up["step"] == {"phase": 1, "number": 1, "text": "the first slice"}
+    assert "next_step" in picked_up["next"]
+    assert picked_up["writes_blocked"] is True, "a decided step is still owed"
+
+
+def test_resuming_broken_notes_asks_for_repair(project: str, forge: Path) -> None:
+    (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
+    picked_up = resume(project)
+    assert picked_up["needs_repair"] is True
+
+
+def test_resuming_outside_a_forge_project_says_what_to_do(tmp_path: Path) -> None:
+    assert "/forge:start" in resume(str(tmp_path))["error"]
+
+
+# ==========================================================================
+# the user's own reason, and the choices made while coding
+# ==========================================================================
+
+
+def test_a_load_bearing_answer_is_not_recorded_without_the_users_reason(
+    project: str, forge: Path
+) -> None:
+    """The thesis of the product, enforced where it can be.
+
+    A user who cannot say why their app is built a certain way does not own it.
+    The record is where that is either true or not, and a record that says only
+    "B" is evidence of nothing.
+    """
+    asked = ask_question(project, "how people log in")
+    refused = record_answer(project, asked["id"], "a login service", "less to get wrong")
+
+    assert refused["needs_their_reason"] is True
+    assert "why that one" in refused["error"].lower()
+    assert fs.open_question(forge) is not None, "still open, so nothing moved on"
+
+    done = record_answer(
+        project,
+        asked["id"],
+        "a login service",
+        "less to get wrong",
+        their_reason="I do not want to be responsible for password resets",
+    )
+    assert done["their_reason_recorded"] is True
+
+    text = (forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()).read_text(
+        encoding="utf-8"
+    )
+    assert "In their words" in text
+    assert "responsible for password resets" in text
+
+
+def test_furniture_is_not_held_up_for_a_reason(project: str) -> None:
+    """The rule is about blast radius, not about ceremony.
+
+    Requiring it everywhere would make the cheap questions expensive, and a
+    gate that fires on everything is one people learn to type past.
+    """
+    asked = ask_question(project, "should this helper be called parse_row")
+    assert record_answer(project, asked["id"], "yes", "it reads better")["id"]
+
+
+def test_a_choice_made_while_coding_is_written_down(project: str, forge: Path) -> None:
+    """They were invisible, and invisible is how a project acquires conventions
+    nobody chose and the user cannot explain when asked."""
+    written = call(srv.record_build_choice)(
+        project,
+        choice="the parser returns None rather than raising",
+        reasoning="the caller already checks for an empty result",
+        instead_of="raising a ParseError",
+        step_marker="phase-1.step-1",
+    )
+
+    assert written["opens_the_gate"] is False
+    text = (forge / fs.DECISIONS / f"{written['file']}").read_text(encoding="utf-8")
+    assert "raising a ParseError" in text
+    assert "decided_by: forge-builder" in text
+
+
+def test_a_build_note_cannot_open_the_gate_it_was_written_against(
+    project: str, forge: Path
+) -> None:
+    """Otherwise the builder clears its own gate by describing its work.
+
+    A decided record naming a step is what tells the governor that step was
+    asked about. If the builder can write one, the one guarantee this product
+    makes becomes a formality it performs on itself.
+    """
+    import forge_steps as stp
+
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+
+    call(srv.record_build_choice)(
+        project,
+        choice="the helper lives in utils.py",
+        reasoning="nothing else needed a new module",
+        step_marker="phase-1.step-1",
+    )
+
+    assert "phase-1.step-1" not in stp.decided_markers(forge)
+    assert fs.writes_allowed(forge)[0] is False
+
+
+def test_a_load_bearing_choice_is_refused_as_a_build_note(project: str) -> None:
+    """The side door, closed. Recorded here it would be answered by Forge,
+    attributed to Forge, and never seen by the user."""
+    refused = call(srv.record_build_choice)(
+        project,
+        choice="use Postgres for the database",
+        reasoning="it scales better",
+    )
+
+    assert refused["load_bearing"] is True
+    assert "ask_question" in refused["error"]
+
+
+def test_adding_a_feature_reads_the_foundation_instead_of_re_asking_it(
+    project: str, forge: Path
+) -> None:
+    """Both halves of the request, at the tool that serves them.
+
+    Fewer tokens: what comes back is ids and one-line choices, not a history.
+    Nothing disturbed: what the feature would contradict is named, with the
+    decision that would have to be reopened.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a todo app")
+    _answer(project, ff.STACK.question, "Both together")
+    _answer(project, ff.DELIVERY.question, "Only on my machine")
+
+    plan = call(srv.plan_feature)(project, "deploy it to the cloud for my team")
+
+    assert plan["built_on"], "a feature with no context contradicts something"
+    assert any("runs only on your own machine" in line for line in plan["clashes"])
+    assert "reopened" in plan["next"]
+    assert ff.STACK.question not in plan["still_to_ask"], "already answered, never re-asked"
+
+
+def test_a_replaced_decision_points_at_the_one_it_replaced(
+    project: str, forge: Path
+) -> None:
+    """A change of mind is a new record, never an edit of the old one."""
+    first = ask_question(project, "how people log in")
+    record_answer(project, first["id"], "passwords", "simplest", their_reason="I know it")
+
+    second = ask_question(project, "how people log in, revisited")
+    done = record_answer(
+        project,
+        second["id"],
+        "a login service",
+        "password resets were a fortnight",
+        their_reason="I would rather not hold passwords",
+        supersedes=first["id"],
+    )
+
+    text = (forge / fs.DECISIONS / f"{done['file']}").read_text(encoding="utf-8")
+    assert f"Supersedes decision {first['id']:03d}" in text
+
+    earlier = forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()
+    assert "passwords" in earlier.read_text(encoding="utf-8"), "the old record survives"
+
+
+def test_superseding_something_that_does_not_exist_is_refused(project: str) -> None:
+    asked = ask_question(project, "which cache")
+    refused = record_answer(project, asked["id"], "none", "not needed", supersedes=99)
+    assert "no decision 099" in refused["error"]
+
+
+def test_the_add_command_actually_calls_plan_feature() -> None:
+    """The same guard as `resume`: a tool nothing calls is a file."""
+    add = (Path(__file__).resolve().parents[1] / "commands" / "add.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`plan_feature`" in add
+    assert "`compile_phases`" in add, "and it says which tool not to use here"
+
+
+def test_the_start_command_actually_calls_resume() -> None:
+    """A tool nothing calls is not a feature, it is a file.
+
+    This is the failure this repository keeps repeating in different clothes:
+    the fixed question order existed and was tested while `start.md` never
+    called it, so the planner improvised its own questions and every test still
+    passed. Registering a tool proves it can be called, not that anything does.
+    """
+    start = (Path(__file__).resolve().parents[1] / "commands" / "start.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`resume`" in start
+    assert start.index("`resume`") < start.index("Step 1"), "before setup, not after it"
+
+
 # ==========================================================================
 # the override — decision 004
 # ==========================================================================
@@ -250,7 +535,13 @@ def test_a_clean_history_reports_intact(project: str) -> None:
 
 def test_an_altered_record_is_reported_in_plain_words(project: str, forge: Path) -> None:
     asked = ask_question(project, "how passwords are stored")
-    record_answer(project, asked["id"], "hashed", "never plain text")
+    record_answer(
+        project,
+        asked["id"],
+        "hashed",
+        "never plain text",
+        their_reason="I do not want to be the one holding readable passwords",
+    )
 
     path = forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()
     path.write_text(path.read_text(encoding="utf-8").replace("hashed", "plain"), encoding="utf-8")
@@ -332,6 +623,8 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "ask_question",
         "record_answer",
         "current_state",
+        "resume",
+        "record_build_choice",
         "record_override",
         "clear_override",
         "usage_report",
@@ -357,6 +650,12 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "render_action",
         "color_legend",
         "plan_steps",
+        "step_questions",
+        "lean_check",
+        "record_lean",
+        "lean_review",
+        "plan_feature",
+        "add_phase",
         "current_step",
         "step_built",
         "compile_phases",
@@ -433,14 +732,11 @@ def test_the_pipeline_tool_says_what_happens_next(project: str) -> None:
     assert answer["asks_user"] is True
     assert answer["mode"] == "pipeline"
 
-    # The five foundation questions come first, in the fixed order of decision
-    # 033 — one arbitrary decision does not get past them, and should not:
-    # every question after the stack is asked inside an answer to it.
-    import forge_foundation as ff
-
-    for question in ff.FOUNDATION:
-        asked = ask_question(project, question.question)
-        record_answer(project, asked["id"], "A", "because")
+    # The foundation questions come first, in the fixed order of decision 033.
+    # One arbitrary decision does not get past them, and should not: every
+    # question after the stack is asked inside an answer to it. The count is
+    # not six, because an answer can open more.
+    _answer_everything(project)
 
     # Only then is there a plan worth challenging.
     assert call(srv.next_step)(project)["stage"] == "challenge"
@@ -480,11 +776,15 @@ def test_a_decision_ends_in_the_action_frame_and_nothing_after_it() -> None:
     """
     block = call(srv.render_decision)(
         "How should people log in?",
-        choices=[["A", "by us", "most work"], ["B", "a service", "less control"]],
+        choices=[
+            ["A", "by us", "most work, nothing to depend on"],
+            ["B", "a service", "less control, less to get wrong"],
+            ["C", "a link by email", "no passwords at all, and slower to use"],
+        ],
     )["block"]
 
     assert "YOUR TURN" in block
-    assert "A, or B?" in block, "the ask names the letters that were offered"
+    assert "A, B, or C?" in block, "the ask names the letters that were offered"
 
     # The presentation depends on where the block is going: a double-ruled
     # The ask is last, whichever presentation the destination gets.
@@ -494,12 +794,116 @@ def test_a_decision_ends_in_the_action_frame_and_nothing_after_it() -> None:
 def test_a_detail_that_cannot_be_undone_gets_its_own_bar() -> None:
     block = call(srv.render_decision)(
         "Public or private?",
-        choices=[["A", "public", "free review"]],
+        choices=[
+            ["A", "public", "free review, and anyone can read it"],
+            ["B", "private", "nobody can read it, and review costs money"],
+        ],
+        binary_because="a repository is one or the other, there is no third state",
         important_lines=["Anyone will be able to read this code."],
     )["block"]
 
     assert "▌" in block
     assert "Anyone will be able to read this code." in block
+
+
+def test_two_options_are_refused_unless_the_question_really_has_two_sides() -> None:
+    """The defect, in the place the user met it.
+
+    A per-step question is written by the planner in the moment, and improvising
+    a menu under no constraint produced "Docker, or run it locally" for a
+    project that runs on one laptop. The floor is checked where the block is
+    drawn, because a brief asking for three options is a brief nothing reads
+    back.
+    """
+    thin = call(srv.render_decision)(
+        "How do we run this?",
+        choices=[["A", "Docker", "reproducible"], ["B", "locally", "simpler"]],
+    )
+
+    assert "block" not in thin
+    assert "at least 3" in thin["error"]
+    assert "false binary" in thin["error"]
+
+    # And a genuine binary still gets through, at the price of saying why.
+    real = call(srv.render_decision)(
+        "Public or private?",
+        choices=[
+            ["A", "public", "free review, and anyone can read it"],
+            ["B", "private", "nobody can read it, and review costs money"],
+        ],
+        binary_because="a repository is one or the other",
+    )
+    assert "a repository is one or the other" in real["block"]
+
+
+def test_an_option_without_its_cost_is_a_word_not_a_choice() -> None:
+    refused = call(srv.render_decision)(
+        "Which database?",
+        choices=[["A", "Postgres", ""], ["B", "SQLite", "one file"], ["C", "MySQL", "familiar"]],
+    )
+    assert "no consequence line" in refused["error"]
+
+
+def test_the_menu_narrows_against_what_this_project_already_decided(
+    project: str,
+) -> None:
+    """The user's example, exactly: no container for a laptop-only project.
+
+    The rule reaches per-step questions, not only the foundation ones, because
+    per-step questions are where the menu is improvised and where they saw it.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a todo app")
+    _answer(project, ff.DELIVERY.question, "Only on my machine")
+
+    drawn = call(srv.render_decision)(
+        "How do we run this?",
+        project=project,
+        choices=[
+            ["A", "In Docker", "the same everywhere, and it is a container to learn"],
+            ["B", "A local script", "one command, nothing else to install"],
+            ["C", "A scheduled task", "it runs without you, and it is invisible when it fails"],
+            ["D", "By hand each time", "nothing to build, and you have to remember"],
+        ],
+    )
+
+    assert drawn["ruled_out"] == [
+        "Ruled out, In Docker: this project runs only on your own machine"
+    ]
+    assert "Ruled out, In Docker" in drawn["block"], "shown, because it teaches"
+
+    options = drawn["block"].split("Options")[1].split("Ruled out")[0]
+    assert "Docker" not in options, "and it is not still on the menu"
+
+
+def test_narrowing_that_leaves_a_thin_menu_is_sent_back_to_be_widened(
+    project: str,
+) -> None:
+    """The first check passes and the block still arrives with two options.
+
+    Four that lose two to a recorded decision is a menu of two, and it is the
+    one the user reads. A per-step menu can simply be widened, so it is asked
+    for rather than drawn thin.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a todo app")
+    _answer(project, ff.DELIVERY.question, "Only on my machine")
+
+    refused = call(srv.render_decision)(
+        "How do we run this?",
+        project=project,
+        choices=[
+            ["A", "In Docker", "the same everywhere, and a container to learn"],
+            ["B", "On a hosted service", "you push and it deploys, for a monthly bill"],
+            ["C", "A local script", "one command, nothing else to install"],
+        ],
+    )
+
+    assert "block" not in refused
+    assert "leaves 1" in refused["error"]
+    assert "at least 3" in refused["error"]
 
 
 def test_the_action_frame_states_what_shape_of_answer_is_wanted() -> None:
@@ -629,6 +1033,7 @@ def test_a_step_decision_unblocks_only_that_step(project: str, forge: Path) -> N
     plan_one_phase(forge)
     call(srv.plan_steps)(project, 1, ["show the list", "save a todo"])
 
+    pass_lean(forge)
     asked = ask_question(project, "how does the list render?", affects="phase-1.step-1")
     record_answer(project, asked["id"], "textContent", "never innerHTML")
 
@@ -704,7 +1109,13 @@ def test_nothing_is_built_until_the_user_has_seen_the_whole_plan(
     record_answer(project, asked["id"], "yes", "two phases, each usable")
 
     assert call(srv.show_roadmap)(project)["accepted"] is True
-    assert "step 1" in call(srv.current_step)(project)["blocked_by"].lower()
+
+    # And the block moves on to the first step, naming it. What holds it now is
+    # the lean pass, which comes before the step's own question: whether the
+    # thing is worth building is asked before how it should work.
+    blocked = call(srv.current_step)(project)["blocked_by"].lower()
+    assert "the first slice" in blocked
+    assert "needs building" in blocked
 
 
 def test_the_roadmap_needs_a_plan_to_show(project: str) -> None:
@@ -733,7 +1144,14 @@ def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Pat
     import forge_ui as ui
 
     blocks = [
-        call(srv.render_decision)("t", choices=[["A", "one", "first"]])["block"],
+        call(srv.render_decision)(
+            "t",
+            choices=[
+                ["A", "one", "the first cost"],
+                ["B", "two", "the second cost"],
+                ["C", "three", "the third cost"],
+            ],
+        )["block"],
         call(srv.render_note)("h", ["one"])["block"],
         call(srv.render_action)("go?", kind="confirm")["block"],
         call(srv.color_legend)()["block"],

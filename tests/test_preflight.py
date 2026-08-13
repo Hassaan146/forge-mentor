@@ -15,7 +15,18 @@ from __future__ import annotations
 import forge_preflight as pf
 
 
-ALLOWED = {"importlib", "shutil", "subprocess", "sys", "dataclasses", "forge_ui"}
+ALLOWED = {
+    "importlib",
+    "shutil",
+    "subprocess",
+    "sys",
+    "dataclasses",
+    # Two plugin modules, both stdlib-only themselves, both shipped in the same
+    # folder. The rule is not "no imports", it is that nothing this file needs
+    # can be the thing that is missing. The test below holds them to it.
+    "forge_ui",
+    "forge_skills",
+}
 
 
 def _imports_of(module) -> set[str]:
@@ -55,12 +66,25 @@ def test_the_one_local_import_is_stdlib_only_itself() -> None:
     stops being true, the readiness check stops being able to run on the
     machine it exists to diagnose, and this test is what notices.
     """
+    import forge_skills
     import forge_ui
 
+    stdlib = {
+        "os", "re", "sys", "unicodedata", "shutil", "textwrap", "json", "pathlib",
+        "subprocess", "dataclasses", "tempfile", "hashlib", "time", "stat",
+    }
     for module in _imports_of(forge_ui):
-        assert module in {
-            "os", "re", "sys", "unicodedata", "shutil", "textwrap", "json", "pathlib",
-        }, f"forge_ui now needs {module}, so preflight can no longer rely on it"
+        assert module in stdlib, (
+            f"forge_ui now needs {module}, so preflight can no longer rely on it"
+        )
+
+    # The companion check imports this one, and it reports whether an optional
+    # plugin is installed. A readiness check that cannot run because the thing
+    # it reports on is missing would be exactly backwards.
+    for module in _imports_of(forge_skills):
+        assert module in stdlib, (
+            f"forge_skills now needs {module}, so preflight can no longer rely on it"
+        )
 
 
 def test_a_missing_engine_package_is_fatal() -> None:

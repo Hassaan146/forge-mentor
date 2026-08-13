@@ -108,13 +108,18 @@ class Phase:
 class Gap:
     """Why code cannot be written yet, and what would close it."""
 
-    # "unplanned":  no phases at all, or this phase has no step list
-    # "unapproved": the plan exists but the user has not seen it whole
-    # "undecided":  this step has no recorded decision
+    # "unplanned":     no phases at all, or this phase has no step list
+    # "unapproved":    the plan exists but the user has not seen it whole
+    # "unasked":       this step touches a subject whose questions are unanswered
+    # "unchallenged":  nobody has asked whether this step should be built at all
+    # "undecided":     this step has no recorded decision
     kind: str
     phase: int
     reason: str
     step: Step | None = None
+    # Set on "unasked": the key of the question that is owed, so a caller can
+    # fetch and draw it rather than inventing one from the reason text.
+    question: str = ""
 
 
 # What a decision writes in `affects` to say the user has seen the whole plan.
@@ -205,6 +210,22 @@ def decided_markers(forge_dir: Path) -> set[str]:
     found: set[str] = set()
     for decision in fs.list_decisions(forge_dir):
         if decision.status.strip().lower() != fs.STATUS_DECIDED:
+            continue
+        # A note the builder wrote about its own work is not permission to do
+        # that work. Both are decided records against the same step, and
+        # without this line the builder could open its own gate by writing down
+        # what it had decided to do, which is the governor rule inverted.
+        if decision.extra.get("kind", "").strip().lower() == fs.BUILD_NOTE:
+            continue
+
+        # Nor is deciding that a step is worth building a decision about how it
+        # works. The lean marker *contains* the step marker (`lean:phase-1.step-1`)
+        # so the pattern below matched it and the pass opened the gate it was
+        # written to come before. Same shape as the line above, found the same
+        # way: by a test that expected the next question and got permission.
+        import forge_lean as ln
+
+        if (decision.affects or "").strip().startswith(f"{ln.PREFIX}:"):
             continue
         for token in re.findall(r"phase-\d+\.step-\d+", decision.affects or ""):
             found.add(token)
@@ -353,9 +374,52 @@ def next_gap(forge_dir: Path) -> Gap | None:
             )
 
         decided = decided_markers(forge_dir)
+        title = str(header.get("title", "")).strip()
         for step in steps:
             if step.built:
                 continue
+
+            # What the subject owes, before what the step owes. A step that
+            # stores something is asked which database, where it runs and how
+            # its shape changes, once per project, and those are answered before
+            # the step's own question is worth asking: the step decision is made
+            # inside them. Without this the whole interrogation after the
+            # foundation was whatever the planner thought of in the moment,
+            # which for a database step was usually nothing.
+            import forge_topics as tp
+
+            owed = tp.next_owed(forge_dir, f"{title} {step.text}")
+            if owed is not None:
+                return Gap(
+                    kind="unasked",
+                    phase=number,
+                    reason=(
+                        f"This step touches something that has not been decided "
+                        f"yet: {owed.question}"
+                    ),
+                    step=step,
+                    question=owed.key,
+                )
+
+            # Whether it should be built at all, before what it should look
+            # like. Asked in this order deliberately: put the size question
+            # after the design question and the design has already settled the
+            # size, which is how a step that needed twenty lines arrives as
+            # four files that everybody has already agreed to.
+            import forge_lean as ln
+
+            if not ln.passed(forge_dir, step.marker):
+                return Gap(
+                    kind="unchallenged",
+                    phase=number,
+                    reason=(
+                        "This step has not been through the lean pass yet: "
+                        f"nobody has asked whether {step.text!r} needs building, "
+                        "or how small it could be."
+                    ),
+                    step=step,
+                )
+
             if step.marker in decided:
                 return None  # the current step is decided; the builder may run
             return Gap(

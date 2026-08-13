@@ -10,13 +10,31 @@ foundation interrogation.
 Forge only acts in projects where this command has been run. Every other project
 stays plain Claude Code.
 
+## If this project already has notes
+
+**Call `resume` first.** If `.claude/forge/` exists, this is not a new project
+and Steps 1 to 5 below are not for it. `resume` reads the notes and returns the
+question that was on screen when the session closed, in the same shape.
+
+1. Print the banner and the update check as below. Skip the readiness check and
+   the colour key: both were shown when this project was set up.
+2. Say at most one line of where things stand. Its `resume` field is that line.
+3. Paste its `block` verbatim if there is one, and stop. That is the turn.
+4. If `block` is empty, follow its `next`.
+
+If it returns `needs_repair`, the notes are damaged: say so and run
+`/forge:status`, which is where repair lives. Do not offer to start again: a
+project's decisions are not something to re-ask for want of a header.
+
+Nothing else happens on this path. No setup interview, no permission requests,
+and above all no foundation question that already has an answer: asking one
+twice is the fastest way to lose a user's trust in the record.
+
 ## If Forge was switched off here
 
 If `.claude/forge/paused.md` exists, someone ran `/forge:stop` in this project.
-Delete it, say in one line that Forge is back on, and carry on from whatever the
-notes say is open. Do not re-run setup and do not ask the foundation questions
-again: the answers are already recorded, and asking a question twice is the
-fastest way to lose a user's trust in the record.
+Delete it, say in one line that Forge is back on, and then take the resume path
+above. The answers are already recorded.
 
 ## Before anything else
 
@@ -57,6 +75,20 @@ to avoid.
 
 If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
 `gh auth login` later.
+
+**ponytail is listed as optional and it is genuinely optional.** If the check reports it
+missing, offer it in one line and move on whatever they say. Forge does not install it for
+them: it is their plugin, on their account, and a setup flow that installs someone else's
+software while the user is reading about permissions has answered a question nobody asked.
+
+> Optional: ponytail gets an agent to write the least code that works. Forge uses it at the
+> build and review steps when it is there.
+>
+>     /plugin marketplace add DietrichGebert/ponytail
+>     /plugin install ponytail@ponytail
+
+Installing it needs a restart before Forge can see it, like any plugin. It is per account
+rather than per project, so it is offered once and then it is everywhere.
 
 ## Step 1 — Explain before asking (decision 014)
 

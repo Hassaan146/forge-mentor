@@ -23,6 +23,7 @@ import pytest
 
 import forge_pipeline as pl
 import forge_state as fs
+from conftest import pass_lean
 
 
 @pytest.fixture()
@@ -40,7 +41,7 @@ def started(forge: Path) -> None:
     """
     import forge_foundation as ff
 
-    for question in ff.FOUNDATION:
+    while (question := ff.next_question(forge)) is not None:
         asked = fs.ask(forge, question.question)
         fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
@@ -62,6 +63,7 @@ def plan(forge: Path, steps: list[str] | None = None) -> None:
 
 def decide_step(forge: Path, phase: int, number: int) -> None:
     """Record a decision against one step, the way the loop does."""
+    pass_lean(forge, f"phase-{phase}.step-{number}")
     asked = fs.ask(forge, f"step {number}", affects=f"phase-{phase}.step-{number}")
     fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 

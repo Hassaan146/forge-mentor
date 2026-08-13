@@ -259,6 +259,33 @@ def _width() -> int:
 WIDTH = _width()
 
 
+def _box_inner() -> int:
+    """How wide the drawn box is, in the client where it actually ships.
+
+    Not `_width()`. That measures a terminal, and the box is drawn inside a
+    fenced block in a chat panel, which is a different surface with a different
+    size that this process cannot ask about.
+
+    Widened from 74 after a user said it plainly: a question with four options,
+    each carrying its consequence, was wrapping every one of them onto a second
+    line, so a menu that is four things read as eight. The consequence lines are
+    the part that makes an option a choice rather than a word, and they are the
+    first thing a narrow box breaks.
+
+    `FORGE_BOX_WIDTH` narrows it again for a split pane. Clamped so neither end
+    can produce a box that cannot hold an option.
+    """
+    raw = os.environ.get("FORGE_BOX_WIDTH", "").strip()
+    try:
+        wanted = int(raw) if raw else 92
+    except ValueError:
+        wanted = 92
+    return max(56, min(wanted, 120))
+
+
+BOX_INNER = _box_inner()
+
+
 # --------------------------------------------------------------------------
 # building blocks
 # --------------------------------------------------------------------------
@@ -820,6 +847,7 @@ def decision(
     *,
     number: int | None = None,
     subtitle: str = "",
+    concept: str = "",
     means: list[str] | None = None,
     choices: list[tuple[str, str, str]] | None = None,
     recommend: tuple[str, str] | None = None,
@@ -847,6 +875,8 @@ def decision(
     body: list[str] = ["", f"  {BOLD}{title}{RESET}"]
     if subtitle:
         body.append(f"  {DIM}{subtitle}{RESET}")
+    if concept:
+        body.append(f"  {DIM}Concept: {concept}{RESET}")
 
     if means:
         body += ["", f"  {BLUE}{BOLD}{TEACH} What this means{RESET}"]
@@ -1206,6 +1236,7 @@ def _plain_block(payload: dict) -> str:
             str(payload.get("title", "")),
             number=payload.get("number") or None,
             subtitle=str(payload.get("subtitle", "")),
+            concept=str(payload.get("concept", "")),
             means=list(payload.get("means") or []) or None,
             choices=[tuple(c) for c in (payload.get("choices") or [])] or None,
             recommend=(tuple(recommend) if recommend else None),
@@ -1240,7 +1271,7 @@ def _coloured_box(payload: dict) -> str:
     should be *instead of* a border, rather than making the border do both jobs.
     """
     kind = str(payload.get("kind", "")).strip().lower()
-    inner = 74
+    inner = BOX_INNER
 
     def rule(title: str = "") -> str:
         if not title:
@@ -1322,6 +1353,11 @@ def _coloured_box(payload: dict) -> str:
     out += wrapped(str(payload.get("title", "")))
     if payload.get("subtitle"):
         out += wrapped(str(payload["subtitle"]))
+    # The concept, named. A question is about something the project contains,
+    # and saying which thing is what makes the answer worth anything on the
+    # next project. Without it the user learns that they picked B.
+    if payload.get("concept"):
+        out += wrapped(f"Concept: {payload['concept']}")
 
     means = [line for line in (payload.get("means") or []) if str(line).strip()]
     if means:
@@ -1337,7 +1373,15 @@ def _coloured_box(payload: dict) -> str:
         width = max(len(str(c[1])) for c in choices)
         for choice in choices:
             letter, label, note_text = (list(choice) + ["", "", ""])[:3]
-            out += wrapped(f"{letter}  {str(label).ljust(width)}   {note_text}", "+", "  ")
+            # Hanging indent, so a consequence that runs on lines up under
+            # itself rather than under the next letter. Without it a wrapped
+            # option reads as another option: the continuation carries the same
+            # `+` in column zero, which is what marks a line as choosable.
+            lead = f"  {letter}  {str(label).ljust(width)}   "
+            room = max(20, inner - 6 - len(lead))
+            first, *rest = _wrap(str(note_text), room, "") or [""]
+            out.append(row(f"{lead}{first}", "+"))
+            out += [row(" " * len(lead) + line, "+") for line in rest]
 
     recommend = payload.get("recommend")
     if recommend:
@@ -1756,6 +1800,7 @@ def render_from(payload: dict) -> str:
             str(payload.get("title", "")),
             number=payload.get("number") or None,
             subtitle=str(payload.get("subtitle", "")),
+            concept=str(payload.get("concept", "")),
             means=list(payload.get("means") or []) or None,
             choices=[tuple(c) for c in (payload.get("choices") or [])] or None,
             recommend=(tuple(recommend) if recommend else None),

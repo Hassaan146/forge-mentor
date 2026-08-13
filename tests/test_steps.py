@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import forge_state as fs
+from conftest import pass_lean
 import forge_steps as st
 
 
@@ -68,6 +69,8 @@ def write_phase(
 
 
 def decide(forge: Path, marker: str) -> None:
+    """A step decision, with the lean pass that has to come before it."""
+    pass_lean(forge, marker)
     asked = fs.ask(forge, f"decision for {marker}", affects=marker)
     fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
@@ -107,6 +110,9 @@ def test_a_plan_nobody_has_seen_cannot_be_built(forge: Path) -> None:
 
     accept_plan(forge)
     assert st.plan_accepted(forge) is True
+    assert st.next_gap(forge).kind == "unchallenged", "first, is it worth building"
+
+    pass_lean(forge)
     assert st.next_gap(forge).kind == "undecided", "now the steps gate, one at a time"
 
 
@@ -130,6 +136,7 @@ def test_a_phase_with_no_steps_cannot_be_built(forge: Path) -> None:
 
 def test_an_undecided_step_names_itself_as_the_question(forge: Path) -> None:
     write_phase(forge, 1, ["Save a typed todo to the browser's storage"])
+    pass_lean(forge)
     gap = st.next_gap(forge)
 
     assert gap is not None

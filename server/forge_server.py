@@ -49,6 +49,7 @@ except ModuleNotFoundError:  # pragma: no cover - the message is the behaviour
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+import forge_foundation as ff  # noqa: E402
 import forge_integrity as fi  # noqa: E402
 import forge_repair as fr  # noqa: E402
 import forge_state as fs  # noqa: E402
@@ -141,6 +142,55 @@ def _forge_dir(project: str) -> Path:
     return found
 
 
+def _project_facts(project: str) -> set[str]:
+    """What this project has already settled, for narrowing a menu against."""
+    import forge_foundation as ff
+
+    return ff.facts(_forge_dir(project))
+
+
+def _foundation_payload(
+    question: Any, done: int, total: int, menu: Any = None, stage: str = "foundation"
+) -> dict[str, Any]:
+    """The block for one foundation question, ready for `forge_ui.render_from`.
+
+    The block itself, not a command that would print it: Claude Code collapses
+    tool output into "ran N shell commands", so a block printed by a command
+    never reaches the screen. On a real run that put a bare prose line in front
+    of the user as question 3 while the block sat invisible behind a summary.
+
+    Built here rather than in each tool, because a resumed session that draws
+    the same question in a slightly different shape reads as a different
+    question, and the whole promise of keeping the notes on disk is that coming
+    back lands you where you left.
+
+    The ruled-out options are carried as important lines rather than dropped.
+    An option the project has excluded is the cheapest teaching in the whole
+    interrogation: a user who is shown that a container is ruled out because
+    they said this runs on their laptop has just learned what a container is
+    for, at no cost in questions.
+    """
+    rows = list(menu.rows) if menu is not None else []
+    ruled_out = list(menu.ruled_out_lines()) if menu is not None else []
+    # What goes wrong if this is answered badly goes first, and it gets the bar
+    # down the side. The questions with the worst consequences are the ones that
+    # sound administrative, and those are exactly the ones read straight past.
+    important = ([question.matters] if getattr(question, "matters", "") else []) + ruled_out
+    return {
+        "kind": "decision",
+        "number": done + 1,
+        "title": question.question,
+        "subtitle": question.subtitle,
+        "concept": question.concept,
+        "means": list(question.means),
+        "choices": rows,
+        "important_lines": important,
+        "done": done,
+        "total": total,
+        "stage": stage,
+    }
+
+
 @server.tool(
     name="ask_question",
     description=(
@@ -167,7 +217,15 @@ def ask_question(project: str, question: str, affects: str = "") -> dict[str, An
     description=(
         "Record the user's decision, turning free text into a structured "
         "record. Include the options considered and why this one was chosen — "
-        "the record is what the user reads back months later. **Writes to "
+        "the record is what the user reads back months later. `their_reason` "
+        "is **the user's own words on why they picked it**, not your summary "
+        "of the tradeoff, and a load-bearing question is refused without it: "
+        "a choice nobody can justify is the failure this product exists to "
+        "prevent, and the record is where that shows. Ask for it in the same "
+        "breath as the question so it costs no extra turn. Pass `supersedes` "
+        "with an earlier decision's id when this one replaces it: changing a "
+        "recorded decision is always a new record pointing at the old, never an "
+        "edit of it. **Writes to "
         "disk** — fills in the decision record and updates .forge/chain.log, "
         "which unblocks code writing."
     ),
@@ -179,10 +237,43 @@ def record_answer(
     reasoning: str,
     options_considered: list[str] | None = None,
     recommendation: str = "",
+    their_reason: str = "",
+    supersedes: int = 0,
 ) -> dict[str, Any]:
+    import forge_pipeline as pp
+
     forge = _forge_dir(project)
 
+    # Asked of the record rather than of the caller. A caller that has to say
+    # whether its own question was load-bearing will say no on the turn it is
+    # in a hurry, and being in a hurry is when this matters.
+    pending = fs.open_question(forge)
+    asked = pending.question if pending and pending.id == decision_id else ""
+    if not their_reason.strip() and pp.is_load_bearing(asked):
+        return {
+            "error": (
+                "This one is load-bearing, so it is not recorded without the "
+                "user's own reason for picking it. Ask them: \"why that one?\" "
+                "and pass what they say as `their_reason`."
+            ),
+            "needs_their_reason": True,
+            "question": asked,
+            "writes_blocked": True,
+        }
+
     body = [f"# {choice}", ""]
+    if supersedes:
+        # A change of mind is a new record pointing at the old one, never an
+        # edit of it. Decision 042 set the shape: the earlier record stays
+        # readable and stays in the chain, and the history says what was
+        # believed and when, which is the only version anybody can audit.
+        earlier = [d for d in fs.list_decisions(forge) if d.id == supersedes]
+        if not earlier:
+            return {"error": f"There is no decision {supersedes:03d} to supersede."}
+        body += [
+            f"**Supersedes decision {supersedes:03d}** ({earlier[0].question})",
+            "",
+        ]
     if options_considered:
         body += ["**Options considered**", ""]
         body += [f"- {option}" for option in options_considered]
@@ -190,6 +281,12 @@ def record_answer(
     if recommendation:
         body += [f"**Recommended:** {recommendation} · **Decided:** {choice}", ""]
     body += ["## Why", "", reasoning, ""]
+    if their_reason.strip():
+        # Kept apart from the reasoning above, and kept in their words. The
+        # section above is Forge's account of the tradeoff, which the user will
+        # read and recognise; this one is evidence that the decision was theirs.
+        # Merged into one section, the second quietly becomes the first.
+        body += ["## In their words", "", their_reason.strip(), ""]
 
     decision = fs.answer(forge, decision_id, "\n".join(body))
     fr.write_chain(forge)
@@ -199,7 +296,359 @@ def record_answer(
         "id": decision.id,
         "file": decision.filename(),
         "verified": bool(checked and checked.trusted),
+        "their_reason_recorded": bool(their_reason.strip()),
         "writes_blocked": not fs.writes_allowed(forge)[0],
+    }
+
+
+@server.tool(
+    name="lean_check",
+    description=(
+        "**Before you ask the user anything about a step, and before you write "
+        "a line of it.** Returns the ladder this step has to go through: does it "
+        "need to exist, does the project already do it, does the standard "
+        "library do it, what is the smallest version worth having, what the "
+        "extra size costs. Answer every rung yourself first (ponytail's skill is "
+        "loaded at this stage and is what it is for), then paste `block` so the "
+        "user chooses the size rather than approving a plan. The governor holds "
+        "the step until `record_lean` has written the answer. Reads only."
+    ),
+)
+def lean_check(project: str) -> dict[str, Any]:
+    import forge_lean as ln
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"finished": True, "reason": "There is no step in progress."}
+
+    if ln.passed(forge, step.marker):
+        return {
+            "finished": True,
+            "step": step.text,
+            "next": "This step has already been through the pass. Ask its own question.",
+        }
+
+    return {
+        "finished": False,
+        "step": {"phase": step.phase, "number": step.number, "text": step.text},
+        "marker": step.marker,
+        "ladder": [{"rung": key, "question": question} for key, question in ln.LADDER],
+        "next": (
+            "Answer all five rungs yourself, in order, before you speak. Then call "
+            "`render_decision` with what you found in `means`, and offer at least "
+            "three sizes: as proposed, the smaller version you found, and not at "
+            "all. Record the answer with `record_lean`. Do not skip a rung because "
+            "the answer seems obvious: the rung nobody asked is the one that would "
+            "have removed the feature."
+        ),
+    }
+
+
+@server.tool(
+    name="record_lean",
+    description=(
+        "Record what the lean pass decided for the current step: what is being "
+        "built, at what size, and what the ladder found on the way. Pass "
+        "`findings` as {rung: answer} covering all five rungs, and it is refused "
+        "if one is missing, because three plausible sentences with two rungs "
+        "quietly absent reads as a completed pass in every summary anybody will "
+        "look at. **Writes to disk**, and it is what opens the step."
+    ),
+)
+def record_lean(
+    project: str,
+    keep: str,
+    findings: dict[str, str],
+    reasoning: str,
+    their_reason: str = "",
+    instead_of: str = "",
+) -> dict[str, Any]:
+    import forge_lean as ln
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"error": "There is no step in progress to record a pass for."}
+
+    found = [ln.Finding(rung, str(answer)) for rung, answer in (findings or {}).items()]
+    missing = ln.missing_rungs(found)
+    if missing:
+        return {
+            "error": (
+                "The ladder is not finished: nothing was said about "
+                f"{', '.join(missing)}. A rung nobody climbed is the one that "
+                "would have removed the feature."
+            ),
+            "missing": missing,
+        }
+
+    if not keep.strip() or not reasoning.strip():
+        return {"error": "Say what is being built and why, in the user's terms."}
+
+    asked = fs.ask(
+        forge,
+        f"Is {step.text!r} worth building, and how much of it?",
+        affects=ln.marker_for(step.marker),
+    )
+    fs.answer(
+        forge,
+        asked.id,
+        ln.body(keep, found, reasoning, their_reason, instead_of),
+    )
+    fr.write_chain(forge)
+
+    return {
+        "id": asked.id,
+        "step": step.text,
+        "next": (
+            "The step is open now. Ask its own question with `render_decision`, "
+            "and pass `project` so the options narrow against what is recorded."
+        ),
+    }
+
+
+@server.tool(
+    name="lean_review",
+    description=(
+        "**After the approach is settled and before it is built.** Put the "
+        "approach back through the same ladder: now that you know how it would "
+        "be done, is any of it unnecessary. Returns `unchanged` when it "
+        "survives, in which case say so in one line and build it. When it comes "
+        "back smaller, the smaller version is **the user's decision, not "
+        "yours**: ask it with `render_decision`, record it, and build what they "
+        "choose. This is the moment over-building actually happens, because by "
+        "now everybody has agreed on the goal and stopped looking. Reads only."
+    ),
+)
+def lean_review(project: str, approach: str, simpler: str = "") -> dict[str, Any]:
+    import forge_lean as ln
+    import forge_ui as ui
+
+    try:
+        _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not approach.strip():
+        return {"error": "Say what the approach is before reviewing it."}
+
+    if not simpler.strip():
+        return {
+            "unchanged": True,
+            "next": (
+                "Say in one line that the approach went back through the ladder "
+                "and came out the same, then build it. One line, not a paragraph: "
+                "a review that survived is not news."
+            ),
+        }
+
+    return {
+        "unchanged": False,
+        "block": ui.render_from(
+            {
+                "kind": "decision",
+                "title": "The approach got smaller on review",
+                "subtitle": "this changes what gets built, so it is yours to settle",
+                "concept": "the cheapest code to maintain is the code that was never written",
+                "means": [
+                    f"Proposed: {approach.strip()}",
+                    f"Smaller: {simpler.strip()}",
+                ],
+                "choices": [
+                    ["A", "The smaller version", "less to read, less to test, less to change"],
+                    ["B", "As originally proposed", "more now, and it is there when you need it"],
+                    ["C", "Something between", "say which part is worth keeping"],
+                ],
+                "ask": "Which one gets built?",
+            }
+        ),
+        "next": (
+            "Paste `block` and wait. Record what they choose with `record_answer`, "
+            "carrying their own reason, and build that. Do not build the smaller "
+            "version because it is smaller: a change to what is built is theirs."
+        ),
+    }
+
+
+@server.tool(
+    name="plan_feature",
+    description=(
+        "Adding something to a project that already works. Call this **first**, "
+        "with the user's description of the feature, before any question and "
+        "before any code. Returns three things and nothing else: the recorded "
+        "decisions this feature has to live inside, anything it wants that the "
+        "project has already ruled out (with the decision that would have to be "
+        "reopened), and the subject questions it owes that are not answered "
+        "yet. The foundation is **not** asked again: it is on disk and still "
+        "true, and re-asking it is the failure this product exists to prevent. "
+        "Reads only; changes nothing."
+    ),
+)
+def plan_feature(project: str, description: str) -> dict[str, Any]:
+    import forge_feature as fe
+    import forge_ui as ui
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not description.strip():
+        return {"error": "Say what the feature is, in the user's own words."}
+
+    built_on = fe.constraints(forge, description)
+    clashes = fe.clashes(forge, description)
+    owed = fe.owed(forge, description)
+
+    block = ""
+    if owed:
+        menu = ff.menu_for(owed[0], facts_known=ff.facts(forge))
+        block = ui.render_from(
+            _foundation_payload(
+                owed[0],
+                done=0,
+                total=len(owed),
+                menu=menu,
+                stage="this feature",
+            )
+        )
+
+    return {
+        "phase_it_becomes": fe.next_phase_number(forge),
+        "built_on": [c.line() for c in built_on],
+        "clashes": [c.line() for c in clashes],
+        "still_to_ask": [q.question for q in owed],
+        "block": block,
+        "next": (
+            (
+                "Put the clashes to the user before anything else. Each one is a "
+                "recorded decision that would have to be reopened, and reopening "
+                "one is a new decision naming the old with `supersedes`, never an "
+                "edit. Do not build around a clash quietly."
+                if clashes
+                else "Nothing here contradicts what is already recorded."
+            )
+            + (
+                f" Then work through the {len(owed)} question(s) this feature owes: "
+                "paste `block` and record the answer, then call this again."
+                if owed
+                else " Nothing is owed, so call `add_phase` and break it into steps."
+            )
+        ),
+    }
+
+
+@server.tool(
+    name="add_phase",
+    description=(
+        "Append one phase for a new feature, leaving every existing phase "
+        "untouched. Use this instead of `compile_phases` on a project that has "
+        "already built something: compiling rewrites the whole list, which puts "
+        "finished work through a new pen and can mark built steps unbuilt. "
+        "**Writes one new phase file.**"
+    ),
+)
+def add_phase(project: str, title: str, delivers: str) -> dict[str, Any]:
+    import forge_feature as fe
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        path = fe.add_phase(forge, title, delivers)
+    except stp.StepError as exc:
+        return {"error": str(exc)}
+
+    return {
+        "file": path.name,
+        "phase": fe.next_phase_number(forge) - 1,
+        "next": (
+            "Break it into steps with `plan_steps`. Nothing can be built until "
+            "it is a list of steps, and each step is a question before it is code."
+        ),
+    }
+
+
+@server.tool(
+    name="record_build_choice",
+    description=(
+        "Write down a choice you made **while writing the code**, one nobody "
+        "was asked about: what a module is called, whether a failure raises or "
+        "returns, where a helper lives, which library a step pulls in. Call it "
+        "as you make them, not in a batch at the end, and name the alternative "
+        "you passed over. These are kept forever and they are **not** "
+        "permission: the record cannot open a step's gate, so writing one never "
+        "substitutes for asking. If the choice would change what the project "
+        "is, stop and ask it properly with `ask_question` instead. **Writes to "
+        "disk.**"
+    ),
+)
+def record_build_choice(
+    project: str,
+    choice: str,
+    reasoning: str,
+    instead_of: str = "",
+    step_marker: str = "",
+) -> dict[str, Any]:
+    import forge_pipeline as pp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not choice.strip() or not reasoning.strip():
+        return {"error": "A build choice needs both what was chosen and why."}
+
+    # The one thing this tool must not become is a side door. A load-bearing
+    # question recorded here would be answered by Forge, attributed to Forge,
+    # and never seen by the user, which is precisely the decision-nobody-made
+    # that the whole product exists to stop.
+    if pp.is_load_bearing(f"{choice} {reasoning}"):
+        return {
+            "error": (
+                "That reads as load-bearing, so it is not a build note. Ask it "
+                "with `ask_question`, let the user answer, and record it with "
+                "`record_answer`."
+            ),
+            "load_bearing": True,
+        }
+
+    body = [f"# {choice}", ""]
+    if instead_of.strip():
+        body += [f"**Instead of:** {instead_of.strip()}", ""]
+    body += ["## Why", "", reasoning.strip(), ""]
+
+    decision = fs.record_note(
+        forge,
+        question=f"While building: {choice.strip()}",
+        body="\n".join(body),
+        affects=step_marker.strip(),
+    )
+    fr.write_chain(forge)
+
+    return {
+        "id": decision.id,
+        "file": decision.filename(),
+        "opens_the_gate": False,
+        "next": (
+            "Carry on building. Mention it in one line when you next speak, so "
+            "the user knows it was written down rather than decided quietly."
+        ),
     }
 
 
@@ -505,7 +954,12 @@ def assemble_request(project: str, blocks: list[dict[str, str]]) -> dict[str, An
         "Which skills load at a stage, and which subagent runs it. Stages: "
         "interrogation, challenge, planning, building, review-fix, teach-back. "
         "The answer is a fixed table, not a judgement — do not substitute your "
-        "own choice of skills for it. Reads only; changes nothing."
+        "own choice of skills for it. `also_use` names companion skills from "
+        "other plugins that are installed on this machine and improve the "
+        "stage: use them **in addition**, never instead, and Forge's own rules "
+        "win wherever they disagree. `suggest` names one that is not installed "
+        "and the command to get it, which is worth mentioning once and never "
+        "twice. Reads only; changes nothing."
     ),
 )
 def skills_for_stage(stage: str) -> dict[str, Any]:
@@ -513,9 +967,21 @@ def skills_for_stage(stage: str) -> dict[str, Any]:
 
     try:
         agent = sk.agent_for(stage)
+        companions = sk.companions_for(stage)
+        installed = [name for name in companions if sk.companion_installed(name)]
         return {
             "stage": stage,
             "skills": list(sk.skills_for(stage)),
+            "also_use": installed,
+            "suggest": [
+                {
+                    "skill": name,
+                    "what_for": sk.COMPANION_SOURCE[name][0],
+                    "install": sk.COMPANION_SOURCE[name][1],
+                }
+                for name in companions
+                if name not in installed and name in sk.COMPANION_SOURCE
+            ],
             "agent": agent.name,
             "model": agent.model,
             "why": JOB_REASONS.get(agent.job, ""),
@@ -804,7 +1270,16 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
         "repository public'); each gets a yellow bar, because as sentence "
         "four of a paragraph it is read straight past. `ask` overrides the "
         "wording of the question; left empty it names the letters that were "
-        "actually offered. Reads only; changes nothing."
+        "actually offered.\n\n"
+        "**At least three options, each with its consequence, or this refuses "
+        "to draw the block.** Two is a false binary and the user ends up "
+        "ratifying the pair you happened to think of. Pass `project` and it "
+        "also strikes out anything the recorded decisions already rule out, so "
+        "a laptop-only project is never offered a container. `concept` names "
+        "the idea underneath the question, which is the part worth anything on "
+        "the next project. If the question genuinely has two sides (public or "
+        "private, keep it or delete it), say why in `binary_because` and the "
+        "reason goes on screen. Reads only; changes nothing."
     ),
 )
 def render_decision(
@@ -821,13 +1296,79 @@ def render_decision(
     total: int = 0,
     stage: str = "",
     ask: str = "",
+    project: str = "",
+    concept: str = "",
+    binary_because: str = "",
 ) -> dict[str, Any]:
+    import forge_options as fo
     import forge_ui as ui
 
     try:
         triples = [(c[0], c[1], c[2]) for c in (choices or [])]
     except (IndexError, TypeError):
         return {"error": "Each choice needs three parts: letter, label, consequence."}
+
+    ruled_out: list[str] = []
+    if binary_because.strip():
+        # Some questions really are two-sided: public or private, hash or
+        # encrypt, keep it or delete it. The escape hatch is deliberately not a
+        # flag but a sentence, and the sentence goes on screen, so claiming a
+        # binary costs the same as arguing for one. Decision 004's shape: the
+        # override exists, it is explicit, and it leaves a trace.
+        ruled_out.append(f"Only two answers here: {binary_because.strip()}")
+    elif triples:
+        # The menu rule, applied where the menu is drawn rather than asked for
+        # in a brief. Every per-step question comes through here, and these are
+        # the questions that were improvised: no floor on how many options, no
+        # requirement that each carry its cost, nothing tying them to what the
+        # project already decided. A brief cannot enforce any of that, because
+        # nothing reads a brief back.
+        problems = fo.problems(fo.from_rows([list(c) for c in triples]), title)
+        if problems:
+            return {
+                "error": " ".join(problems),
+                "fix": (
+                    "Rewrite the options and call this again. This is not a "
+                    "formatting complaint: a question that arrives with two "
+                    "options has usually had its answer chosen by whoever "
+                    "picked the pair."
+                ),
+            }
+
+        if project:
+            try:
+                known = _project_facts(project)
+            except ValueError:
+                known = set()
+            kept: list[tuple[str, str, str]] = []
+            for letter, label, note in triples:
+                fact, why = fo.contradicted(f"{label} {note}", known)
+                if fact:
+                    ruled_out.append(f"Ruled out, {label}: {why}")
+                else:
+                    kept.append((letter, label, note))
+            # Checked again, after the narrowing. A menu of four that loses two
+            # to a recorded decision is a menu of two, and it is the one the
+            # user sees: the first check passed and the block would still have
+            # arrived thin. Unlike the foundation, whose menus are written in
+            # the file, a per-step menu can simply be widened, so it is worth
+            # asking for rather than degrading to an open question.
+            if ruled_out and len(kept) < fo.MIN_OPTIONS:
+                return {
+                    "error": (
+                        f"{len(ruled_out)} of these "
+                        f"{'is' if len(ruled_out) == 1 else 'are'} ruled out by "
+                        f"decisions already recorded ({'; '.join(ruled_out)}), "
+                        f"which leaves {len(kept)}. Offer at least "
+                        f"{fo.MIN_OPTIONS} that fit this project."
+                    ),
+                    "ruled_out": ruled_out,
+                }
+            if kept:
+                triples = [
+                    (fo.LETTERS[i], label, note)
+                    for i, (_old, label, note) in enumerate(kept)
+                ]
 
     return {
         "block": ui.render_from(
@@ -836,17 +1377,19 @@ def render_decision(
                 "title": title,
                 "number": number or None,
                 "subtitle": subtitle,
+                "concept": concept,
                 "means": means or [],
                 "choices": [list(c) for c in triples],
                 "recommend": [recommend_choice, recommend_reason] if recommend_choice else None,
                 "against": against,
-                "important_lines": list(important_lines or []),
+                "important_lines": list(important_lines or []) + ruled_out,
                 "done": done,
                 "total": total,
                 "stage": stage,
                 "ask": ask,
             }
-        )
+        ),
+        "ruled_out": ruled_out,
     }
 
 
@@ -874,41 +1417,33 @@ def foundation_question(project: str) -> dict[str, Any]:
     if question is None:
         return {"finished": True, "answered": done, "total": total}
 
-    # The block itself, ready to paste. Not a command: Claude Code collapses
-    # tool output into "ran N shell commands", so a block printed by a command
-    # never reaches the screen. On a real run that put a bare prose line in
-    # front of the user as question 3 while the block sat invisible behind a
-    # summary line.
     import forge_ui as ui
 
-    payload = {
-        "kind": "decision",
-        "number": done + 1,
-        "title": question.question,
-        "subtitle": question.subtitle,
-        "means": list(question.means),
-        "choices": [list(o) for o in question.options],
-        "done": done,
-        "total": total,
-        "stage": "foundation",
-    }
+    known = ff.facts(forge)
+    menu = ff.menu_for(question, facts_known=known)
 
     return {
         "finished": False,
         "key": question.key,
         "question": question.question,
         "subtitle": question.subtitle,
+        "concept": question.concept,
         "means": list(question.means),
-        "choices": [list(o) for o in question.options],
+        "choices": menu.rows,
+        "ruled_out": menu.ruled_out_lines(),
+        "known_about_this_project": sorted(known),
         "answered": done,
         "total": total,
-        "block": ui.render_from(payload),
+        "block": ui.render_from(_foundation_payload(question, done, total, menu)),
         "next": (
             "Paste `block` into your reply verbatim, as the whole answer. Do not "
             "print it through a shell command: that output is collapsed and the "
             "user never sees it. Do not summarise it or add a line before it "
             "either; the block already says everything, including what kind of "
-            "answer is wanted."
+            "answer is wanted. The options in it are the ones this project can "
+            "still have: do not add one back that `ruled_out` names, and do not "
+            "invent extras, because the list narrowed against answers that are "
+            "already recorded."
         ),
     }
 
@@ -1070,6 +1605,181 @@ def show_roadmap(project: str) -> dict[str, Any]:
 
 
 @server.tool(
+    name="resume",
+    description=(
+        "Pick the thread back up after the session was closed. Returns the "
+        "block for whatever is open right now, ready to paste, plus one line "
+        "saying where the work stands. **Call this first in any project that "
+        "already has notes**, before /forge:start does anything else: the "
+        "answers are on disk, and asking a question the user has already "
+        "answered is the fastest way to lose their trust in the record. Reads "
+        "only; changes nothing."
+    ),
+)
+def resume(project: str) -> dict[str, Any]:
+    import forge_foundation as ff
+    import forge_steps as stp
+    import forge_ui as ui
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        progress = fs.Progress.read(forge)
+    except fs.StateError as exc:
+        return {"error": str(exc), "needs_repair": True}
+
+    decided = len([d for d in fs.list_decisions(forge) if d.status == fs.STATUS_DECIDED])
+    pending = fs.open_question(forge)
+    done, total = ff.position(forge)
+
+    # The same block, not a description of it. A session that comes back and
+    # says "decision 001 is still open" has made the user reconstruct from a
+    # summary what was on screen when they left, and the whole point of keeping
+    # state on disk is that they should not have to.
+    block = ""
+    stage = ""
+    if pending is not None:
+        stage = "open-question"
+        known = ff.match(pending.question)
+        if known is not None:
+            block = ui.render_from(_foundation_payload(known, done, total))
+        else:
+            block = ui.render_from(
+                {
+                    "kind": "decision",
+                    "number": pending.id,
+                    "title": pending.question,
+                    "subtitle": "still open from your last session",
+                    "means": ["Nothing can be written until this is answered."],
+                }
+            )
+    else:
+        # Nothing asked, and the foundation unfinished: the session ended in the
+        # gap between one answer and the next question. Handing back "nothing is
+        # open, carry on" here would send the client to the build loop, where
+        # the governor blocks every write for a reason the client has not been
+        # told, so the next foundation question is what resuming means.
+        upcoming = ff.next_question(forge)
+        if upcoming is not None:
+            stage = "foundation"
+            block = ui.render_from(_foundation_payload(upcoming, done, total))
+
+    step = stp.current(forge)
+    return {
+        "open_question": pending.question if pending else None,
+        "block": block,
+        "stage": stage,
+        "resume": progress.resume_line(pending.question if pending else None),
+        "decided": decided,
+        "answered": done,
+        "total": total,
+        "step": (
+            {"phase": step.phase, "number": step.number, "text": step.text} if step else None
+        ),
+        "writes_blocked": not fs.writes_allowed(forge)[0],
+        "next": (
+            "Paste `block` verbatim if there is one: it is the question they were "
+            "looking at when they closed the session, in the same shape. Say at "
+            "most one line before it. Do not re-run setup and do not ask anything "
+            "already recorded."
+            if block
+            else "The foundation is answered and nothing is open. Call next_step "
+            "and carry on from there."
+        ),
+    }
+
+
+@server.tool(
+    name="step_questions",
+    description=(
+        "The next question the **current step** owes the user, drawn and ready "
+        "to paste. Call this before writing any code for a step, and keep "
+        "calling it until it reports `finished`. A step that stores something "
+        "is asked which database (Postgres, Supabase, Neon, SQLite, MySQL, "
+        "Mongo, each with what it costs), where it runs, how its shape changes "
+        "once there is real data in it, how the code talks to it, and what is "
+        "in it when a test opens it. A step that deploys is asked how many "
+        "pieces have to run, what starts and restarts them, and what happens "
+        "in the five minutes after a bad release. These are asked **once per "
+        "project**, by whichever step needs them first, and the governor blocks "
+        "the step until they are recorded. Reads only; changes nothing."
+    ),
+)
+def step_questions(project: str) -> dict[str, Any]:
+    import forge_steps as stp
+    import forge_topics as tp
+    import forge_ui as ui
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"finished": True, "reason": "There is no step in progress."}
+
+    title = ""
+    for number, _path, header in stp.phase_files(forge):
+        if number == step.phase:
+            title = str(header.get("title", "")).strip()
+
+    subject = f"{title} {step.text}"
+    pending = tp.owed(forge, subject)
+    topics = [topic.key for topic in tp.topics_in(subject)]
+
+    if not pending:
+        return {
+            "finished": True,
+            "topics": topics,
+            "step": {"phase": step.phase, "number": step.number, "text": step.text},
+            "next": (
+                "Everything this subject owes is recorded. Ask the step's own "
+                "question now, with `render_decision`, and pass `project`."
+            ),
+        }
+
+    question = pending[0]
+    known = ff.facts(forge)
+    menu = ff.menu_for(question, facts_known=known)
+
+    # Counted against what this step's subjects owe, not against every question
+    # in the file. A step about the database is not five questions into a
+    # twenty-question interrogation, and telling the user it is makes the bar
+    # meaningless (rule R4 asks for progress, not for a number).
+    owed_here = {q.key for topic in tp.topics_in(subject) for q in topic.questions}
+    remaining = len(pending)
+
+    return {
+        "finished": False,
+        "topics": topics,
+        "key": question.key,
+        "question": question.question,
+        "concept": question.concept,
+        "matters": question.matters,
+        "remaining_for_this_step": remaining,
+        "block": ui.render_from(
+            _foundation_payload(
+                question,
+                done=len(owed_here) - remaining,
+                total=len(owed_here),
+                menu=menu,
+                stage=", ".join(topics) or "this step",
+            )
+        ),
+        "next": (
+            "Paste `block` verbatim and wait. Do not write code for this step: "
+            "the governor is holding it until this is recorded, and it will say "
+            "so in the block if you try. Record the answer with `record_answer`, "
+            "including the user's own reason, then call this again."
+        ),
+    }
+
+
+@server.tool(
     name="plan_steps",
     description=(
         "Break one phase into the steps it will actually be built in. **Code "
@@ -1183,7 +1893,13 @@ def step_built(project: str, phase: int, number: int) -> dict[str, Any]:
         "steps_built": built,
         "steps_total": total,
         "next": gap.reason if gap else "",
-        "next_is_a_question": bool(gap and gap.kind == "undecided"),
+        # All three of these are questions to the user, and the flag is read as
+        # "does the loop stop here". Counting only `undecided` said no while the
+        # next thing on screen was a question, which is the wrong answer for the
+        # two gates that were added in front of it.
+        "next_is_a_question": bool(
+            gap and gap.kind in {"undecided", "unchallenged", "unasked"}
+        ),
     }
 
 

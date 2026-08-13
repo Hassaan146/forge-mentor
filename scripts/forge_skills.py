@@ -187,6 +187,81 @@ def routed_library_skills() -> tuple[str, ...]:
 
 
 # --------------------------------------------------------------------------
+# companions: other people's plugins, used where they are better than ours
+# --------------------------------------------------------------------------
+
+# Kept apart from ROUTE, and that separation is the whole design.
+#
+# ROUTE is deterministic and its skills ship with Forge or with the pinned
+# library, so a stage loads the same set on every machine. A companion is
+# somebody else's plugin, installed separately, updated on their schedule, and
+# possibly absent. Folding one into ROUTE would make the guarantee "the same
+# skills every time, unless the user happened to install something", which is
+# not a guarantee.
+#
+# So companions are additive and optional. Forge works without them, its own
+# rules win where they disagree, and the security floor is not overridable by
+# anything here.
+#
+# **ponytail** (github.com/DietrichGebert/ponytail, MIT): teaches an agent to
+# write the least code that works, checking reuse and the standard library
+# before reaching for a dependency. It is pointed at the same thing Forge is
+# pointed at from the other end. Forge governs *which* decisions get made;
+# ponytail governs how much code the answer turns into. Its review and audit
+# skills belong at the fix stage for the same reason.
+COMPANIONS: dict[str, tuple[str, ...]] = {
+    "building": ("ponytail",),
+    "review-fix": ("ponytail-review",),
+}
+
+# What to tell someone who does not have them. Two lines, and the second is the
+# install, because a suggestion without the command is a suggestion nobody acts
+# on.
+COMPANION_REPOS: dict[str, str] = {
+    "ponytail": "https://github.com/DietrichGebert/ponytail",
+    "ponytail-review": "https://github.com/DietrichGebert/ponytail",
+}
+
+COMPANION_SOURCE: dict[str, tuple[str, str]] = {
+    "ponytail": (
+        "writes the least code that works, so a feature is not four files when it is one",
+        "/plugin marketplace add DietrichGebert/ponytail",
+    ),
+    "ponytail-review": (
+        "reviews what was written for code that did not need to exist",
+        "/plugin marketplace add DietrichGebert/ponytail",
+    ),
+}
+
+
+def companions_for(stage: str) -> tuple[str, ...]:
+    """Optional skills that improve a stage, if the user has them."""
+    return COMPANIONS.get(stage, ())
+
+
+def companion_installed(name: str, home: Path | None = None) -> bool:
+    """Is this companion on this machine?
+
+    Looked for in both places a skill can live, because a plugin's skills sit
+    under the plugin rather than in the shared library, and the layout of the
+    plugin directory is not something this file should claim to know exactly.
+    A false negative costs a suggestion the user can ignore; a false positive
+    would have Forge name a skill that does not exist, which reads as a bug in
+    Forge.
+    """
+    base = (home or Path.home()) / ".claude"
+    if (library_dir(home) / name / "SKILL.md").is_file():
+        return True
+    plugins = base / "plugins"
+    if not plugins.is_dir():
+        return False
+    try:
+        return any(plugins.glob(f"**/skills/{name}/SKILL.md"))
+    except OSError:
+        return False
+
+
+# --------------------------------------------------------------------------
 # the library — installed once, at setup
 # --------------------------------------------------------------------------
 

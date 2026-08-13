@@ -51,8 +51,49 @@ Then ask them **one at a time**, in order, each with `affects` set to the marker
 gives you. A decision recorded without the marker unblocks nothing, and the loop stalls on a
 question the user has already answered.
 
+## The order of a step, and it does not vary
+
+1. `lean_check` — the ladder, answered by you before anybody is asked anything.
+2. The size question, from what the ladder found. Three options at least: as proposed, the
+   smaller version you found, not at all. `record_lean` writes it and opens the step.
+3. `step_questions` — what the subject owes, if this step is the first to touch it.
+4. The step's own question, through `render_decision` with `project` set.
+5. The builder writes it.
+6. `lean_review` on the approach, before it is built. Unchanged means one line and carry on.
+   **Smaller means the user decides**, because a change to what gets built is theirs.
+7. The gate, then the explain-back.
+
+Steps 1 and 6 are the two moments over-building happens: once when a line on a plan becomes
+a feature, and once when a feature becomes four files. The second is the one that is easy to
+skip, because by then everybody has agreed on the goal and stopped looking.
+
+## The subject comes before the step
+
+**Call `step_questions` before the step's own question, and keep calling it until it says
+`finished`.** A step that stores something owes the user five decisions before it is buildable:
+which database (Postgres, Supabase, Neon, SQLite, MySQL, Mongo, each with what it costs), where
+it runs, how its shape changes once there is real data in it, how the code talks to it, and what
+is in it when a test opens it. A step that deploys owes how many pieces have to run, what starts
+and restarts them, and what happens in the five minutes after a bad release.
+
+They are asked once per project, by whichever step needs them first, and the governor holds the
+step until they are recorded. You will not have to remember which ones are outstanding: the tool
+knows, and it hands you the block.
+
+This exists because everything after the foundation used to be whatever you thought of in the
+moment. For a database step that was usually one question, and the database itself was chosen by
+the model writing that turn.
+
+Every question you draw goes through `render_decision` **with `project` set**, and it will
+refuse a menu of two or an option with no consequence. That refusal is the rule working, not a
+formatting complaint: a per-step question is written by you in the moment, and improvising a
+menu with no constraint is what produced "Docker, or run it locally" for a project that runs on
+one laptop. Three options at least, six at most, each with what it costs, the concept named, and
+nothing offered that an earlier answer already ruled out.
+
 The rhythm never changes, and it is the product: teach the step, offer the options, recommend
-one with a reason drawn from *this* project, wait. Then the builder writes that step and only
+one with a reason drawn from *this* project, wait, then ask why they picked it and record their
+answer in their own words. Then the builder writes that step and only
 that step, and you ask the next one. A phase built in a single pass with nothing asked is the
 exact failure Forge exists to prevent — and it has happened, which is why the gate is in the
 files rather than in this paragraph.

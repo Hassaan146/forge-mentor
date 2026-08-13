@@ -53,6 +53,12 @@
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py\" --hook",
             "timeout": 15,
             "_note": "The installed copy lagged the repository for four sessions running, and every one of them began by debugging the wrong build. Checks once a day, caches the answer outside the plugin so a reinstall does not reset it, and says nothing on any failure. FORGE_NO_UPDATE_CHECK=1 turns it off."
+          },
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/companion.py\"",
+            "timeout": 10,
+            "_note": "Brings ponytail in with Forge rather than leaving it in a routing table nothing is obliged to read (decision 059). One line when it is installed, the install command once per project when it is not, silence on every error and outside a Forge project. FORGE_NO_COMPANION=1 turns it off."
           }
         ]
       }

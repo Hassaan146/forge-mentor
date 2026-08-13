@@ -164,7 +164,28 @@ def run() -> list[Check]:
         )
     )
 
+    # Reported, never required (decision 058). It is somebody else's plugin, it
+    # is optional by design, and a preflight that marks an optional thing
+    # MISSING teaches people to ignore the preflight.
+    checks.append(
+        Check(
+            "ponytail (optional companion)",
+            _companion_installed(),
+            "gets the builder to write the least code that works; Forge runs without it",
+            fix="/plugin marketplace add DietrichGebert/ponytail",
+        )
+    )
+
     return checks
+
+
+def _companion_installed() -> bool:
+    try:
+        import forge_skills as sk
+
+        return sk.companion_installed("ponytail")
+    except Exception:
+        return False
 
 
 def report(checks: list[Check] | None = None) -> str:

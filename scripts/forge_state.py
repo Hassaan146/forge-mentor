@@ -356,6 +356,11 @@ class Decision:
             "decided_by": self.decided_by,
             "affects": self.affects,
         }
+        # Written back, not dropped. `extra` is inside the fingerprint, so a
+        # record carrying an unmodelled key was signed with it and then rewritten
+        # without it: the file would read as modified the next time anything
+        # verified it, and nothing that rewrote a record knew it had done that.
+        fields.update({k: v for k, v in self.extra.items() if k not in fields})
         if signature:
             fields.update(signature)
         path.write_text(render_header(fields) + "\n" + self.body, encoding="utf-8")
@@ -414,6 +419,11 @@ def next_decision_id(forge_dir: Path) -> int:
 STATUS_OPEN = "open"
 STATUS_DECIDED = "decided"
 
+# A record of a choice made while writing code, rather than an answer to a
+# question somebody was asked. It is a real decision and it is kept forever;
+# what it is not is permission. See `record_note`.
+BUILD_NOTE = "build-note"
+
 
 def open_question(forge_dir: Path) -> Decision | None:
     """The question currently awaiting an answer, or None.
@@ -451,6 +461,41 @@ def ask(forge_dir: Path, question: str, body: str = "", affects: str = "") -> De
         decided_by="",
         affects=affects,
         body=body or f"# {question}\n\n_Awaiting the user's decision._\n",
+    )
+    decision.write(forge_dir, signature=_sign_for(forge_dir, decision))
+    return decision
+
+
+def record_note(
+    forge_dir: Path,
+    question: str,
+    body: str,
+    affects: str = "",
+    decided_by: str = "forge-builder",
+) -> Decision:
+    """Write down a choice that was made while writing code, already settled.
+
+    **Why this is not `ask` followed by `answer`.** Nobody was asked. These are
+    the choices the builder makes inside a step it has already been cleared to
+    build: what a module is called, whether a failure returns or raises, where a
+    helper goes. They were invisible, and invisible is how a project ends up
+    with conventions nobody chose and nobody can explain.
+
+    **Why it is marked, and what the mark is for.** A decided record whose
+    `affects` names a step opens the governor's gate for that step. If the
+    builder could write one of those, it could clear its own gate, and the one
+    guarantee this product makes would be a formality. So the mark goes in the
+    header, inside the fingerprint, and `forge_steps.decided_markers` refuses to
+    count it.
+    """
+    decision = Decision(
+        id=next_decision_id(forge_dir),
+        question=question,
+        status=STATUS_DECIDED,
+        decided_by=decided_by,
+        affects=affects,
+        body=body,
+        extra={"kind": BUILD_NOTE},
     )
     decision.write(forge_dir, signature=_sign_for(forge_dir, decision))
     return decision

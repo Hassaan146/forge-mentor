@@ -451,3 +451,38 @@ def test_an_added_skill_file_also_fails_verification(tmp_path: Path) -> None:
     (smuggled / "SKILL.md").write_text("---\nname: smuggled\n---\n", encoding="utf-8")
 
     assert sk.library_verified(tmp_path, commit=sha) is False
+
+
+# --------------------------------------------------------------------------
+# companions: other people's plugins, used where they are better than ours
+# --------------------------------------------------------------------------
+
+
+def test_companions_are_additive_and_never_part_of_the_guarantee() -> None:
+    """Somebody else's plugin cannot be load-bearing.
+
+    ROUTE is deterministic because its skills ship with Forge or with the
+    pinned library. A companion is installed separately, updated on someone
+    else's schedule, and may be absent. Folding one into ROUTE would turn "the
+    same skills every time" into "the same skills every time, unless the user
+    happened to install something", which is not a guarantee.
+    """
+    for stage, companions in sk.COMPANIONS.items():
+        routed = sk.skills_for(stage)
+        for name in companions:
+            assert name not in routed, f"{name} is load-bearing at {stage}"
+            assert name in sk.COMPANION_SOURCE, f"{name} has no install line"
+
+
+def test_a_missing_companion_is_not_a_failure(tmp_path: Path) -> None:
+    """Forge works without them, and says so quietly rather than breaking."""
+    assert sk.companion_installed("ponytail", home=tmp_path) is False
+    assert sk.skills_for("building"), "the stage still has its own skills"
+
+
+def test_a_companion_is_found_where_a_plugin_actually_puts_it(tmp_path: Path) -> None:
+    skill = tmp_path / ".claude" / "plugins" / "ponytail" / "skills" / "ponytail"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: ponytail\n---\n", encoding="utf-8")
+
+    assert sk.companion_installed("ponytail", home=tmp_path) is True

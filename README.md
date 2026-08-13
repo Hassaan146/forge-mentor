@@ -192,6 +192,7 @@ written — that is the product working, not a delay.
 | | |
 |---|---|
 | `/forge:start` | Set up Forge in this project and begin |
+| `/forge:add` | Add a feature to a project that already works |
 | `/forge:status` | Where the work stands and what happens next |
 | `/forge:mode` | `pipeline` · `accept-edits` · `auto` — how much Forge settles itself |
 | `/forge:update` | Check now whether a newer Forge is out, and how to get it |
@@ -199,6 +200,33 @@ written — that is the product working, not a delay.
 
 The three modes differ in one thing only: how much gets decided for you. Code can never
 move past an undecided question in any of them.
+
+### Adding to something that already works
+
+`/forge:add` is the path for the second version. It reads what is already recorded rather
+than asking again: the foundation is on disk and still true, so what comes back is the
+handful of decisions the new feature has to live inside, anything it wants that the project
+already ruled out, and only the questions the feature itself owes. The phase is appended, so
+nothing already built is rewritten.
+
+If the feature contradicts a recorded decision, that is put to you rather than worked around.
+Changing your mind is a new record naming the old one, never an edit of it.
+
+### Better with, fine without
+
+[ponytail](https://github.com/DietrichGebert/ponytail) (MIT) gets an agent to write the least
+code that works: check whether the thing needs writing, whether the project already does it,
+whether the standard library does it, before adding anything.
+
+```
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
+```
+
+Forge picks it up on its own when it is there, at the building and review stages, and says so
+once. It is optional: Forge runs without it, and where the two disagree Forge wins. The
+security floor is not overridable, and a recorded decision is not optimised away because a
+shorter version exists. `FORGE_NO_COMPANION=1` silences the mention.
 
 ## Switching it off
 

@@ -33,10 +33,14 @@ Four moving parts, and the split between them matters.
 **Hooks** (`scripts/governor.py`, `safety.py`, `gates.py`) are the guarantees.
 They run as subprocesses, are **standard-library only**, and never depend on
 anything being installed. The governor blocks writes; safety blocks secret reads
-and quotes outside text as data; gates hold the commit until tests pass.
+and quotes outside text as data; gates hold the commit until tests pass. Three
+more are not guarantees and never block: `forge_update.py` (are you on the
+current build), `presenter.py` (was that said in a frame), `companion.py`
+(bring ponytail in with Forge).
 
-**The MCP server** (`server/forge_server.py`) is the engine — 33 tools for
-recording decisions, reading reviews, metering usage, planning the pipeline.
+**The MCP server** (`server/forge_server.py`) is the engine — 43 tools for
+recording decisions, reading reviews, metering usage, planning the pipeline,
+and asking a subject what it owes before it is built.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
 below it is silently never registered.
 
@@ -58,6 +62,10 @@ Not aspirations. Each is code, with a test.
    questions — a fresh project blocks until all of them are recorded. This was
    broken for most of the build: the rule only covered the window between asking
    and answering, so a brand-new project allowed everything.
+1b. **A note the builder writes about its own work is not permission.** Build
+   choices are recorded as they are made (decision 051), marked in the header,
+   and `decided_markers` refuses to count them. Without that line the builder
+   opens its own gate by describing what it decided to do.
 2. **Secret files are never read**, by any spelling. `cat`, `sed`, `python -c`,
    a symlink with a harmless name.
 3. **Outside text is data.** Review findings arrive wrapped, and the wrapper
@@ -77,6 +85,111 @@ Not aspirations. Each is code, with a test.
 4. **Is there more than one person using this?**
 5. **Where does this run when you are not running it?**
 6. **What does 'finished' mean for a step?**
+
+Six is where it starts, not where it ends. **Answers open further questions** (decision 049):
+deploying opens how a change gets there, what happens when it falls over, and where the secrets
+live; staying local opens what you would want back if the machine died; a second person opens
+identity and permissions. A question that does not apply was never in the sequence, rather than
+skipped in front of the user. `sequence()` computes the live list and `position()` counts against
+it, so the total moves as the interrogation runs.
+
+## The order of a step, and it does not vary
+
+`scripts/forge_lean.py`, decision 060. Forge's question was always *which* decision. The one
+before it, does this need writing and how much of it, was never asked.
+
+1. `lean_check` runs the ladder: does it need to exist, does the project already do it, does the
+   standard library do it, what is the smallest version worth having, what the extra size costs.
+   The model answers all five (ponytail's job), then puts the findings to the user as a size
+   question. `record_lean` writes it, and it is refused with a rung missing.
+2. `step_questions`, if this step is the first to touch a subject.
+3. The step's own question.
+4. The builder writes it.
+5. `lean_review` on the approach **before** it is built. Unchanged is one line. **Smaller is the
+   user's decision**, not the reviewer's.
+
+The gate is `next_gap` returning `unchallenged`. Nothing here judges whether code is minimal:
+the model reasons, the gate remembers. Note the marker trap this hit on the way in: `lean:` plus
+the step marker *contains* the step marker, so recording the pass counted as deciding the step
+and skipped the question the pass exists to precede.
+
+## Adding to something that already works
+
+`scripts/forge_feature.py` and `/forge:add`, decisions 056 and 057. Every gate reads the phase
+list, so once the last phase was built `next_gap` found no unbuilt step and **opened**. Someone
+coming back a month later to add one feature got no questions at all.
+
+- `plan_feature` returns three things: the recorded decisions the feature lives inside (ids and
+  one-line choices, capped at eight), anything it wants that the project has ruled out with the
+  decision that would have to be reopened, and the subject questions it still owes.
+- **The foundation is never asked again.** It is on disk and still true. Re-asking it spends a
+  new project's tokens to learn what was already written down.
+- `add_phase` appends. `compile_phases` rewrites the whole list, which puts finished work
+  through a new pen and can mark built steps unbuilt.
+- Changing a recorded decision is a **new record naming the old one** with `supersedes`, never
+  an edit. The old record stays readable and stays in the chain.
+
+## Companions: other people's plugins
+
+`COMPANIONS` in `forge_skills.py`, decision 058. **ponytail**
+(github.com/DietrichGebert/ponytail, MIT) loads at the building stage and `ponytail-review` at
+the fix stage, if the user has them. It teaches an agent to write the least code that works,
+which is the same argument as the incremental path from the other end: Forge governs which
+decisions get made, ponytail governs how much code the answer turns into.
+
+Kept out of `ROUTE` deliberately. ROUTE is deterministic because its skills ship with Forge or
+with the pinned library; a plugin installed separately and updated on someone else's schedule
+would turn "the same skills every time" into "unless the user happened to install something".
+So companions are additive, absence is a suggestion rather than a failure, and **where they
+disagree Forge wins**: the security floor is not overridable, and a recorded decision is not
+optimised away because a shorter version exists.
+
+Install: `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail`.
+
+`scripts/companion.py` is the hook that brings it in with Forge (decision 059), on SessionStart:
+one line when it is installed, the install command once per project when it is not, silence
+outside a Forge project and on every error. The routing table alone was not enough, because a
+table is read by whatever asks it, and four rules in this repository have shipped in code that
+nothing called. `FORGE_NO_COMPANION=1` turns it off.
+
+## What a subject owes before it is built
+
+`scripts/forge_topics.py`, decisions 053 to 055. The foundation asks its questions and stops.
+Everything after it used to be whatever the planner thought of in the moment, so a step called
+"store the todos" could be asked one question, or none worth the name, and the database was
+chosen by whichever model was writing that turn.
+
+Eight subjects now carry the questions they owe, twenty in all:
+
+| Subject | Owes |
+|---|---|
+| database | which one (Postgres, Supabase, Neon, SQLite, MySQL, Mongo), where it runs, how the shape changes once there is real data, how the code talks to it, what a test opens |
+| deploy | how many pieces run, what starts and restarts them (nothing, systemd, Compose, a platform, Kubernetes), rollback, how a change gets there, how you hear it broke |
+| config | where settings live, what happens when one is missing, where the secrets are |
+| auth | how someone proves who they are, what each may see |
+| api | its shape, and what a caller gets when it fails |
+| jobs, uploads, payments | one question each, same shape |
+
+Asked **once per project**, by whichever step needs them first, and `next_gap` returns an
+`unasked` gap until they are recorded, so the write is refused rather than discouraged. A step
+that touches none of them is not held up: a gate that fires on everything is one people learn to
+type past. Each question also carries one line on **what a bad answer costs**, shown with a bar,
+because the questions with the worst consequences sound the most administrative.
+
+## What a menu has to be
+
+`scripts/forge_options.py`, decisions 047 and 048. This was reported as "it is giving very
+limited options", and underneath it **nothing generated options at all**: one question carried a
+menu and the rest were improvised against no rule, which is how "Docker, or run it locally"
+reached a project that runs on one laptop.
+
+- **Three at least, six at most, each carrying its consequence.** `render_decision` refuses to
+  draw a block that breaks it. Two is a false binary; a real one passes `binary_because` and the
+  sentence goes on screen.
+- **The menu narrows against the recorded facts**, and what it removes is shown struck out with
+  the reason, because the exclusion teaches. A question is never narrowed by the fact its own
+  answer produces.
+- **Each question names its concept.** A user who remembers picking B has learned nothing.
 
 The idea comes first because every later question is asked *inside* it. The
 stack comes next because "where is the data kept" means different things for a
@@ -145,7 +258,15 @@ pip install "mcp>=2.0.0,<3"
 ```
 
 Then per project: `/forge:start`, and afterwards `/forge:status`, `/forge:mode`,
-`/forge:update`, `/forge:stop`.
+`/forge:update`, `/forge:stop`. `/forge:add` is the path for adding a feature to
+a project that already works.
+
+Recommended alongside it, not required:
+
+```
+/plugin marketplace add DietrichGebert/ponytail
+/plugin install ponytail@ponytail
+```
 
 Check a machine before installing anything:
 
@@ -159,16 +280,23 @@ Tests:
 python -m pytest
 ```
 
-727 tests, ~88% coverage, no model calls anywhere in the suite.
+822 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 727 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (45 records, ids 1 to 45; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 822 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (60 records, ids 1 to 61; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
+
+**Changed most recently (2026-08-13, decisions 047 to 055):** the option rules,
+the branching interrogation, the recorded reason in the user's own words, build
+notes, a wider block that names its concept, and the per-subject interrogation
+above. `resume` is the tool `/forge:start` now calls first in a project that
+already has notes; `step_questions` is the one the planner calls before writing
+any code for a step.
 
 **Not done:**
 

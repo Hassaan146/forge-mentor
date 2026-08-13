@@ -1,18 +1,101 @@
 ---
 type: progress
 project: forge
-stage: phase-7-complete
-questions_total_estimate: 30
-questions_answered: 29
-next_question: none — Phase 8 next
+stage: built-and-in-use
+questions_total_estimate: 59
+questions_answered: 58
+next_question: none
 open_question: none
 override_active: false
-updated: 2026-08-04
+updated: 2026-08-13
 ---
 
 # Where we are
 
-**Stage:** Foundation interrogation **complete** — all 9 questions decided (Phase 1, dogfood stage 1).
+All ten phases are built. 822 tests, 88% coverage, 60 decision records, chain verified.
+
+## Adding without disturbing, and a companion plugin (2026-08-13)
+
+Decisions [056](decisions/056-what-happens-when-someone-adds-a-feature-to-a-project-forge.md)
+to [059](decisions/059-how-does-the-companion-plugin-actually-reach-a-build-rather.md).
+
+**The incremental path did not exist.** Every gate reads the phase list, so once the last phase
+was built `next_gap` found no unbuilt step and opened: a user coming back to add one feature got
+no questions at all. `/forge:add` and `plan_feature` read the recorded decisions the feature
+lives inside, name anything it contradicts along with the decision that would have to be
+reopened, and ask only what the feature owes. `add_phase` appends rather than recompiling.
+Changing a recorded decision is a new record with `supersedes`, never an edit.
+
+**ponytail is wired in as a companion**, not a dependency: additive at the building and review
+stages, detected rather than assumed, reported by the preflight, and Forge wins where they
+disagree. `scripts/companion.py` is the SessionStart hook that brings it in with Forge, because
+a routing table is only read by whatever asks it, and this repository has shipped four rules
+that lived in code nothing called. Kept out of `ROUTE`
+because ROUTE is the deterministic table and a separately installed plugin cannot be part of a
+guarantee.
+
+## The final check: a subject is not one question (2026-08-13)
+
+Decisions [053](decisions/053-what-does-a-subject-owe-the-user-before-code-touching-it-is.md)
+to [055](decisions/055-does-a-question-say-what-goes-wrong-if-it-is-answered-badly.md).
+
+Asked for as a last pass: *"you have to ask me about the database, then how I want to configure
+it, then whether I want to deploy, whether I want it orchestrated. I want to figure out whether
+I have to use Supabase or something else."* None of it could happen. **The whole product held
+twelve questions**, all of them in the foundation, and everything after it was written by the
+planner in the moment.
+
+`scripts/forge_topics.py` holds eight subjects and the twenty questions they owe, asked once per
+project by whichever step touches them first, gated in `next_gap` rather than asked for in a
+brief. The options name products: Postgres, Supabase, Neon, SQLite, MySQL, Mongo, and for
+orchestration nothing, systemd, Compose, a platform, Kubernetes. Every question carries what a
+bad answer costs.
+
+Two bugs found by running it rather than by testing it: the keyword fallback read facts out of
+the open idea question, so "a to-do app I can use from my phone and my laptop" was recorded as
+local-only and struck Supabase off a hosted project's menu; and the progress line counted a
+database step against every question in the file instead of against the five it owed.
+**Read `context.md` at the repository root first**: it is the cold-start brief and it is
+kept current. This file is the log.
+
+## The interrogation was rewritten after a user watched it run (2026-08-13)
+
+Decisions [047](decisions/047-how-many-options-does-a-question-put-in-front-of-the-user.md)
+to [052](decisions/052-is-the-block-wide-enough-and-does-it-say-what-the-question-i.md).
+
+The report was one sentence: "it is giving very limited options". Underneath it, **nothing
+generated options at all.** One question in the product carried a menu (the stack, four
+options); every other foundation question carried none, and every per-step question in the
+build loop carried none either. So the options a user saw were improvised in the moment
+against no rule: no floor on how many, no requirement that each carry its cost, and nothing
+tying them to what the project had already decided. "Docker, or run it locally" was the
+result, offered to a project that had said three questions earlier that it runs on one laptop.
+
+What changed:
+
+- `scripts/forge_options.py` holds the rule. Three options minimum, six maximum, each with its
+  consequence. `render_decision` refuses to draw a block that breaks it, so a per-step question
+  cannot be improvised thin. A genuine two-sided question passes `binary_because`, and that
+  sentence goes on screen.
+- Menus narrow against the recorded facts, and what they remove is **shown struck out with the
+  reason**. The exclusion is the cheapest teaching in the interrogation.
+- Answers open further questions. Deploying opens four; staying local opens the backup question
+  instead; a second person opens identity and permissions. The total moves, and R4 already
+  required showing it.
+- Every question names the **concept** it teaches, and the block is 92 columns rather than 74,
+  because an option and its consequence did not fit on one line.
+- The user's own reason is recorded in its own section, and a load-bearing answer is refused
+  without it.
+- The builder records the choices it makes while writing code, and those records **cannot open a
+  step's gate**.
+
+Two bugs the new tests found immediately, both in the fact-reading: a leading "a " was read as
+option A, so "A small server I rent" was recorded as "Only on my machine"; and a question was
+being narrowed by the fact its own answer produces, so the delivery question struck out four of
+its own five options.
+
+**Stage before this:** foundation interrogation complete, all 9 original questions decided
+(Phase 1, dogfood stage 1).
 
 **Challenge stage: complete** — see [challenge-001.md](challenge-001.md). Premortem + redteam
 found **3 critical** issues (C1 second provider, C2 state-file trust, C3 review injection)
