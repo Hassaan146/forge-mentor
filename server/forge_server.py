@@ -1481,7 +1481,48 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
     except ValueError as exc:
         return {"error": str(exc)}
 
-    return fpr.report(Path(project), forge, name or Path(project).name)
+    out = fpr.report(Path(project), forge, name or Path(project).name)
+    out["asked_for"] = str(fpr.write_asked_for(forge, name or Path(project).name))
+    return out
+
+
+@server.tool(
+    name="what_did_i_ask_for",
+    description=(
+        "Everything the user has asked for, in their own words, drawn from the "
+        "decision records into `.claude/forge/asked-for.md`. Call it when they "
+        "ask what they said, when something feels like it was requested and "
+        "forgotten, and before any review of the work as a whole. It is a view "
+        "of `decisions/`, not a second copy, so it cannot claim a requirement "
+        "that is not recorded. **Writes the index.**"
+    ),
+)
+def what_did_i_ask_for(project: str) -> dict[str, Any]:
+    import forge_explain as fe
+    import forge_prompts as fpr
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    path = fpr.write_asked_for(forge, Path(project).name)
+    said = [e for e in fe.collect(forge) if e.asked_for.strip()]
+
+    return {
+        "file": str(path),
+        "count": len(said),
+        "asked_for": [
+            {"id": e.id, "in_their_words": " ".join(e.asked_for.split())[:200],
+             "became": " ".join(e.choice.split())[:120]}
+            for e in said
+        ],
+        "next": (
+            "Read it back to them as a list, not as prose. If something they "
+            "believe they asked for is missing, it was never recorded, and the "
+            "honest answer is that rather than a reconstruction from memory."
+        ),
+    }
 
 @server.tool(
     name="render_decision",
@@ -1738,7 +1779,13 @@ def render_note(
         "phase four, and that answer quietly sets the shape of all of them. "
         "Five phases is the usual size; each one delivers something the user "
         "could use on its own. Refuses to rewrite a plan whose phases have "
-        "started. **Writes `.claude/forge/phases/`.**"
+        "started.\n\n"
+        "**Draft the plan in Claude Code's plan mode and stay in it until the "
+        "user accepts**, running ponytail's ladder over the phases while you "
+        "are there: a phase that exists because plans usually have one, or one "
+        "whose deliverable the project already has, is the cheapest thing in "
+        "the build to delete and the most expensive to notice later. "
+        "**Writes `.claude/forge/phases/`.**"
     ),
 )
 def compile_phases(project: str, phases: list[list[str]]) -> dict[str, Any]:

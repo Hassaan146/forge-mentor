@@ -180,6 +180,68 @@ def write(project_root: Path, forge_dir: Path, name: str = "") -> Path:
     return path
 
 
+ASKED_FOR = "asked-for.md"
+
+
+def render_asked_for(entries: list[fe.Explained], project: str = "") -> str:
+    """Everything the owner asked for, in their words, in one list.
+
+    **Why this is its own document.** All of it is already in the records, one
+    request per file, which is the right place for it and the wrong place to
+    read it from. Sixty records is not a list anybody scans, so a small thing
+    asked for in March is a small thing nobody can find in June, and the person
+    who forgets it first is usually the one who asked.
+
+    Generated, never edited. It is a view of the records rather than a second
+    copy of them: delete a decision and the line goes, which is the property
+    that keeps it honest and the reason it is not a notebook.
+    """
+    said = [entry for entry in entries if entry.asked_for.strip()]
+
+    lines = [
+        fs.render_header(
+            {
+                "type": "asked-for",
+                "project": project or "this project",
+                "entries": str(len(said)),
+                "generated": "yes, from the decision records; do not edit",
+            }
+        ),
+        "",
+        "# What you asked for",
+        "",
+        "Your own words, from every decision that carries them, newest last. This is a",
+        "view of `decisions/`, not a second copy: nothing is written here that is not",
+        "already recorded, and deleting a record removes its line.",
+        "",
+    ]
+
+    for entry in said:
+        wanted, _ = redact(" ".join(entry.asked_for.split()))
+        got, _ = redact(" ".join(entry.choice.split()))
+        lines += [
+            f"### {entry.id:03d} · {entry.question}",
+            "",
+            f"> {wanted}",
+            "",
+            f"**What it became:** {got or 'recorded'}",
+            "",
+        ]
+
+    if not said:
+        lines += ["Nothing yet. A decision records this the moment you say why.", ""]
+
+    return "\n".join(lines)
+
+
+def write_asked_for(forge_dir: Path, name: str = "") -> Path:
+    """Write the index beside the records it is drawn from."""
+    path = forge_dir / ASKED_FOR
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_asked_for(fe.collect(forge_dir), name), encoding="utf-8")
+    return path
+
+
 def report(project_root: Path, forge_dir: Path, name: str = "") -> dict[str, object]:
     path = write(project_root, forge_dir, name)
     entries = fe.collect(forge_dir)

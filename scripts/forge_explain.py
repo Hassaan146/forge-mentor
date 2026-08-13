@@ -35,6 +35,11 @@ _OPTIONS = re.compile(r"\*\*Options considered\*\*\s*(.+?)(?=\n\s*\n|\Z)", re.DO
 _DECIDED = re.compile(r"\*\*Decided:\*\*\s*(.+?)(?:\s*·|$)", re.MULTILINE)
 _WHY = re.compile(r"##\s+Why\s*\n+(.+?)(?=\n##\s|\Z)", re.DOTALL)
 
+# What the user said, in their words, kept apart from Forge's account of the
+# tradeoff (decision 050). It is the only part of a record that is evidence
+# rather than argument, which is what makes it worth indexing on its own.
+_THEIRS = re.compile(r"##\s+In their words\s*\n+(.+?)(?=\n##\s|\Z)", re.DOTALL)
+
 
 @dataclass
 class Explained:
@@ -46,6 +51,7 @@ class Explained:
     options: list[str]
     why: str
     decided_by: str
+    asked_for: str = ""
 
     @property
     def was_automatic(self) -> bool:
@@ -86,6 +92,7 @@ def read(decision: fs.Decision) -> Explained:
         options=options,
         why=_first(_WHY, body),
         decided_by=decision.decided_by,
+        asked_for=_first(_THEIRS, body),
     )
 
 

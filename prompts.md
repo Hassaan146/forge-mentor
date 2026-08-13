@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 65
+entries: 67
 generated: 2026-08-14
 ---
 
@@ -1277,5 +1277,47 @@ about Forge.
 **Reasoning given:**
 
 > Reopening after a gap was answered with the open question and nothing around it, which tells somebody what to do and not what they were doing. The box carries the idea in their own words, questions answered against the estimate, decisions recorded, phases finished, steps built, which step is open, and the last three decisions with what was chosen. A session log was rejected: it would be a second version of a history the records already hold, and two records of the same thing is one record that is wrong. Assembling it on every call means deleting a decision changes the summary, which is the property that keeps it honest. The next block is `resume`'s, reused rather than rebuilt, because two ways of drawing the same open question is two ways for them to differ.
+
+---
+
+## 067 · Where is the plan drafted?
+
+**Asked:**
+
+> Where is the plan drafted?
+
+**Options put to the user:**
+
+- In the ordinary conversation, as it is now
+- In Claude Code's plan mode, from the first draft until the user accepts
+- In plan mode only for the first plan, not for added features
+- In a file the user edits directly
+
+**Answered by the user:** The planner enters Claude Code's plan mode before drafting the phases and stays in it until the user accepts, running ponytail's ladder over the plan while there
+
+**Reasoning given:**
+
+> Plan mode is the one state where the client itself refuses to let anything be written, so the plan is drafted somewhere the code cannot start early. Forge's governor already blocks the write, and this means the question never arises. Running the ladder over the phases while in it is the cheapest deletion in the whole build: a phase that exists because plans usually have one, or one whose deliverable the project already has, costs nothing to remove now and a great deal to notice in week three. Recorded with its limit stated: nothing in Forge can put the client into plan mode, so unlike the gates this one depends on the planner following it. It is an instruction, and instructions in this project have a history of being skipped.
+
+---
+
+## 068 · How does the owner find a small thing they asked for months ago?
+
+**Asked:**
+
+> How does the owner find a small thing they asked for months ago?
+
+**Options put to the user:**
+
+- Read the decision records
+- A generated index of their own words, drawn from the records
+- A notebook kept alongside, written as things are said
+- Ask, and have it reconstructed from the conversation
+
+**Answered by the user:** `asked-for.md`, generated from the 'In their words' section of every record
+
+**Reasoning given:**
+
+> All of it is already recorded, one request per file, which is the right place to keep it and the wrong place to read it from. Sixty records is not a list anybody scans, so a small thing asked for in March is a small thing nobody can find in June, and the person who forgets it first is usually the one who asked for it. A notebook was rejected for the reason a session log was rejected in 066: it would be a second version of a history the records already hold, and it would keep asserting requirements after the record behind them was gone. This is a view instead, regenerated on every call, so deleting a record removes its line and the index cannot claim something that is not written down. Reconstructing from the conversation is the one answer that is never acceptable: it is memory presented as a record.
 
 ---

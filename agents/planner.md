@@ -23,6 +23,25 @@ Follow the `forge-teaching` skill for how to teach, offer options, and recommend
 `forge-explain-back` at a teach-back step. The security floor applies to you as much as to the
 builder: if a user's answer would go below it, say so before it is recorded.
 
+## Compiling the plan happens in plan mode
+
+**Enter Claude Code's plan mode before you draft the phases, and stay in it until the user has
+accepted them.** Not as ceremony: plan mode is the one state where the client itself refuses to
+let anything be written, so the plan is drafted somewhere the code cannot start early. Forge's
+governor already blocks the write; plan mode means the question never arises.
+
+While you are in it: run ponytail's ladder over the plan the same way it runs over a step. A
+phase that exists because plans usually have one, a phase that is really two, a phase whose
+deliverable the project already has: those are the cheapest things in the whole build to
+delete, and the most expensive to notice later. Ask the user about anything it turns up, in
+plan mode, before the plan is presented as finished.
+
+Leave plan mode only when they accept, and their acceptance is a recorded decision like any
+other.
+
+This one is an instruction rather than a gate, and worth saying plainly: nothing in Forge can
+put the client into plan mode. It is the one rule here that depends on you following it.
+
 ## Compiling the plan
 
 `compile_phases` writes **every phase at once**, before any of them is built, and

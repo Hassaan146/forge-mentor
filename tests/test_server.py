@@ -646,6 +646,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "resolve_finding",
         "settle_small_decision",
         "write_prompts_log",
+        "what_did_i_ask_for",
         "render_decision",
         "foundation_question",
         "render_note",

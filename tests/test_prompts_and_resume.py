@@ -250,3 +250,79 @@ def test_a_redacted_log_says_so(project: Path, forge: Path) -> None:
     assert fp.REDACTED in text
     assert "were blanked" in text
     assert "in its decision record" in text, "the reader is told where the original is"
+
+
+# --------------------------------------------------------------------------
+# what the owner asked for, in one place — decision 068
+# --------------------------------------------------------------------------
+
+
+def test_the_index_carries_their_words_and_what_it_became(tmp_path: Path) -> None:
+    """Sixty records is not a list anybody scans.
+
+    A small thing asked for in March is a small thing nobody can find in June,
+    and the person who forgets it first is usually the one who asked.
+    """
+    import forge_prompts as fpr
+
+    forge = fs.init(tmp_path)
+    asked = fs.ask(forge, "How many options does a question offer?")
+    fs.answer(
+        forge,
+        asked.id,
+        "# At least three, each with its cost\n\n## Why\n\nTwo is a false binary.\n\n"
+        "## In their words\n\nIt is giving very limited options.\n",
+    )
+
+    path = fpr.write_asked_for(forge, "demo")
+    text = path.read_text(encoding="utf-8")
+
+    assert "It is giving very limited options." in text
+    assert "At least three, each with its cost" in text
+    assert "How many options does a question offer?" in text
+
+
+def test_the_index_is_a_view_and_not_a_second_copy(tmp_path: Path) -> None:
+    """Delete the record and the line goes.
+
+    A notebook would keep asserting a requirement that is no longer written
+    down anywhere, which is worse than not having one.
+    """
+    import forge_prompts as fpr
+
+    forge = fs.init(tmp_path)
+    asked = fs.ask(forge, "something")
+    fs.answer(forge, asked.id, "# yes\n\n## Why\n\nbecause\n\n## In their words\n\nI want it.\n")
+
+    assert "I want it." in fpr.write_asked_for(forge, "demo").read_text(encoding="utf-8")
+
+    (forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()).unlink()
+    assert "I want it." not in fpr.write_asked_for(forge, "demo").read_text(encoding="utf-8")
+
+
+def test_a_record_with_no_words_of_theirs_is_not_invented(tmp_path: Path) -> None:
+    import forge_prompts as fpr
+
+    forge = fs.init(tmp_path)
+    asked = fs.ask(forge, "something")
+    fs.answer(forge, asked.id, "# yes\n\n## Why\n\nForge's own reasoning only\n")
+
+    text = fpr.write_asked_for(forge, "demo").read_text(encoding="utf-8")
+    assert "Nothing yet" in text, "silence is reported as silence"
+
+
+def test_credentials_are_redacted_out_of_the_index(tmp_path: Path) -> None:
+    """It is generated into a committed folder, like everything else here."""
+    import forge_prompts as fpr
+
+    forge = fs.init(tmp_path)
+    asked = fs.ask(forge, "which database")
+    fs.answer(
+        forge,
+        asked.id,
+        "# hosted\n\n## Why\n\nbecause\n\n## In their words\n\n"
+        "use postgres://admin:hunter2@db.example.com/app\n",
+    )
+
+    text = fpr.write_asked_for(forge, "demo").read_text(encoding="utf-8")
+    assert "hunter2" not in text
