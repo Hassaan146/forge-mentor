@@ -1,8 +1,8 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 64
-generated: 2026-08-13
+entries: 65
+generated: 2026-08-14
 ---
 
 # Prompts, forge-mentor
@@ -1256,5 +1256,26 @@ about Forge.
 **Reasoning given:**
 
 > Filing ponytail's findings was a tool somebody had to remember, which is the shape of every rule this repository has watched get skipped. Hooking the write was the obvious fix and it is the wrong one: the usual way a review arrives is a workflow committing it on GitHub's side and the user pulling in a terminal (decision 026), and no hook in the session sees that happen. So the question asked is not 'did the file just arrive' but 'has ponytail seen this version', which is answerable from disk however the file got there, including a fetch three sessions ago that nobody followed up. `clean` now means all three reviewers have looked, not merely that no finding is open: the old bar read as passed while one of the reviewers had never run. Filing nothing counts as having looked, because 'found nothing' and 'has not run' are different states and only the second should hold a step up. The hook runs after the fetch tool, after Bash, and at the start of a session, so a pull in another window is noticed at the top of the next turn.
+
+---
+
+## 066 · What does somebody see when they come back to a project after a gap?
+
+**Asked:**
+
+> What does somebody see when they come back to a project after a gap?
+
+**Options put to the user:**
+
+- The open question on its own, as resume already gives
+- A summary box assembled from the records, then the thing they were on
+- A session log written at the end of each session and replayed
+- The full status report every time
+
+**Answered by the user:** `catch_up` returns two blocks: where you left off, assembled from the records, and then the open question or next step
+
+**Reasoning given:**
+
+> Reopening after a gap was answered with the open question and nothing around it, which tells somebody what to do and not what they were doing. The box carries the idea in their own words, questions answered against the estimate, decisions recorded, phases finished, steps built, which step is open, and the last three decisions with what was chosen. A session log was rejected: it would be a second version of a history the records already hold, and two records of the same thing is one record that is wrong. Assembling it on every call means deleting a decision changes the summary, which is the property that keeps it honest. The next block is `resume`'s, reused rather than rebuilt, because two ways of drawing the same open question is two ways for them to differ.
 
 ---

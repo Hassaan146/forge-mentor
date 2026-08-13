@@ -1011,3 +1011,52 @@ def test_the_markers_carry_forge_meanings_not_version_control_ones(monkeypatch) 
     assert any(
         line.startswith("- ") and "cannot be undone" in line for line in out.splitlines()
     )
+
+
+def test_the_summary_box_carries_the_story_without_a_second_record() -> None:
+    """Assembled from the records every time, never accumulated in a log.
+
+    A log would be a second version of the history, and two records of the same
+    thing is one record that is wrong (decision 011: the repository is the
+    memory).
+    """
+    out = ui.render_from(
+        {
+            "kind": "summary",
+            "title": "WHERE YOU LEFT OFF",
+            "idea": "a to-do app I can use from my phone",
+            "facts": [["Questions", "9 of about 9 answered"], ["Phases", "1 of 2 finished"]],
+            "recent": ["010  Does this plan look right?  ->  yes"],
+            "important_lines": ["Waiting on you: which database"],
+        }
+    )
+
+    for expected in (
+        "WHERE YOU LEFT OFF",
+        "a to-do app I can use from my phone",
+        "9 of about 9 answered",
+        "Lately",
+        "Waiting on you: which database",
+    ):
+        assert expected in out, f"the summary lost {expected!r}"
+
+
+def test_a_long_bar_line_wraps_under_itself() -> None:
+    """Flat-wrapped, the continuation starts under the bar and reads as a new
+    point rather than the rest of this one."""
+    out = ui.render_from(
+        {
+            "kind": "summary",
+            "facts": [],
+            "important_lines": ["a consequence that keeps going and going and " * 4],
+        }
+    )
+
+    carrying = [line for line in out.splitlines() if "▌" in line]
+    assert len(carrying) == 1, "the bar is drawn once, on the first line only"
+
+
+def test_the_summary_survives_every_route() -> None:
+    payload = {"kind": "summary", "title": "T", "facts": [["a", "b"]], "recent": ["one"]}
+    assert "T" in ui.as_markdown(payload)
+    assert "T" in plain(ui.summary("T", facts=[("a", "b")], recent=["one"]))

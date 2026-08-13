@@ -38,7 +38,7 @@ more are not guarantees and never block: `forge_update.py` (are you on the
 current build), `presenter.py` (was that said in a frame), `companion.py`
 (bring ponytail in with Forge).
 
-**The MCP server** (`server/forge_server.py`) is the engine — 45 tools for
+**The MCP server** (`server/forge_server.py`) is the engine — 46 tools for
 recording decisions, reading reviews, metering usage, planning the pipeline,
 and asking a subject what it owes before it is built.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
@@ -114,6 +114,19 @@ The gate is `next_gap` returning `unchallenged`. Nothing here judges whether cod
 the model reasons, the gate remembers. Note the marker trap this hit on the way in: `lean:` plus
 the step marker *contains* the step marker, so recording the pass counted as deciding the step
 and skipped the question the pass exists to precede.
+
+## Coming back after a gap
+
+`catch_up`, decision 066, and the first thing `/forge:status` calls. Two blocks: **where you
+left off**, then the question or step you were on, so the session continues rather than
+restarts. The box carries the idea in the user's own words, questions answered against the
+estimate, decisions recorded, phases finished, steps built, what is open now, and the last three
+decisions with what was chosen.
+
+Assembled from the records on every call, never from a session log. A log would be a second
+version of a history the records already hold, and two records of the same thing is one record
+that is wrong. Deleting a decision changes the summary, which is the property that keeps it
+honest. The second block is `resume`'s, reused rather than rebuilt.
 
 ## Adding to something that already works
 
@@ -329,14 +342,14 @@ Tests:
 python -m pytest
 ```
 
-858 tests, ~88% coverage, no model calls anywhere in the suite.
+872 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 858 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (64 records, ids 1 to 65; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 872 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (66 records, ids 1 to 66; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 

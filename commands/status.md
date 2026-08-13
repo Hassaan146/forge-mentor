@@ -2,13 +2,27 @@
 description: Where this project stands, and what happens next
 ---
 
-Show where the work is, without changing anything.
+Show where the work is, and carry on from it.
+
+**Start with `catch_up`.** It returns two blocks: the story so far, and whatever comes next.
+Paste them in that order and stop. That is the whole reply on the common path, which is
+somebody reopening after a gap and needing to know where they were.
+
+The summary is assembled from the records every time rather than kept in a log, so there is no
+second version of the history to drift from the first (decision 011: the repository is the
+memory). It carries the idea in the user's own words, how many questions are answered against
+the estimate, how many decisions are recorded, phases finished, steps built, which step is open
+now, and the last three decisions with what was chosen.
+
+If it reports `needs_repair`, call `check_history`, show what is damaged and how to repair it,
+and stop. Nothing else on this screen is worth reading until the notes are sound.
+
+Everything below is the longer report, for when the user asks for more than a glance.
 
 Steps:
 
 1. Call `next_step` for the stage, the subagent, the model, and whether the next step needs the
-   user. If it reports `needs_repair`, call `check_history` and show what is damaged and how to
-   repair it — then stop; nothing else is worth reading until the notes are sound.
+   user.
 2. Call `current_state` for what is decided and what is open.
 3. Call `usage_report` for tokens used so far. If it reports `available: false`, say usage is
    unavailable in one line and carry on — nothing else depends on it.

@@ -1203,6 +1203,44 @@ def _md_roadmap(phases: list[dict], title: str) -> str:
     return "\n".join(out)
 
 
+def summary(
+    title: str = "THE STORY SO FAR",
+    *,
+    idea: str = "",
+    facts: list[tuple[str, str]] | None = None,
+    recent: list[str] | None = None,
+    important_lines: list[str] | None = None,
+) -> str:
+    """Where a project stands, for somebody who closed the laptop on Friday.
+
+    Read back off disk every time rather than accumulated in a log, so the
+    tenth session's summary is assembled the same way as the second's and there
+    is no second record to drift from the first (decision 011: the repository is
+    the memory).
+    """
+    body: list[str] = ["", f"  {BOLD}{title}{RESET}"]
+    if idea:
+        body.append(f"  {DIM}{idea}{RESET}")
+
+    rows = list(facts or [])
+    if rows:
+        body.append("")
+        width = max(len(str(label)) for label, _ in rows)
+        for label, value in rows:
+            body.append(f"  {DIM}{str(label).ljust(width)}{RESET}   {value}")
+
+    lines = [line for line in (recent or []) if str(line).strip()]
+    if lines:
+        body += ["", f"  {GREEN}{BOLD}{RECORDED} Lately{RESET}"]
+        body += [f"    {DIM}{line}{RESET}" for line in lines]
+
+    for line in important_lines or []:
+        body.append(f"  {YELLOW}{BAR} {line}{RESET}")
+
+    body.append("")
+    return box(body, f"{AMBER}{BOLD}{MARK} FORGE{RESET}")
+
+
 def _plain_block(payload: dict) -> str:
     """The drawn block, whatever the colour setting says.
 
@@ -1211,6 +1249,15 @@ def _plain_block(payload: dict) -> str:
     that chose this route.
     """
     kind = str(payload.get("kind", "")).strip().lower()
+
+    if kind == "summary":
+        return summary(
+            str(payload.get("title", "THE STORY SO FAR")),
+            idea=str(payload.get("idea", "")),
+            facts=[tuple(f) for f in (payload.get("facts") or [])],
+            recent=list(payload.get("recent") or []),
+            important_lines=list(payload.get("important_lines") or []),
+        )
 
     if kind == "legend":
         return legend()
@@ -1273,7 +1320,7 @@ def _coloured_box(payload: dict) -> str:
     kind = str(payload.get("kind", "")).strip().lower()
     inner = BOX_INNER
 
-    def rule(title: str = "") -> str:
+    def rule(title: str = "") -> str:  # noqa: D401 - closure over `inner`
         if not title:
             return "+" + "-" * inner + "+"
         return "+-- " + title + " " + "-" * max(3, inner - len(title) - 4) + "+"
@@ -1284,14 +1331,28 @@ def _coloured_box(payload: dict) -> str:
     def wrapped(text: str, mark: str = "|", indent: str = "") -> list[str]:
         return [row(indent + line, mark) for line in _wrap(text, inner - 6 - len(indent), "")]
 
+    def barred(text: str) -> list[str]:
+        """A yellow-bar line, with its continuation under itself.
+
+        Wrapped flat, the second line starts in column zero under the bar and
+        reads as a new point rather than the rest of this one. Same defect the
+        options had, in the one place the text is longest.
+        """
+        lead = f"{BAR} "
+        room = max(20, inner - 6 - len(lead))
+        first, *rest = _wrap(str(text), room, "") or [""]
+        return [row(f"{lead}{first}", "-")] + [
+            row(" " * len(lead) + line, "-") for line in rest
+        ]
+
     out: list[str] = []
 
-    if kind in {"action", "note", "legend", "roadmap", "decision"}:
+    if kind in {"action", "note", "legend", "roadmap", "decision", "summary"}:
         pass
     else:
         raise ValueError(
             f"Unknown block kind {kind!r}. "
-            "Use one of: decision, note, action, legend, roadmap, banner."
+            "Use one of: decision, note, action, legend, roadmap, summary, banner."
         )
 
     if kind == "action":
@@ -1312,7 +1373,7 @@ def _coloured_box(payload: dict) -> str:
         ]:
             out += wrapped(str(line))
         for line in payload.get("important_lines") or []:
-            out += wrapped(f"{BAR} {line}", "-")
+            out += barred(line)
         out += [row(), rule()]
         if payload.get("ask"):
             out += ["", *_coloured_box(
@@ -1324,6 +1385,28 @@ def _coloured_box(payload: dict) -> str:
         out = [rule(f"{MARK} How to read Forge"), row()]
         for symbol, meaning in SYMBOL_MEANINGS:
             out += wrapped(f"{symbol}  {meaning}")
+        out += [row(), rule()]
+        return "```diff\n" + "\n".join(out) + "\n```"
+
+    if kind == "summary":
+        # The story so far, for somebody who closed the laptop three days ago.
+        # Every line of it is read back off disk rather than remembered, so it
+        # is the same summary in the tenth session as in the second.
+        out = [rule(f"{MARK} {payload.get('title', 'THE STORY SO FAR')}"), row()]
+        if payload.get("idea"):
+            out += wrapped(str(payload["idea"]))
+            out.append(row())
+        width = max((len(str(k)) for k, _ in (payload.get("facts") or [])), default=0)
+        for label, value in payload.get("facts") or []:
+            out += wrapped(f"{str(label).ljust(width)}   {value}")
+        recent = [line for line in (payload.get("recent") or []) if str(line).strip()]
+        if recent:
+            out.append(row())
+            out += wrapped(f"{RECORDED} Lately")
+            for line in recent:
+                out += wrapped(str(line), "|", "  ")
+        for line in payload.get("important_lines") or []:
+            out += barred(line)
         out += [row(), rule()]
         return "```diff\n" + "\n".join(out) + "\n```"
 
@@ -1665,6 +1748,15 @@ def _boxed_markdown(payload: dict) -> str:
 def as_markdown(payload: dict) -> str:
     """The block as markdown, for a client that colours markdown and not ANSI."""
     kind = str(payload.get("kind", "")).strip().lower()
+    if kind == "summary":
+        out = [f"**{payload.get('title', 'THE STORY SO FAR')}**", ""]
+        if payload.get("idea"):
+            out += [f"*{payload['idea']}*", ""]
+        out += [f"- {label}: {value}" for label, value in (payload.get("facts") or [])]
+        recent = [line for line in (payload.get("recent") or []) if str(line).strip()]
+        if recent:
+            out += ["", "**Lately**", ""] + [f"- {line}" for line in recent]
+        return "\n".join(out)
     if kind == "decision":
         return _md_decision(payload)
     if kind == "note":

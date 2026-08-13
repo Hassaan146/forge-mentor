@@ -636,6 +636,110 @@ def add_phase(project: str, title: str, delivers: str) -> dict[str, Any]:
 
 
 @server.tool(
+    name="catch_up",
+    description=(
+        "The story so far, in one block, plus whatever comes next. Call it "
+        "**first** in `/forge:status` and whenever somebody comes back after a "
+        "gap: it says what the project is, how far in it is, what was decided "
+        "lately, and then hands over the open question or the next step so the "
+        "session continues rather than restarts. Assembled from the records "
+        "every time, never from a log, so the tenth session's summary is built "
+        "the same way as the second's. Reads only; changes nothing."
+    ),
+)
+def catch_up(project: str) -> dict[str, Any]:
+    import forge_lean as ln
+    import forge_steps as stp
+    import forge_ui as ui
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        progress = fs.Progress.read(forge)
+    except fs.StateError as exc:
+        return {"error": str(exc), "needs_repair": True}
+
+    decisions = [d for d in fs.list_decisions(forge) if d.status == fs.STATUS_DECIDED]
+    pending = fs.open_question(forge)
+    answered, total = ff.position(forge)
+
+    # What they are building, in their own words, from the first answer they
+    # gave. It is the one line that makes the rest of the box mean anything.
+    idea = ""
+    for decision in decisions:
+        if ff.match_in(decision.question, (ff.INTENT,)) is not None:
+            idea = ff.chosen(decision)
+            break
+
+    phases = stp.phase_files(forge)
+    built, steps = stp.position(forge)
+    step = stp.current(forge)
+
+    facts: list[list[str]] = [
+        ["Questions", f"{answered} of about {total} answered"],
+        ["Decisions", f"{len(decisions)} recorded"],
+    ]
+    if phases:
+        done = sum(1 for _n, _p, header in phases if str(header.get("done", "")).strip())
+        facts.append(["Phases", f"{done} of {len(phases)} finished"])
+    if steps:
+        facts.append(["Steps", f"{built} of {steps} built in the phase you are on"])
+    if step is not None:
+        facts.append(["On now", f"phase {step.phase}, step {step.number}: {step.text}"])
+    if decisions:
+        facts.append(["Last worked on", decisions[-1].date or "not dated"])
+
+    # The last few, newest first, because "what was I doing" is answered by the
+    # end of the list rather than the beginning of it.
+    recent = [
+        f"{d.id:03d}  {d.question}  ->  {ff.chosen(d) or 'recorded'}"[:110]
+        for d in reversed(decisions[-3:])
+    ]
+
+    gap = stp.next_gap(forge)
+    blocked = ""
+    if pending is not None:
+        blocked = f"Waiting on you: {pending.question}"
+    elif gap is not None:
+        blocked = gap.reason
+
+    block = ui.render_from(
+        {
+            "kind": "summary",
+            "title": "WHERE YOU LEFT OFF",
+            "idea": idea,
+            "facts": facts,
+            "recent": recent,
+            "important_lines": [blocked] if blocked else [],
+        }
+    )
+
+    # And then the thing to actually do, so this continues the session instead
+    # of describing it. Reusing `resume` rather than rebuilding the question:
+    # two ways of drawing the same open question is two ways for them to differ.
+    carry_on = resume.fn(project) if hasattr(resume, "fn") else resume(project)
+
+    return {
+        "block": block,
+        "next_block": carry_on.get("block", ""),
+        "open_question": pending.question if pending else None,
+        "blocked_by": blocked,
+        "writes_blocked": not fs.writes_allowed(forge)[0],
+        "stage": progress.stage,
+        "lean_pass_done": bool(step and ln.passed(forge, step.marker)),
+        "next": (
+            "Paste `block` first, then `next_block` if there is one, and stop. "
+            "Those two are the whole reply: a summary followed by the question "
+            "they were on. Do not re-explain what the summary already says, and "
+            "do not re-ask anything that is recorded."
+        ),
+    }
+
+
+@server.tool(
     name="record_build_choice",
     description=(
         "Write down a choice you made **while writing the code**, one nobody "

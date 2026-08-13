@@ -624,6 +624,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "record_answer",
         "current_state",
         "resume",
+        "catch_up",
         "record_build_choice",
         "record_override",
         "clear_override",
@@ -1171,3 +1172,55 @@ def test_every_render_tool_hands_back_a_pasteable_block(project: str, forge: Pat
             body = block.split("```diff\n", 1)[1].rsplit("\n```", 1)[0]
             for line in [ln for ln in body.splitlines() if ln.strip()]:
                 assert line[0] in "+-|", "every line carries a border"
+
+
+def test_catching_up_summarises_and_then_continues(project: str, forge: Path) -> None:
+    """Two blocks: where you left off, and the thing you were on.
+
+    The common path is somebody reopening after a gap, and what they need is
+    not a report. It is the report followed by the question, so the session
+    continues rather than restarts.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a to-do app I can use from my phone")
+
+    caught = call(srv.catch_up)(project)
+
+    assert "WHERE YOU LEFT OFF" in caught["block"]
+    assert "a to-do app I can use from my phone" in caught["block"], "in their own words"
+    assert "Decisions" in caught["block"]
+    assert ff.STACK.question in caught["next_block"], "and it hands over the next question"
+
+
+def test_the_summary_is_assembled_from_the_records_not_from_a_log(
+    project: str, forge: Path
+) -> None:
+    """No second version of the history to drift from the first.
+
+    Deleting a record changes the summary, which is the property a log would
+    not have: it would keep asserting work that is no longer written down.
+    """
+    import forge_foundation as ff
+
+    _answer(project, ff.INTENT.question, "a to-do app")
+    _answer(project, ff.STACK.question, "Both together")
+    assert "2 recorded" in call(srv.catch_up)(project)["block"]
+
+    for record in fs.list_decisions(forge)[1:]:
+        (forge / fs.DECISIONS / record.filename()).unlink()
+
+    assert "1 recorded" in call(srv.catch_up)(project)["block"]
+
+
+def test_catching_up_on_damaged_notes_asks_for_repair(project: str, forge: Path) -> None:
+    (forge / fs.PROGRESS).write_text("no header at all\n", encoding="utf-8")
+    assert call(srv.catch_up)(project)["needs_repair"] is True
+
+
+def test_the_status_command_actually_calls_catch_up() -> None:
+    """The same guard as `resume` and `plan_feature`: a tool nothing calls."""
+    status = (Path(__file__).resolve().parents[1] / "commands" / "status.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`catch_up`" in status
