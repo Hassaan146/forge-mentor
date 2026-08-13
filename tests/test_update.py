@@ -389,10 +389,46 @@ def test_ordinary_prompts_are_never_touched(plugin: Path, monkeypatch, prompt) -
     assert up.gate(prompt, plugin) == ""
 
 
-@pytest.mark.parametrize("prompt", ["/forge:start", "/forge:status", "run /forge:mode auto"])
-def test_every_command_that_starts_work_is_covered(plugin: Path, monkeypatch, prompt) -> None:
+@pytest.mark.parametrize(
+    "prompt", ["/forge:start", "/forge:add a photo on each todo", "run /forge:mode auto"]
+)
+def test_every_command_that_writes_state_is_covered(plugin: Path, monkeypatch, prompt) -> None:
     answers(monkeypatch, "1.1.0")
     assert up.gate(prompt, plugin) != ""
+
+
+@pytest.mark.parametrize("prompt", ["/forge:status", "/forge:update"])
+def test_the_gate_never_blocks_its_own_way_out(plugin: Path, monkeypatch, prompt) -> None:
+    """It told the user to run `/forge:status` and then refused it.
+
+    Both commands read; neither writes anything version-shaped. `/forge:update`
+    was the worse of the two, because its entire job is the thing the gate is
+    asking for. Reported from a real session, where the block arrived twice: once
+    for the command the user ran, and once for the command the block recommended.
+    """
+    answers(monkeypatch, "1.1.0")
+    assert up.gate(prompt, plugin) == ""
+
+
+def test_what_the_block_recommends_is_something_it_lets_through(
+    plugin: Path, monkeypatch
+) -> None:
+    """The general form of the same bug, so the next one is caught by the test.
+
+    A way out named in the message and refused by the list is worse than no way
+    out at all: it reads as the product contradicting itself.
+    """
+    answers(monkeypatch, "1.1.0")
+    blocked = up.gate("/forge:start", plugin)
+
+    # Only the arrowed lines. The body names `/forge:start` while explaining why
+    # it is being held, which is the opposite of recommending it: a check that
+    # cannot tell those apart reports the message for describing itself.
+    for line in blocked.splitlines():
+        if "→" not in line:
+            continue
+        for command in re.findall(r"/forge:\w+", line):
+            assert up.gate(command, plugin) == "", f"{command} is recommended and blocked"
 
 
 @pytest.mark.parametrize("prompt", ["/forge:start anyway", "/forge:start, skip the update"])

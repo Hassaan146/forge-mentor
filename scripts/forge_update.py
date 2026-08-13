@@ -437,7 +437,19 @@ def report(plugin_root: Path, *, force: bool = False) -> str:
 # Prompts that start real work. A stale plugin is harmless while someone is
 # reading; it is expensive the moment it starts writing state into a project,
 # because the questions, the gates and the file layout are all version-shaped.
-STARTING = ("forge:start", "forge:status", "forge:mode", "forge:update")
+#
+# **`/forge:status` and `/forge:update` are deliberately not here, and both were.**
+# The block message tells the user to run `/forge:status` to see which question
+# is open, and the same list then refused it: a gate that blocks the way out it
+# just recommended. `/forge:update` was worse, because its entire job is the
+# thing the gate is asking for. Both read; neither writes anything
+# version-shaped, so neither is what this is protecting.
+#
+# `/forge:add` is here because it writes phases and decisions into an existing
+# project, which is exactly the state a stale version shapes wrongly. It was
+# missing for the same reason things are usually missing from lists: it was
+# added to the product after the list was written.
+STARTING = ("forge:start", "forge:add", "forge:mode")
 
 # How someone gets past it. There is always a way past — decision 004, and
 # challenge finding H1: a gate with no exit is a gate that gets ripped out.
