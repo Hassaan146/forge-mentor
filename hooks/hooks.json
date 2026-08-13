@@ -35,6 +35,17 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "mcp__forge__fetch_review|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/reviewed.py\"",
+            "timeout": 15,
+            "_note": "When the hosted reviews land, ponytail's review runs (decision 065). Matched on the fetch tool and on Bash, because the usual way a review arrives is a workflow committing it and the user pulling. It compares the review on disk against the version ponytail last saw rather than trying to catch the write, so it is right however the file got there. FORGE_NO_REVIEW_TRIGGER=1 turns it off."
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           {
@@ -66,6 +77,12 @@
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/forge_update.py\" --hook",
             "timeout": 15,
             "_note": "The installed copy lagged the repository for four sessions running, and every one of them began by debugging the wrong build. Checks once a day, caches the answer outside the plugin so a reinstall does not reset it, and says nothing on any failure. FORGE_NO_UPDATE_CHECK=1 turns it off."
+          },
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/reviewed.py\"",
+            "timeout": 15,
+            "_note": "The same check at the start of a session, because a review pulled in another window between sessions is the case a tool-matched hook cannot see."
           },
           {
             "type": "command",

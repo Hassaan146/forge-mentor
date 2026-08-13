@@ -13,6 +13,7 @@ whether urllib works.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -678,3 +679,110 @@ def test_local_findings_count_towards_the_same_gate(tmp_path: Path) -> None:
 
     assert review.is_clean is False
     assert len(review.open_by_reviewer("ponytail")) == 1
+
+
+# --------------------------------------------------------------------------
+# the local review is owed the moment the hosted one lands — decision 065
+# --------------------------------------------------------------------------
+
+
+def land(forge: Path, pr: int, text: str = "# review\n\nfindings here\n") -> None:
+    """A hosted review arriving, however it arrived."""
+    path = rv.combined_path(forge, pr)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def test_nothing_is_owed_before_a_review_has_landed(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    assert rv.local_review_owed(forge, 4) is False
+
+
+def test_a_landed_review_is_owed_a_local_one(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    land(forge, 4)
+    assert rv.local_review_owed(forge, 4) is True
+
+
+def test_filing_findings_marks_that_version_seen(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    land(forge, 4)
+    rv.add_local(forge, 4, [("app.py", "1", "this did not need writing")])
+
+    assert rv.local_review_owed(forge, 4) is False
+
+
+def test_finding_nothing_still_counts_as_having_looked(tmp_path: Path) -> None:
+    """"ponytail found nothing" and "ponytail has not run" are different states,
+    and only the second should hold a step up."""
+    forge = fs.init(tmp_path)
+    land(forge, 4)
+    rv.add_local(forge, 4, [])
+
+    assert rv.local_review_owed(forge, 4) is False
+    assert rv.read_local(forge, 4) == []
+
+
+def test_a_new_hosted_review_is_owed_again(tmp_path: Path) -> None:
+    """The reviewers post again after a push, and that is a new version."""
+    forge = fs.init(tmp_path)
+    land(forge, 4)
+    rv.add_local(forge, 4, [])
+
+    land(forge, 4, "# review\n\nand now something else\n")
+    assert rv.local_review_owed(forge, 4) is True
+
+
+def test_the_trigger_notices_however_the_file_arrived(tmp_path: Path) -> None:
+    """State, not an event.
+
+    The usual arrival is a workflow committing the file and the user pulling in
+    a terminal, which no hook in the session sees.
+    """
+    import reviewed
+
+    forge = fs.init(tmp_path)
+    assert reviewed.message(tmp_path) == ""
+
+    land(forge, 7)
+    text = reviewed.message(tmp_path)
+    assert "#7" in text and "Run ponytail's review" in text
+
+    rv.add_local(forge, 7, [])
+    assert reviewed.message(tmp_path) == ""
+
+
+def test_the_trigger_ignores_the_local_files_themselves(tmp_path: Path) -> None:
+    import reviewed
+
+    forge = fs.init(tmp_path)
+    rv.add_local(forge, 4, [("a.py", "1", "note")])
+
+    assert reviewed.message(tmp_path) == "", "a local file is not a review to answer"
+
+
+def test_the_trigger_stands_down_where_forge_is_paused(tmp_path: Path) -> None:
+    import reviewed
+
+    forge = fs.init(tmp_path)
+    land(forge, 4)
+    (forge / "paused.md").write_text("off\n", encoding="utf-8")
+
+    assert reviewed.message(tmp_path) == ""
+
+
+def test_the_trigger_is_registered_where_it_will_run() -> None:
+    hooks = json.loads(
+        (Path(__file__).resolve().parents[1] / "hooks" / "hooks.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    everywhere = [
+        hook["command"]
+        for event in hooks["hooks"].values()
+        for entry in event
+        for hook in entry["hooks"]
+    ]
+    assert sum("reviewed.py" in command for command in everywhere) >= 2, (
+        "after the tool, and at the start of a session"
+    )

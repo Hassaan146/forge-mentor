@@ -121,6 +121,62 @@ def local_path(forge_dir: Path, pr: int) -> Path:
     return forge_dir / REVIEWS_DIR / f"pr-{valid_pr(pr)}{LOCAL_SUFFIX}"
 
 
+def combined_path(forge_dir: Path, pr: int) -> Path:
+    return forge_dir / REVIEWS_DIR / f"pr-{valid_pr(pr)}.md"
+
+
+def _fingerprint(text: str) -> str:
+    import hashlib
+
+    normalised = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").splitlines())
+    return hashlib.sha256(normalised.encode("utf-8")).hexdigest()[:16]
+
+
+def remote_fingerprint(forge_dir: Path, pr: int) -> str:
+    """What the hosted reviewers have said, as one short value.
+
+    The whole file rather than the findings alone. It is generated
+    deterministically from the review, so a changed fingerprint means the
+    review changed, and that is the only question being asked.
+    """
+    path = combined_path(forge_dir, pr)
+    if not path.is_file():
+        return ""
+    try:
+        return _fingerprint(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return ""
+
+
+def reviewed_upto(forge_dir: Path, pr: int) -> str:
+    """The version of the hosted review that the local reviewer has seen."""
+    path = local_path(forge_dir, pr)
+    if not path.is_file():
+        return ""
+    try:
+        header, _ = fs.parse_header(path.read_text(encoding="utf-8", errors="replace"), path)
+    except (fs.StateError, OSError):
+        return ""
+    return str(header.get("reviewed_upto", "")).strip()
+
+
+def local_review_owed(forge_dir: Path, pr: int) -> bool:
+    """Has the local reviewer seen *this* version of the hosted review?
+
+    **State, not an event.** The obvious way to trigger the local review is to
+    catch the moment the file arrives, and that misses the way it usually
+    arrives: a workflow writes it on GitHub's side and commits it, and the user
+    pulls in a terminal (decision 026). Nothing in the session sees that
+    happen. Comparing what is on disk against what was last reviewed catches it
+    however it got there, including a fetch three sessions ago that nobody
+    followed up.
+    """
+    current = remote_fingerprint(forge_dir, pr)
+    if not current:
+        return False  # nothing has been downloaded, so nothing is owed
+    return current != reviewed_upto(forge_dir, pr)
+
+
 def read_local(forge_dir: Path, pr: int) -> list[Finding]:
     """The local reviewer's findings, read back off disk.
 
@@ -170,7 +226,9 @@ def read_local(forge_dir: Path, pr: int) -> list[Finding]:
     return findings
 
 
-def save_local(forge_dir: Path, pr: int, findings: list[Finding]) -> Path:
+def save_local(
+    forge_dir: Path, pr: int, findings: list[Finding], upto: str | None = None
+) -> Path:
     """Write the local reviewer's findings where the fix loop will find them."""
     pr = valid_pr(pr)
     path = local_path(forge_dir, pr)
@@ -183,6 +241,12 @@ def save_local(forge_dir: Path, pr: int, findings: list[Finding]) -> Path:
                 "pr": str(pr),
                 "reviewer": ", ".join(sorted({f.reviewer for f in findings})) or "ponytail",
                 "open": str(sum(1 for f in findings if not f.resolved)),
+                # Which version of the hosted review this was written against.
+                # It is what makes "has ponytail seen this one?" answerable
+                # without having caught the moment the file arrived.
+                "reviewed_upto": (
+                    upto if upto is not None else reviewed_upto(forge_dir, pr)
+                ),
             }
         ),
         "",
@@ -238,7 +302,11 @@ def add_local(
         )
         seen.add(key)
 
-    save_local(forge_dir, pr, existing)
+    # Filing marks this version of the hosted review as seen, including when
+    # nothing was raised: "ponytail looked and found nothing" and "ponytail has
+    # not looked" are different states, and only one of them should hold up a
+    # step.
+    save_local(forge_dir, pr, existing, upto=remote_fingerprint(forge_dir, pr))
     return existing
 
 
@@ -1096,13 +1164,32 @@ def fetch_and_save(project: Path, forge_dir: Path, pr: int) -> dict[str, object]
                 review.reviewers.append(name)
 
     path = save(forge_dir, review, repo)
+
+    # Asked *after* the file is written, because writing it is what changes the
+    # answer: the fingerprint of the review that just landed is not the one the
+    # local reviewer last saw, so it is owed from this moment.
+    owed = local_review_owed(forge_dir, pr)
+
     return {
         "pr": pr,
         "file": str(path),
         "open": len(review.open_findings),
         "stale": len(review.stale_findings),
         "resolved": len(review.resolved_findings),
-        "clean": review.is_clean,
+        # **Clean means all three have looked.** Counting only the open findings
+        # made "clean" reachable while one of the reviewers had not run, which
+        # is a bar that reads as passed and was never set.
+        "clean": review.is_clean and not owed,
+        "local_review_owed": owed,
+        "next": (
+            "The hosted reviews are on disk. Run ponytail's review over this "
+            "pull request's diff now and file what it raises with "
+            "`record_review_findings`. The step is not clean until it has "
+            "looked at this version, and filing nothing is a valid outcome that "
+            "still counts as having looked."
+            if owed
+            else "All three reviewers have seen this version."
+        ),
         "reviewers": review.reviewers,
         "open_by_reviewer": {
             name: len(review.open_by_reviewer(name)) for name in review.reviewers

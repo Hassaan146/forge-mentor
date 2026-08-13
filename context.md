@@ -147,6 +147,16 @@ plugin in the session with no account to post from.
   because the repository is public and any account containing the right word could otherwise
   raise findings and satisfy the reviewed check on its own.
 
+**What makes it run (decision 065).** Not the model remembering. `pr-<n>.md` carries a
+fingerprint, `pr-<n>.local.md` records the version it was written against, and anything else is
+*owed*. `scripts/reviewed.py` checks it after the fetch tool, after Bash, and at the start of a
+session, so a review pulled in another window is noticed at the top of the next turn.
+
+Hooking the moment the file is written was the obvious design and the wrong one: the usual
+arrival is the workflow committing it and the user pulling in a terminal, which nothing in the
+session sees. **`clean` now means all three have looked**, not merely that no finding is open,
+and filing nothing counts as looking: "found nothing" and "has not run" are different states.
+
 ## Code that refers to things which do not exist
 
 `scripts/forge_grounding.py` and the `grounded.py` PostToolUse hook, decision 063. Every import
@@ -317,14 +327,14 @@ Tests:
 python -m pytest
 ```
 
-848 tests, ~88% coverage, no model calls anywhere in the suite.
+858 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 848 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (63 records, ids 1 to 64; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 858 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (64 records, ids 1 to 65; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 

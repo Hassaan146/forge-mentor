@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 63
+entries: 64
 generated: 2026-08-13
 ---
 
@@ -1235,5 +1235,26 @@ about Forge.
 **Reasoning given:**
 
 > CodeRabbit and Sourcery are GitHub apps: they post to the pull request and a workflow reads them (decisions 025, 026). ponytail is a plugin in the user's session, on the machine that wrote the code, and it has no account to post from. Writing straight into pr-<n>.md was rejected because the workflow rewrites that file on every review, so the local findings would vanish at the next fetch and nobody would see them go. Posting from the user's account was rejected because the reviewer table is anchored to the two bot logins on purpose: the repository is public, and any account whose name contains the right word could otherwise raise findings and satisfy the reviewed check on its own. Running it in CI would need Claude Code and credentials in Actions to review a diff that was already reviewed here for free. So the local findings get their own committed file, and `fetch_and_save` assembles the combined view from both every time: decision 026 stays true, nothing is overwritten, the anchored check stays as strict as it was, and `is_clean` counts all three so a step is not finished while any of them is open. Closing one routes on its id, since a local finding has no GitHub thread behind it.
+
+---
+
+## 065 · What makes the local review run once the hosted ones have landed?
+
+**Asked:**
+
+> What makes the local review run once the hosted ones have landed?
+
+**Options put to the user:**
+
+- Nothing. The model calls the tool when it remembers to
+- A hook on the moment the review file is written
+- A state check: the review on disk against the version the local reviewer last saw
+- Run it on a schedule
+
+**Answered by the user:** Every pull request's review carries a fingerprint, the local review file records which version it was written against, and anything else is owed until they match
+
+**Reasoning given:**
+
+> Filing ponytail's findings was a tool somebody had to remember, which is the shape of every rule this repository has watched get skipped. Hooking the write was the obvious fix and it is the wrong one: the usual way a review arrives is a workflow committing it on GitHub's side and the user pulling in a terminal (decision 026), and no hook in the session sees that happen. So the question asked is not 'did the file just arrive' but 'has ponytail seen this version', which is answerable from disk however the file got there, including a fetch three sessions ago that nobody followed up. `clean` now means all three reviewers have looked, not merely that no finding is open: the old bar read as passed while one of the reviewers had never run. Filing nothing counts as having looked, because 'found nothing' and 'has not run' are different states and only the second should hold a step up. The hook runs after the fetch tool, after Bash, and at the start of a session, so a pull in another window is noticed at the top of the next turn.
 
 ---
