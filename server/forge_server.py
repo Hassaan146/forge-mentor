@@ -302,6 +302,58 @@ def record_answer(
 
 
 @server.tool(
+    name="check_grounding",
+    description=(
+        "Does this code refer to anything that does not exist? Checks every "
+        "import against the project's own manifests, the standard library and "
+        "the files that are actually there, and checks any claim about a "
+        "recorded decision against the records. Pass `files` (paths) and "
+        "`said` (what you are about to tell the user). **Call it before "
+        "`step_built`, which refuses while anything is unresolved.** It never "
+        "fixes what it finds: each one is either a dependency to add and "
+        "record, a file about to be written, or something that was invented, "
+        "and which of the three it is belongs to the user. Reads only."
+    ),
+)
+def check_grounding(
+    project: str, files: list[str] | None = None, said: str = ""
+) -> dict[str, Any]:
+    import forge_grounding as gr
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    root = Path(project)
+    claims = gr.check([root / name for name in (files or [])], root)
+    if said.strip():
+        claims += gr.check_decisions(said, forge)
+
+    if not claims:
+        return {
+            "grounded": True,
+            "next": "Nothing here names something the project does not have.",
+        }
+
+    return {
+        "grounded": False,
+        "found": [
+            {"kind": c.kind, "name": c.name, "where": c.where, "line": c.line}
+            for c in claims
+        ],
+        "questions": [c.question() for c in claims],
+        "next": (
+            "Put every one of these to the user before writing anything else, "
+            "with `render_decision`, and record what they say. Do not install a "
+            "package to make it true and do not quietly rename it: a silent "
+            "correction is a second guess stacked on the first, and they learn "
+            "nothing from a mistake they never saw."
+        ),
+    }
+
+
+@server.tool(
     name="lean_check",
     description=(
         "**Before you ask the user anything about a step, and before you write "

@@ -38,14 +38,19 @@ PRESENT = (
     "and the recorded decision win wherever the two disagree."
 )
 
-# Said once per project, ever. A suggestion repeated is an advertisement.
+# Not a suggestion any more (decision 062). Said every session while it is
+# missing, because it is now a broken install rather than a preference, and a
+# broken install that mentions itself once is one the user forgets by Tuesday.
 ABSENT = (
-    "Mention once, in one line, then never again this project: ponytail is a "
-    "companion plugin that gets an agent to write the least code that works, and "
-    "Forge routes it at the build and review stages when it is present. It is "
-    "optional and Forge works without it.\n\n"
-    "    /plugin marketplace add DietrichGebert/ponytail\n"
-    "    /plugin install ponytail@ponytail\n"
+    "**ponytail is required and it is not installed.** Forge routes to it at the "
+    "build and review steps, and without it the builder has nothing pushing back "
+    "on how much code it writes. Tell the user, in one framed block, and do not "
+    "start or continue a build until it is there:\n\n"
+    "    /plugin install ponytail@forge-marketplace\n\n"
+    "Then restart Claude Code, because plugins register at startup. If they say "
+    "carry on regardless, that is their call: record it with `record_override` so "
+    "the reason is in the history, and say once that the build is running without "
+    "the check that keeps it small.\n"
 )
 
 MARKER = "companion-offered"
@@ -87,18 +92,16 @@ def message(cwd: Path) -> str:
     if _installed():
         return PRESENT
 
-    offered = forge / MARKER
-    if offered.exists():
-        return ""
+    # Said every session now, not once. Decision 062 made it required, and a
+    # missing requirement mentioned once in March is a requirement nobody has
+    # by June. The marker is still written, so anything that wants to know
+    # whether the user has already been told can ask.
     try:
-        offered.write_text(
-            "Forge mentioned the ponytail companion here once. It does not ask again.\n",
-            encoding="utf-8",
+        (forge / MARKER).write_text(
+            "Forge has told this project that ponytail is missing.\n", encoding="utf-8"
         )
     except OSError:
-        # Cannot remember having asked, so do not ask: repeating is worse than
-        # staying quiet, and the user can install it from the README.
-        return ""
+        pass
     return ABSENT
 
 

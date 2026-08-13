@@ -164,15 +164,17 @@ def run() -> list[Check]:
         )
     )
 
-    # Reported, never required (decision 058). It is somebody else's plugin, it
-    # is optional by design, and a preflight that marks an optional thing
-    # MISSING teaches people to ignore the preflight.
+    # Required, and fatal (decision 062, superseding 058). It was optional and
+    # the owner overruled that: code quality is not a nice-to-have in a product
+    # whose output is somebody else's codebase. Same shape as decision 017 on
+    # permissions, and it carries the same cost, written down there.
     checks.append(
         Check(
-            "ponytail (optional companion)",
+            "ponytail",
             _companion_installed(),
-            "gets the builder to write the least code that works; Forge runs without it",
-            fix="/plugin marketplace add DietrichGebert/ponytail",
+            "required: it is what keeps the builder writing the least code that works",
+            fix="/plugin install ponytail@forge-marketplace",
+            fatal=True,
         )
     )
 

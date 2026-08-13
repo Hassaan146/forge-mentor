@@ -33,6 +33,19 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/scripts/grounded.py\"",
+            "timeout": 15,
+            "_note": "Catches a reference to something the project does not have: an import that is in no manifest, a relative import with no file behind it (decision 063). After the write rather than before, because the reference cannot be checked until it exists. Never blocks, never fixes: it hands the question to the user, because a silent correction is a second guess stacked on the first. FORGE_NO_GROUNDING=1 turns it off."
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

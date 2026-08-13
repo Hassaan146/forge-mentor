@@ -1,13 +1,13 @@
 ---
 type: code-explained
-decisions: 60
-chosen_by_you: 60
+decisions: 62
+chosen_by_you: 62
 updated: 2026-08-13
 ---
 
 # Why forge-mentor is built the way it is
 
-60 decisions shape this project. You made 60 of them.
+62 decisions shape this project. You made 62 of them.
 
 Read in the order they were decided, because each one was made knowing the
 ones above it, which is not the order the files are listed in.
@@ -657,3 +657,23 @@ Also considered: They find it themselves from the README; Vendor its rules into 
 A marketplace can carry more than one plugin, so adding Forge's marketplace now offers both and installing ponytail is one command from the same place rather than a link in a README. It points at Dietrich Gebert's repository, so it stays his: his updates, his licence, his name on it, and no fork of a fast-moving repository for anybody to maintain. Silent installation was rejected. Installing somebody else's software onto a user's account while they are reading about permissions answers a question nobody asked, and Claude Code installs plugins on the user's word rather than a plugin's. The offer is made at setup, in one line, and the session hook from decision 059 makes it once per project after that.
 
 Full record: [`061`](decisions/)
+
+## 062 · Is ponytail optional or required?
+
+**Required. Setup stops without it, the readiness check is fatal, and the user installs it**
+
+Also considered: Optional. Forge routes to it when present and runs without it (decision 058); Bundled: copy its rules into Forge's own skills
+
+This supersedes decision 058, which made it optional on the argument that Forge's guarantees cannot depend on something Forge does not ship. The owner overruled that twice, and the reasoning stands on its own: the output of this product is somebody else's codebase, so the thing that keeps that code small is not a nice-to-have. It is the same argument decision 017 makes about permissions, and it carries the same cost, which is written down rather than argued away: Forge now breaks when a third-party plugin changes name, layout or availability, and the detection is a filesystem guess about a directory layout Claude Code owns. Mitigated the way decision 004 mitigates every hard rule: there is exactly one way through, it is explicit, and it is recorded. Forge still does not install it, because Claude Code installs plugins on the user's word rather than a plugin's.
+
+Full record: [`062`](decisions/)
+
+## 063 · What happens when the code refers to something that does not exist?
+
+**Every import is checked against the project's own manifests and files, every citation of a decision against the records, and anything unaccounted for goes to the user as a question**
+
+Also considered: Nothing. Tests catch it, or the reviewers do; Forge corrects it quietly; Forge blocks the write until it resolves
+
+The hallucination that costs the most here is the confident one: an import of a package that is in no manifest, a relative import with no file behind it, or 'as decided in decision 014' when 014 is about something else. All three are plausible, none is caught by tests written in the same turn that invented them, and all three are decidable from the file and the manifests without judging whether the code is right. `scripts/grounded.py` runs after the write rather than before, because a reference cannot be checked until it exists, and it never fixes anything: a silent correction is a second guess stacked on the first and the user learns nothing from a mistake they never saw. Each finding is one of three things, a dependency to add and record, a file about to be written, or something invented, and which one it is belongs to the user. Blocking the write was rejected: the check needs the file to exist, and a hook that stops work on suspicion is one people turn off.
+
+Full record: [`063`](decisions/)

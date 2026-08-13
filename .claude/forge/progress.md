@@ -12,7 +12,7 @@ updated: 2026-08-13
 
 # Where we are
 
-All ten phases are built. 822 tests, 88% coverage, 60 decision records, chain verified.
+All ten phases are built. 842 tests, 88% coverage, 62 decision records, chain verified.
 
 ## Adding without disturbing, and a companion plugin (2026-08-13)
 

@@ -212,21 +212,35 @@ nothing already built is rewritten.
 If the feature contradicts a recorded decision, that is put to you rather than worked around.
 Changing your mind is a new record naming the old one, never an edit of it.
 
-### Better with, fine without
+### ponytail, which Forge requires
 
-[ponytail](https://github.com/DietrichGebert/ponytail) (MIT) gets an agent to write the least
-code that works: check whether the thing needs writing, whether the project already does it,
-whether the standard library does it, before adding anything.
+[ponytail](https://github.com/DietrichGebert/ponytail) (MIT, by Dietrich Gebert) gets an agent
+to write the least code that works: check whether the thing needs writing, whether the project
+already does it, whether the standard library does it, before adding anything.
 
 ```
-/plugin marketplace add DietrichGebert/ponytail
-/plugin install ponytail@ponytail
+/plugin install ponytail@forge-marketplace
 ```
 
-Forge picks it up on its own when it is there, at the building and review stages, and says so
-once. It is optional: Forge runs without it, and where the two disagree Forge wins. The
-security floor is not overridable, and a recorded decision is not optimised away because a
-shorter version exists. `FORGE_NO_COMPANION=1` silences the mention.
+It is listed in Forge's own marketplace, so there is no second marketplace to add. Forge routes
+to it at the building and review steps, and **setup will not finish without it**: the output of
+this tool is your codebase, and the thing keeping that code small is not an optional extra.
+
+Where the two disagree Forge wins. The security floor is not overridable, and a recorded
+decision is not optimised away because a shorter version exists.
+
+If it is genuinely unavailable, `record_override` is the one way past, and it writes down that
+the build ran without the check that keeps it small.
+
+### When the code names something that is not there
+
+Every import Forge writes is checked against your manifests, the standard library, and the
+files that actually exist. Every "as decided in decision 014" is checked against the records.
+
+Anything unaccounted for stops and asks you, because it is one of three things and only you
+know which: a dependency that has to be added, a file about to be written, or something the
+model invented. Forge does not quietly fix it, and it does not install a package to make the
+guess true. `FORGE_NO_GROUNDING=1` turns the check off.
 
 ## Switching it off
 

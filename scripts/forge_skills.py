@@ -190,18 +190,21 @@ def routed_library_skills() -> tuple[str, ...]:
 # companions: other people's plugins, used where they are better than ours
 # --------------------------------------------------------------------------
 
-# Kept apart from ROUTE, and that separation is the whole design.
+# Kept apart from ROUTE, and that separation is still the design: ROUTE's
+# skills ship with Forge or with the pinned library, and a companion is
+# somebody else's plugin on somebody else's release schedule, so the two cannot
+# be verified the same way.
 #
-# ROUTE is deterministic and its skills ship with Forge or with the pinned
-# library, so a stage loads the same set on every machine. A companion is
-# somebody else's plugin, installed separately, updated on their schedule, and
-# possibly absent. Folding one into ROUTE would make the guarantee "the same
-# skills every time, unless the user happened to install something", which is
-# not a guarantee.
+# **Required, though (decision 062, superseding 058).** They are additive in
+# where they load and not in whether they are there: setup refuses to finish
+# without one, and the readiness check calls it fatal. The owner's reasoning is
+# that code quality is not a nice-to-have in a product whose output is somebody
+# else's codebase, and the same argument decision 017 makes about permissions
+# applies here: a reduced mode nobody chose is a product that is worse in a way
+# the user cannot see.
 #
-# So companions are additive and optional. Forge works without them, its own
-# rules win where they disagree, and the security floor is not overridable by
-# anything here.
+# Forge's own rules still win where they disagree, and the security floor is
+# not overridable by anything here.
 #
 # **ponytail** (github.com/DietrichGebert/ponytail, MIT): teaches an agent to
 # write the least code that works, checking reuse and the standard library
@@ -225,13 +228,22 @@ COMPANION_REPOS: dict[str, str] = {
 COMPANION_SOURCE: dict[str, tuple[str, str]] = {
     "ponytail": (
         "writes the least code that works, so a feature is not four files when it is one",
-        "/plugin marketplace add DietrichGebert/ponytail",
+        "/plugin install ponytail@forge-marketplace",
     ),
     "ponytail-review": (
         "reviews what was written for code that did not need to exist",
-        "/plugin marketplace add DietrichGebert/ponytail",
+        "/plugin install ponytail@forge-marketplace",
     ),
 }
+
+# The ones setup will not finish without. A list rather than a flag, so a second
+# required companion is a line here instead of a new branch everywhere.
+REQUIRED: tuple[str, ...] = ("ponytail",)
+
+
+def missing_required(home: Path | None = None) -> list[str]:
+    """Required companions that are not installed on this machine."""
+    return [name for name in REQUIRED if not companion_installed(name, home)]
 
 
 def companions_for(stage: str) -> tuple[str, ...]:

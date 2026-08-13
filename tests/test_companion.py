@@ -59,16 +59,44 @@ def test_an_installed_companion_is_named_once_a_session(
     assert "security floor" in text, "and which one wins where they disagree"
 
 
-def test_a_missing_companion_is_offered_once_and_never_again(
+def test_a_missing_companion_is_reported_every_session(
     project: Path, monkeypatch
 ) -> None:
-    """A suggestion repeated is an advertisement."""
+    """Required, not suggested (decision 062, superseding 058).
+
+    It was said once per project while it was a preference. A missing
+    requirement mentioned once in March is a requirement nobody has by June.
+    """
     monkeypatch.setattr(companion, "_installed", lambda: False)
 
     first = companion.message(project)
-    assert "plugin marketplace add DietrichGebert/ponytail" in first
+    assert "required and it is not installed" in first
+    assert "/plugin install ponytail@forge-marketplace" in first
 
-    assert companion.message(project) == "", "it does not ask twice"
+    assert companion.message(project) == first, "and it keeps saying so"
+
+
+def test_carrying_on_without_it_is_possible_and_leaves_a_trace(
+    project: Path, monkeypatch
+) -> None:
+    """Required is not the same as unescapable.
+
+    Decision 004's shape: blocked by default, one explicit way through, and the
+    way through is recorded. A requirement with no override is a product that
+    strands somebody at two in the morning over a plugin install.
+    """
+    monkeypatch.setattr(companion, "_installed", lambda: False)
+    text = companion.message(project)
+
+    assert "record_override" in text
+    assert "their call" in text
+
+
+def test_required_names_what_setup_will_not_finish_without() -> None:
+    import forge_skills as sk
+
+    assert "ponytail" in sk.REQUIRED
+    assert sk.missing_required(home=Path("/nowhere-at-all")) == ["ponytail"]
 
 
 def test_it_is_silent_where_forge_was_switched_off(project: Path, monkeypatch) -> None:

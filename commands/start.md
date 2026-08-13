@@ -76,19 +76,26 @@ to avoid.
 If only "GitHub sign-in" is unset, carry on and mention that reading reviews will need
 `gh auth login` later.
 
-**ponytail is listed as optional and it is genuinely optional.** If the check reports it
-missing, offer it in one line and move on whatever they say. Forge does not install it for
-them: it is their plugin, on their account, and a setup flow that installs someone else's
-software while the user is reading about permissions has answered a question nobody asked.
+**ponytail is required (decision 062).** If the check reports it missing, stop, the same as
+for any other MISSING line. Forge routes to it at the build and review steps, and without it
+the builder has nothing pushing back on how much code it writes.
 
-> Optional: ponytail gets an agent to write the least code that works. Forge uses it at the
-> build and review steps when it is there.
+> ponytail is required and not installed. It is what keeps the builder writing the least code
+> that works.
 >
->     /plugin marketplace add DietrichGebert/ponytail
->     /plugin install ponytail@ponytail
+>     /plugin install ponytail@forge-marketplace
 
-Installing it needs a restart before Forge can see it, like any plugin. It is per account
-rather than per project, so it is offered once and then it is everywhere.
+It comes from Forge's own marketplace, so it is one command and no second marketplace to add.
+Installing it needs a restart, like any plugin, and it is per account rather than per project,
+so it is done once and then it is everywhere.
+
+Forge does not install it for them. Claude Code installs plugins on the user's word, not a
+plugin's, and running an install for somebody while they are reading about permissions answers
+a question nobody asked.
+
+If they want to carry on without it, that is theirs to decide: record it with
+`record_override` so the reason is in the history, and say once that the build is running
+without the check that keeps it small. Do not offer that as an easy third option.
 
 ## Step 1 — Explain before asking (decision 014)
 

@@ -38,7 +38,7 @@ more are not guarantees and never block: `forge_update.py` (are you on the
 current build), `presenter.py` (was that said in a frame), `companion.py`
 (bring ponytail in with Forge).
 
-**The MCP server** (`server/forge_server.py`) is the engine — 43 tools for
+**The MCP server** (`server/forge_server.py`) is the engine — 44 tools for
 recording decisions, reading reviews, metering usage, planning the pipeline,
 and asking a subject what it owes before it is built.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
@@ -129,20 +129,39 @@ coming back a month later to add one feature got no questions at all.
 - Changing a recorded decision is a **new record naming the old one** with `supersedes`, never
   an edit. The old record stays readable and stays in the chain.
 
+## Code that refers to things which do not exist
+
+`scripts/forge_grounding.py` and the `grounded.py` PostToolUse hook, decision 063. Every import
+is checked against the project's manifests, the standard library and the files actually there;
+every "as decided in decision 014" against the records.
+
+- **After the write, not before.** A reference cannot be checked until it exists, and a hook
+  that stops work on suspicion is one people turn off.
+- **It never fixes anything.** Each finding is a dependency to add and record, a file about to
+  be written, or something invented, and which of the three belongs to the user. A silent
+  correction is a second guess stacked on the first.
+- Read from the manifests, never from the environment: a package installed by accident is why
+  this class of bug survives review.
+
+`FORGE_NO_GROUNDING=1` turns it off.
+
 ## Companions: other people's plugins
 
-`COMPANIONS` in `forge_skills.py`, decision 058. **ponytail**
-(github.com/DietrichGebert/ponytail, MIT) loads at the building stage and `ponytail-review` at
-the fix stage, if the user has them. It teaches an agent to write the least code that works,
-which is the same argument as the incremental path from the other end: Forge governs which
-decisions get made, ponytail governs how much code the answer turns into.
+`COMPANIONS` in `forge_skills.py`. **ponytail** (github.com/DietrichGebert/ponytail, MIT) loads
+at the building stage and `ponytail-review` at the fix stage. It teaches an agent to write the
+least code that works, which is the same argument as the incremental path from the other end:
+Forge governs which decisions get made, ponytail governs how much code the answer turns into.
 
-Kept out of `ROUTE` deliberately. ROUTE is deterministic because its skills ship with Forge or
-with the pinned library; a plugin installed separately and updated on someone else's schedule
-would turn "the same skills every time" into "unless the user happened to install something".
-So companions are additive, absence is a suggestion rather than a failure, and **where they
-disagree Forge wins**: the security floor is not overridable, and a recorded decision is not
-optimised away because a shorter version exists.
+**It is required (decision 062, superseding 058).** Setup stops without it and the readiness
+check is fatal, on the owner's argument that the output of this product is somebody else's
+codebase, so the thing keeping that code small is not a nice-to-have. The cost is written down
+rather than argued away: Forge now breaks if a third-party plugin changes name, layout or
+availability, and detection is a filesystem guess about a directory layout Claude Code owns.
+There is one way through, per decision 004's shape: `record_override`, explicit, recorded.
+
+Still kept out of `ROUTE`, which stays the deterministic table of things that ship with Forge or
+the pinned library. And **where they disagree Forge wins**: the security floor is not
+overridable, and a recorded decision is not optimised away because a shorter version exists.
 
 Install: `/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail`.
 
@@ -280,14 +299,14 @@ Tests:
 python -m pytest
 ```
 
-822 tests, ~88% coverage, no model calls anywhere in the suite.
+842 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 822 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (60 records, ids 1 to 61; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 842 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (62 records, ids 1 to 63; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 
