@@ -740,6 +740,180 @@ def catch_up(project: str) -> dict[str, Any]:
 
 
 @server.tool(
+    name="plan_files",
+    description=(
+        "Name the files this step will touch, in the order they will be "
+        "written, **before writing any of them**. Skeleton first: the file that "
+        "is the shape of the thing before the file that fills it in, so the "
+        "user watches a project take form rather than a pile arrive "
+        "alphabetically. After this the governor allows one file at a time, in "
+        "this order, and each one has to be explained before the next is "
+        "written. **Writes the build ledger.**"
+    ),
+)
+def plan_files(project: str, files: list[str]) -> dict[str, Any]:
+    import forge_build as fb
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"error": "There is no step in progress to plan files for."}
+
+    try:
+        planned = fb.plan(forge, step.marker, files or [])
+    except fs.StateError as exc:
+        return {"error": str(exc)}
+
+    return {
+        "step": step.text,
+        "files": [item.path for item in planned],
+        "first": planned[0].path,
+        "next": (
+            f"Say what {planned[0].path} is, why it exists and how it works, then "
+            "write it, then call `file_written`. Nothing else can be written "
+            "until that one is explained."
+        ),
+    }
+
+
+@server.tool(
+    name="next_file",
+    description=(
+        "Which file this step writes next, and what is owed before it. Reads "
+        "only; changes nothing."
+    ),
+)
+def next_file(project: str) -> dict[str, Any]:
+    import forge_build as fb
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"finished": True, "reason": "There is no step in progress."}
+
+    owed = fb.owed_explanation(forge, step.marker)
+    if owed is not None:
+        return {
+            "finished": False,
+            "explain_first": owed.path,
+            "next": (
+                f"{owed.path} is written and unexplained. Say what it is, why it "
+                "exists and how it works, and record it with `file_written`."
+            ),
+        }
+
+    upcoming = fb.next_file(forge, step.marker)
+    if upcoming is None:
+        return {"finished": True, "step": step.text}
+
+    return {"finished": False, "file": upcoming.path, "step": step.text}
+
+
+@server.tool(
+    name="file_written",
+    description=(
+        "Record that a file is written **and explained**, which is what allows "
+        "the next one. All three are required and they are not the same "
+        "sentence: `what` is the thing itself, `why` is what the project would "
+        "be missing without it, `how` is the way it does its job. What without "
+        "why leaves somebody who can read the code and not question it; why "
+        "without how leaves somebody who agrees with a thing they could not "
+        "maintain. Say all three to the user in the same turn, in that order. "
+        "**Writes the ledger.**"
+    ),
+)
+def file_written(
+    project: str, path: str, what: str, why: str, how: str
+) -> dict[str, Any]:
+    import forge_build as fb
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"error": "There is no step in progress."}
+
+    missing = [
+        name for name, text in (("what", what), ("why", why), ("how", how))
+        if not str(text).strip()
+    ]
+    if missing:
+        return {
+            "error": (
+                f"{path} is not explained without {', '.join(missing)}. The three "
+                "are different questions and the file does not count as met "
+                "until all of them are answered."
+            ),
+            "missing": missing,
+        }
+
+    fb.mark_explained(forge, step.marker, path)
+    fr.write_chain(forge)
+
+    upcoming = fb.next_file(forge, step.marker)
+    return {
+        "recorded": path,
+        "next_file": upcoming.path if upcoming else None,
+        "next": (
+            f"Now {upcoming.path}: say what it is, why it exists and how it works, "
+            "then write it."
+            if upcoming
+            else "Every planned file is written and explained. Run the tests, then "
+            "the explain-back gate."
+        ),
+    }
+
+
+@server.tool(
+    name="add_file",
+    description=(
+        "Add a file to this step's list that was not planned. The escape "
+        "hatch, and it is visible in the ledger on purpose: a list with no way "
+        "to grow is a list somebody works around, and working around it means "
+        "writing files nobody announced. **Writes the ledger.**"
+    ),
+)
+def add_file(project: str, path: str, because: str = "") -> dict[str, Any]:
+    import forge_build as fb
+    import forge_steps as stp
+
+    try:
+        forge = _forge_dir(project)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    step = stp.current(forge)
+    if step is None:
+        return {"error": "There is no step in progress."}
+    if not path.strip():
+        return {"error": "Name the file."}
+
+    files = fb.add_file(forge, step.marker, path.strip())
+    return {
+        "files": [item.path for item in files],
+        "added": path.strip(),
+        "next": (
+            "Say in one line why it was not on the list, then explain it like any "
+            "other file before writing the one after it."
+        ),
+    }
+
+
+@server.tool(
     name="record_build_choice",
     description=(
         "Write down a choice you made **while writing the code**, one nobody "

@@ -1,7 +1,7 @@
 ---
 type: asked-for
 project: forge-mentor
-entries: 22
+entries: 24
 generated: yes, from the decision records; do not edit
 ---
 
@@ -143,3 +143,15 @@ already recorded, and deleting a record removes its line.
 > I have told you a lot of these smaller things, a lot of them. Is there any fact check you are keeping, because I may forget.
 
 **What it became:** `asked-for.md`, generated from the 'In their words' section of every record
+
+### 069 · How does the code reach the user: all at once, or a file at a time?
+
+> Update all the code so that it should have an incremental approach in coding. Ponytail should ensure at least an incremental approach so that the user can understand each and every concept of the code: why we are using a certain thing, how we are using it, what it is.
+
+**What it became:** The step names its files first, skeleton before detail, and the governor allows one at a time: what it is, why it exists, how it works, then the file, then the next
+
+### 070 · What does Forge need to know about a project that it was never asking?
+
+> There are some basic questions Claude should have, for example the repository name, and other things. There are a few fundamentals to add in the governor.
+
+**What it became:** A question for the name and the repository, asked straight after the idea

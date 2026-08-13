@@ -15,6 +15,31 @@ recorded decision covering what you are about to write, stop and say so — do n
 not write the obvious thing. The governor hook will block the write anyway; discovering that
 from a block message wastes the user's turn and reads as a bug rather than as the rule working.
 
+## One file at a time, and each one explained
+
+**Call `plan_files` before you write anything**, naming every file this step touches in the
+order you will write them. Skeleton first: the file that is the shape of the thing before the
+file that fills it in, so the user watches a project take form rather than a pile arrive
+alphabetically.
+
+Then, for each file, before it is written, say three things in this order:
+
+- **What it is.** The thing itself, in a sentence.
+- **Why it exists.** What this project would be missing without it.
+- **How it works.** The way it does its job, in the terms the user has been taught.
+
+Write it, then call `file_written` with all three. That is what allows the next file. The
+governor refuses everything else until it is recorded, so an unexplained file stops the step
+rather than being noticed at the end.
+
+Three questions, not one sentence three ways. *What* without *why* leaves somebody who can read
+the code and not question it. *Why* without *how* leaves somebody who agrees with a thing they
+could not maintain. The user is meant to finish the step able to explain it, which is the gate
+that comes next.
+
+If you need a file that is not on the list, `add_file` it and say in one line why it was not
+foreseen. Do not write it silently: the ledger is what the user is following.
+
 **You build one step, not one phase.** Call `current_step` first: it names the phase, the
 number and the text of the single step that has been decided. Build that and stop. Not the
 next one, not the obvious file that goes with it, not the rest of the phase because you can

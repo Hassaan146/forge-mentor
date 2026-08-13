@@ -114,6 +114,21 @@ INTENT = Question(
     # hosting is not answerable until Forge knows what the thing is.
 )
 
+NAME = Question(
+    key="name",
+    question="What is this called, and where will the code live?",
+    subtitle="the name and the repository, which everything after this is written into",
+    matters="Renaming a repository later breaks every link, clone and pipeline pointing at it.",
+    concept="a repository is the one place the code and its history live together",
+    means=(
+        "The name goes in the folder, the repository, and every link anyone sends you.",
+        "Forge needs the repository to push, to open a pull request, and to read reviews.",
+    ),
+    # Deliberately open. A menu here would be Forge naming somebody's project
+    # for them, and the answer is two facts it cannot guess: what they call it
+    # and whose account it goes under.
+)
+
 STACK = Question(
     key="stack",
     question="What are you building this with?",
@@ -371,7 +386,7 @@ DONE = Question(
 # Fixed, not chosen per project. A planner picking the order will sometimes
 # pick badly, and a question that was skipped is invisible — unlike a wrong
 # answer, which the user can see and argue with.
-FOUNDATION: tuple[Question, ...] = (INTENT, STACK, DATA, PEOPLE, DELIVERY, DONE)
+FOUNDATION: tuple[Question, ...] = (INTENT, NAME, STACK, DATA, PEOPLE, DELIVERY, DONE)
 
 
 # --------------------------------------------------------------------------

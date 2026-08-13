@@ -262,7 +262,7 @@ def test_resuming_between_answers_asks_the_next_question(project: str) -> None:
     picked_up = resume(project)
     assert picked_up["open_question"] is None
     assert picked_up["stage"] == "foundation"
-    assert ff.STACK.question in picked_up["block"]
+    assert ff.NAME.question in picked_up["block"], "the name comes second now"
     assert "next_step" not in picked_up["next"]
     assert (picked_up["answered"], picked_up["total"]) == (1, len(ff.FOUNDATION))
 
@@ -654,6 +654,10 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "color_legend",
         "plan_steps",
         "step_questions",
+        "plan_files",
+        "next_file",
+        "file_written",
+        "add_file",
         "lean_check",
         "record_lean",
         "lean_review",
@@ -1191,7 +1195,7 @@ def test_catching_up_summarises_and_then_continues(project: str, forge: Path) ->
     assert "WHERE YOU LEFT OFF" in caught["block"]
     assert "a to-do app I can use from my phone" in caught["block"], "in their own words"
     assert "Decisions" in caught["block"]
-    assert ff.STACK.question in caught["next_block"], "and it hands over the next question"
+    assert ff.NAME.question in caught["next_block"], "and it hands over the next question"
 
 
 def test_the_summary_is_assembled_from_the_records_not_from_a_log(

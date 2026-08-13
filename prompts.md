@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 67
+entries: 69
 generated: 2026-08-14
 ---
 
@@ -1319,5 +1319,47 @@ about Forge.
 **Reasoning given:**
 
 > All of it is already recorded, one request per file, which is the right place to keep it and the wrong place to read it from. Sixty records is not a list anybody scans, so a small thing asked for in March is a small thing nobody can find in June, and the person who forgets it first is usually the one who asked for it. A notebook was rejected for the reason a session log was rejected in 066: it would be a second version of a history the records already hold, and it would keep asserting requirements after the record behind them was gone. This is a view instead, regenerated on every call, so deleting a record removes its line and the index cannot claim something that is not written down. Reconstructing from the conversation is the one answer that is never acceptable: it is memory presented as a record.
+
+---
+
+## 069 · How does the code reach the user: all at once, or a file at a time?
+
+**Asked:**
+
+> How does the code reach the user: all at once, or a file at a time?
+
+**Options put to the user:**
+
+- As the builder produces it, which is a step's worth of files in one turn
+- One file at a time, in a planned order, each explained before the next
+- All at once, with an explanation written afterwards
+- One file at a time, with the explanation optional
+
+**Answered by the user:** The step names its files first, skeleton before detail, and the governor allows one at a time: what it is, why it exists, how it works, then the file, then the next
+
+**Reasoning given:**
+
+> A decided step came back as four finished files. Every one was permitted and covered by the decision, and the user watched an application appear: they could defend the decision because they made it, and not the code, because they met it finished and all at once. That is the problem this product exists to solve, moved one level down. So the unit is the file and the price of the next one is explaining the last, which is what stops the explanation being a note somebody meant to add at the end. Three questions and not one sentence three ways: what it is without why leaves somebody who can read the code and not question it, and why without how leaves somebody who agrees with a thing they could not maintain. Skeleton first, so what arrives is a project taking form rather than a pile in alphabetical order. The ledger is opt-in per step and can be extended with `add_file`, because a list with no way to grow is a list somebody works around, and working around it means writing files nobody announced.
+
+---
+
+## 070 · What does Forge need to know about a project that it was never asking?
+
+**Asked:**
+
+> What does Forge need to know about a project that it was never asking?
+
+**Options put to the user:**
+
+- Nothing. The six questions cover the shape
+- What it is called and where the code lives, asked second
+- Ask for the repository only when a push is first attempted
+- Read it from the git remote and never ask
+
+**Answered by the user:** A question for the name and the repository, asked straight after the idea
+
+**Reasoning given:**
+
+> The foundation asked what the project *is* and never what it is *called* or where it lives, which Forge needs to push, to open a pull request and to read reviews back. Asked second because it does not depend on the stack and everything written afterwards goes into it, and renaming a repository later breaks every link, clone and pipeline pointing at it. Left open with no menu on purpose: a menu here would be Forge naming somebody's project for them, and the answer is two facts it cannot guess. Reading it from the git remote was rejected because a remote that exists is not the same as a remote the user meant to use, and decision 006 already makes the repository theirs to create.
 
 ---

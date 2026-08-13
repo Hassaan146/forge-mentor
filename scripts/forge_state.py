@@ -544,8 +544,12 @@ def answer(forge_dir: Path, decision_id: int, body: str, decided_by: str = "user
     )
 
 
-def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
+def writes_allowed(forge_dir: Path, target: Path | None = None) -> tuple[bool, str]:
     """The governor's rule, in one place. Returns (allowed, reason_if_not).
+
+    `target` is the file about to be written, where one is known. Without it
+    this answers "may anything be written at all", which is the question the
+    pipeline and the status report ask. With it, the per-file order applies too.
 
     **Unreadable state blocks.** This used to swallow the error and carry on,
     so a damaged or missing progress file with no decision open came out as
@@ -615,6 +619,26 @@ def writes_allowed(forge_dir: Path) -> tuple[bool, str]:
     gap = st.next_gap(forge_dir)
     if gap is not None:
         return False, gap.reason
+
+    # And then one file at a time, each explained before the next.
+    #
+    # The gates above get the user to a decided step. This one is about what
+    # they see after it: a decided step used to come back as four finished
+    # files at once, which is the same problem this product exists to solve,
+    # moved one level down. They can defend the decision because they made it,
+    # and not the code, because they met it finished.
+    #
+    # Only when a target is known. `writes_allowed` is also asked "may anything
+    # be written", and answering that with a rule about *which* file would be
+    # answering a different question.
+    if target is not None:
+        import forge_build as fb
+
+        step = st.current(forge_dir)
+        if step is not None:
+            ok, why = fb.allowed(forge_dir, step.marker, target, forge_dir.parent.parent)
+            if not ok:
+                return False, why
 
     return True, ""
 

@@ -101,11 +101,18 @@ def main() -> None:
     if forge_dir is None:
         allow()  # not a Forge project
 
-    if is_forge_owned(str(payload.get("tool_input", {}).get("file_path", ""))):
+    written = str(payload.get("tool_input", {}).get("file_path", ""))
+    if is_forge_owned(written):
         allow()  # Forge writing its own notes
 
     try:
-        permitted, reason = writes_allowed(forge_dir)
+        # The target is handed over, so the per-file order applies too: a step
+        # writes the file it announced next, and only after the last one was
+        # explained. Without it the governor would answer "may anything be
+        # written", which is a different question and always was.
+        permitted, reason = writes_allowed(
+            forge_dir, Path(written) if written else None
+        )
     except StateError as exc:
         # Fail closed (004), but always with a way out (challenge finding H1).
         deny(f"Forge cannot read its own notes.\n{exc}")

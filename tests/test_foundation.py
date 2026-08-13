@@ -30,10 +30,10 @@ def answer(forge: Path, question: str, choice: str = "A") -> None:
     fs.answer(forge, asked.id, f"# {choice}\n\n## Why\n\nbecause\n")
 
 
-def test_the_sequence_is_the_six_until_an_answer_opens_more(forge: Path) -> None:
-    """A fresh project is asked six questions, and it is told six."""
+def test_the_sequence_is_the_fixed_set_until_an_answer_opens_more(forge: Path) -> None:
+    """A fresh project is asked the fixed set, and it is told how many."""
     assert [q.key for q in ff.sequence(forge)] == [q.key for q in ff.FOUNDATION]
-    assert ff.position(forge) == (0, 6)
+    assert ff.position(forge) == (0, 7)
 
 
 def test_the_idea_is_asked_first_and_asked_openly(forge: Path) -> None:
@@ -57,6 +57,9 @@ def test_the_idea_is_asked_first_and_asked_openly(forge: Path) -> None:
 def test_the_stack_is_asked_before_anything_it_decides(forge: Path) -> None:
     """Nothing after it can be asked honestly until it is answered."""
     answer(forge, ff.INTENT.question)
+    assert ff.next_question(forge).key == "name", "what it is called comes before what it is built with"
+
+    answer(forge, ff.NAME.question)
     assert ff.next_question(forge).key == "stack"
 
 
@@ -193,14 +196,15 @@ def test_a_project_with_no_server_can_still_be_put_somewhere(forge: Path) -> Non
 
 
 def test_the_sequence_advances_as_questions_are_answered(forge: Path) -> None:
-    assert ff.position(forge) == (0, 6)
+    assert ff.position(forge) == (0, 7)
 
     answer(forge, ff.INTENT.question)
+    answer(forge, ff.NAME.question)
     assert ff.next_question(forge).key == "stack"
 
     answer(forge, ff.STACK.question)
     assert ff.next_question(forge).key == "data"
-    assert ff.position(forge)[0] == 2
+    assert ff.position(forge)[0] == 3
 
     answer(forge, ff.DATA.question)
     assert ff.next_question(forge).key == "people"
@@ -222,6 +226,7 @@ def test_deciding_to_deploy_opens_the_questions_deploying_needs(forge: Path) -> 
     front of everyone else.
     """
     answer(forge, ff.INTENT.question, "a todo app")
+    answer(forge, ff.NAME.question, "todo, on my github")
     answer(forge, ff.STACK.question, "C")
     answer(forge, ff.DATA.question, "B")
     answer(forge, ff.PEOPLE.question, "A")
@@ -243,6 +248,7 @@ def test_staying_local_never_opens_the_deployment_questions(forge: Path) -> None
     considered.
     """
     answer(forge, ff.INTENT.question, "a todo app")
+    answer(forge, ff.NAME.question, "todo, on my github")
     answer(forge, ff.STACK.question, "A")
     answer(forge, ff.DATA.question, "A")
     answer(forge, ff.PEOPLE.question, "Only me")
@@ -295,6 +301,7 @@ def test_an_unrelated_decision_does_not_count_as_a_foundation_answer(
 def test_questions_that_do_not_apply_are_skipped_not_invented(forge: Path) -> None:
     """A single-file script has no delivery question worth asking."""
     answer(forge, ff.INTENT.question)
+    answer(forge, ff.NAME.question)
     answer(forge, ff.STACK.question)
     answer(forge, ff.DATA.question)
 

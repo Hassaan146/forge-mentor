@@ -38,7 +38,7 @@ more are not guarantees and never block: `forge_update.py` (are you on the
 current build), `presenter.py` (was that said in a frame), `companion.py`
 (bring ponytail in with Forge).
 
-**The MCP server** (`server/forge_server.py`) is the engine — 47 tools for
+**The MCP server** (`server/forge_server.py`) is the engine — 51 tools for
 recording decisions, reading reviews, metering usage, planning the pipeline,
 and asking a subject what it owes before it is built.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
@@ -80,13 +80,15 @@ Not aspirations. Each is code, with a test.
 `scripts/forge_foundation.py`, decision 033.
 
 1. **What's the idea?** — open, no options
-2. **What are you building this with?** — the stack, in detail
-3. **What is stored, and what happens if it is lost?**
-4. **Is there more than one person using this?**
-5. **Where does this run when you are not running it?**
-6. **What does 'finished' mean for a step?**
+2. **What is this called, and where will the code live?** — the name and the repository
+   (decision 070). Open too: a menu here would be Forge naming somebody's project for them.
+3. **What are you building this with?** — the stack, in detail
+4. **What is stored, and what happens if it is lost?**
+5. **Is there more than one person using this?**
+6. **Where does this run when you are not running it?**
+7. **What does 'finished' mean for a step?**
 
-Six is where it starts, not where it ends. **Answers open further questions** (decision 049):
+Seven is where it starts, not where it ends. **Answers open further questions** (decision 049):
 deploying opens how a change gets there, what happens when it falls over, and where the secrets
 live; staying local opens what you would want back if the machine died; a second person opens
 identity and permissions. A question that does not apply was never in the sequence, rather than
@@ -108,7 +110,11 @@ before it, does this need writing and how much of it, was never asked.
    Unchanged is one line. **Smaller is the user's decision**, not the reviewer's. Reviewing
    after the code exists means arguing to delete something that already works, which is an
    argument the code usually wins.
-5. The builder writes what they settled on.
+5. The builder writes what they settled on, **one file at a time** (decision 069):
+   `plan_files` names them skeleton-first, and each is announced as *what it is, why it exists,
+   how it works* before it is written and recorded with `file_written` after. The governor
+   refuses anything else while a written file is unexplained, so the explanation is the price of
+   the next file rather than a note somebody meant to add at the end.
 
 The gate is `next_gap` returning `unchallenged`. Nothing here judges whether code is minimal:
 the model reasons, the gate remembers. Note the marker trap this hit on the way in: `lean:` plus
@@ -364,14 +370,14 @@ Tests:
 python -m pytest
 ```
 
-876 tests, ~88% coverage, no model calls anywhere in the suite.
+885 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 876 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (68 records, ids 1 to 68; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 885 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (70 records, ids 1 to 70; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 
