@@ -633,6 +633,7 @@ def test_every_tool_is_registered_with_the_protocol() -> None:
         "repair_history",
         "check_review_setup",
         "fetch_review",
+        "record_review_findings",
         "skills_for_stage",
         "check_skills",
         "install_skill_library",

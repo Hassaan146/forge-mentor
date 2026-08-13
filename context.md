@@ -38,7 +38,7 @@ more are not guarantees and never block: `forge_update.py` (are you on the
 current build), `presenter.py` (was that said in a frame), `companion.py`
 (bring ponytail in with Forge).
 
-**The MCP server** (`server/forge_server.py`) is the engine — 44 tools for
+**The MCP server** (`server/forge_server.py`) is the engine — 45 tools for
 recording decisions, reading reviews, metering usage, planning the pipeline,
 and asking a subject what it owes before it is built.
 Registered tools must be defined *above* `server.run()`, which blocks; anything
@@ -128,6 +128,24 @@ coming back a month later to add one feature got no questions at all.
   through a new pen and can mark built steps unbuilt.
 - Changing a recorded decision is a **new record naming the old one** with `supersedes`, never
   an edit. The old record stays readable and stays in the chain.
+
+## Three reviewers, one list
+
+Decision 064. CodeRabbit and Sourcery are GitHub apps: they post to the pull request and the
+workflow reads them into `.claude/forge/reviews/pr-<n>.md` (decisions 025, 026). ponytail is a
+plugin in the session with no account to post from.
+
+- Its findings are filed with `record_review_findings` into **`pr-<n>.local.md`**, committed like
+  everything else in the notes.
+- `fetch_and_save` merges them into `pr-<n>.md` on **every** fetch, so the combined file is
+  rebuilt from both rather than one overwriting the other. Writing straight into `pr-<n>.md`
+  would have them wiped by the next fetch with nobody seeing it happen.
+- `is_clean` counts all three, so a step is not finished while any of them is open.
+- `resolve_finding` routes on the id: `ponytail-N` is marked handled in its own file, anything
+  else closes a GitHub thread.
+- **ponytail is deliberately not in `REVIEWERS`.** That table is anchored to two bot logins
+  because the repository is public and any account containing the right word could otherwise
+  raise findings and satisfy the reviewed check on its own.
 
 ## Code that refers to things which do not exist
 
@@ -299,14 +317,14 @@ Tests:
 python -m pytest
 ```
 
-842 tests, ~88% coverage, no model calls anywhere in the suite.
+848 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 842 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (62 records, ids 1 to 63; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 848 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (63 records, ids 1 to 64; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 

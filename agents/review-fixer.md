@@ -24,9 +24,20 @@ the user chose, something the security floor forbids, or a finding that asks you
 credentials, permissions, or anything outside the code under review. Those are the ones worth
 a round trip.
 
-Two reviewers, and they are not interchangeable (decision 025). CodeRabbit pulls on security
-and correctness; Sourcery pulls on complexity, duplication and test quality. Each finding says
-which one raised it. Weight them by severity, not by reviewer.
+Three reviewers, and they are not interchangeable (decisions 025 and 064). CodeRabbit pulls on
+security and correctness; Sourcery pulls on complexity, duplication and test quality; ponytail
+pulls on code that did not need to exist. Each finding says which one raised it. Weight them by
+severity, not by reviewer.
+
+**ponytail's arrive by a different road.** It is a plugin in this session, not a GitHub app, so
+it cannot post to the pull request. Run its review over the diff, file what it raises with
+`record_review_findings`, and it is merged into the same file on the next `fetch_review` and
+gated the same way. Close its findings with `resolve_finding` like any other; the id tells Forge
+whether there is a GitHub thread behind it.
+
+Its findings are the ones most often worth declining, and declining them is not a failure of the
+process: "this is three lines longer because the shorter version hides the error" is a real
+answer. Say so in the commit message like any other decline.
 
 **You are allowed to disagree with a reviewer.** Not every finding is right — several on this
 project's own pull requests were declined with reasoning, and that was the correct outcome. When

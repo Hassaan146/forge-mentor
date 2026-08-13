@@ -92,6 +92,168 @@ def reviewer_of(login: str) -> str | None:
             return name
     return None
 
+
+# --------------------------------------------------------------------------
+# the third reviewer, which is not on GitHub
+# --------------------------------------------------------------------------
+
+# **Why ponytail is not in REVIEWERS above.** That table decides which GitHub
+# account may raise a finding, and it is anchored precisely so no other account
+# can. ponytail is not an account at all: it is a plugin running in the user's
+# own session, reviewing the same diff from the same machine that wrote it.
+#
+# So its findings arrive by a different road and are kept in their own file,
+# `pr-<n>.local.md`, which is committed like everything else in the notes. The
+# combined `pr-<n>.md` is regenerated from both every time the workflow runs,
+# which keeps decision 026 true (the workflow writes the review file) without
+# the local findings being wiped by the next fetch, and keeps the anchored
+# login check exactly as strict as it was.
+LOCAL_REVIEWERS: tuple[str, ...] = ("ponytail",)
+
+LOCAL_SUFFIX = ".local.md"
+
+_LOCAL_HEADING = re.compile(
+    r"^##\s+(?P<id>[\w.-]+)\s+·\s+(?P<state>open|fixed)\s+·\s+(?P<where>.*?)$"
+)
+
+
+def local_path(forge_dir: Path, pr: int) -> Path:
+    return forge_dir / REVIEWS_DIR / f"pr-{valid_pr(pr)}{LOCAL_SUFFIX}"
+
+
+def read_local(forge_dir: Path, pr: int) -> list[Finding]:
+    """The local reviewer's findings, read back off disk.
+
+    Read rather than remembered, like everything else (decision 019). A session
+    that files three findings and ends still has them, and the fix loop in the
+    next session sees the same three.
+    """
+    path = local_path(forge_dir, pr)
+    if not path.is_file():
+        return []
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    findings: list[Finding] = []
+    current: Finding | None = None
+    body: list[str] = []
+
+    def close() -> None:
+        if current is not None:
+            current.body = "\n".join(body).strip()
+            findings.append(current)
+
+    for line in text.splitlines():
+        match = _LOCAL_HEADING.match(line.strip())
+        if match:
+            close()
+            body = []
+            where = match.group("where").strip()
+            file_part, _, line_part = where.rpartition(":")
+            current = Finding(
+                path=file_part or where,
+                line=line_part if line_part.isdigit() else "",
+                body="",
+                severity="suggestion",
+                resolved=match.group("state") == "fixed",
+                reviewer="ponytail",
+                thread_id=match.group("id"),
+            )
+            continue
+        if current is not None:
+            body.append(line)
+
+    close()
+    return findings
+
+
+def save_local(forge_dir: Path, pr: int, findings: list[Finding]) -> Path:
+    """Write the local reviewer's findings where the fix loop will find them."""
+    pr = valid_pr(pr)
+    path = local_path(forge_dir, pr)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    out = [
+        fs.render_header(
+            {
+                "type": "local-review",
+                "pr": str(pr),
+                "reviewer": ", ".join(sorted({f.reviewer for f in findings})) or "ponytail",
+                "open": str(sum(1 for f in findings if not f.resolved)),
+            }
+        ),
+        "",
+        "# Reviewed here, not on GitHub",
+        "",
+        "Findings from a reviewer that runs in the session rather than as a GitHub app.",
+        "They are merged into `pr-%d.md` and count towards the same gate." % pr,
+        "",
+    ]
+    for finding in findings:
+        where = f"{finding.path}:{finding.line}" if finding.line else finding.path
+        out += [
+            f"## {finding.thread_id} · {'fixed' if finding.resolved else 'open'} · {where}",
+            "",
+            finding.body.strip(),
+            "",
+        ]
+
+    path.write_text("\n".join(out), encoding="utf-8")
+    return path
+
+
+def next_local_id(existing: list[Finding], reviewer: str = "ponytail") -> str:
+    used = [f.thread_id for f in existing if f.thread_id.startswith(f"{reviewer}-")]
+    numbers = [int(i.rsplit("-", 1)[-1]) for i in used if i.rsplit("-", 1)[-1].isdigit()]
+    return f"{reviewer}-{(max(numbers) if numbers else 0) + 1}"
+
+
+def add_local(
+    forge_dir: Path, pr: int, raised: list[tuple[str, str, str]], reviewer: str = "ponytail"
+) -> list[Finding]:
+    """Add findings, keeping the ones already on file and their state.
+
+    Appended rather than replaced, and this is not a detail: a second review
+    pass that overwrote the file would take three findings the user had already
+    answered and present them again as new.
+    """
+    existing = read_local(forge_dir, pr)
+    seen = {(f.path, str(f.line), f.body.strip()) for f in existing}
+
+    for path_name, line, note in raised:
+        key = (path_name, str(line), note.strip())
+        if key in seen:
+            continue
+        existing.append(
+            Finding(
+                path=path_name,
+                line=line,
+                body=note.strip(),
+                reviewer=reviewer,
+                thread_id=next_local_id(existing, reviewer),
+            )
+        )
+        seen.add(key)
+
+    save_local(forge_dir, pr, existing)
+    return existing
+
+
+def resolve_local(forge_dir: Path, pr: int, finding_id: str) -> bool:
+    """Mark one local finding handled. Nothing is deleted."""
+    findings = read_local(forge_dir, pr)
+    hit = False
+    for finding in findings:
+        if finding.thread_id == finding_id:
+            finding.resolved = True
+            hit = True
+    if hit:
+        save_local(forge_dir, pr, findings)
+    return hit
+
 SEVERITY_ORDER = ("critical", "security", "bug_risk", "issue", "suggestion", "nitpick")
 
 # The reviewer prefixes each comment with a badge line such as
@@ -921,6 +1083,18 @@ def fetch_and_save(project: Path, forge_dir: Path, pr: int) -> dict[str, object]
         raise ReviewError("This project has no GitHub remote.")
 
     review = fetch(repo, pr)
+
+    # The local reviewer's findings are merged in on every fetch, so the
+    # combined file is rebuilt from both sources rather than one overwriting the
+    # other. The workflow still owns `pr-<n>.md` (decision 026); what changed is
+    # that it now assembles it from what GitHub says *and* what was raised here.
+    local = read_local(forge_dir, pr)
+    if local:
+        review.findings.extend(local)
+        for name in sorted({f.reviewer for f in local}):
+            if name not in review.reviewers:
+                review.reviewers.append(name)
+
     path = save(forge_dir, review, repo)
     return {
         "pr": pr,

@@ -607,3 +607,74 @@ def test_a_truncated_comparison_is_unknown_not_unchanged(
         lambda path, token: {"total_commits": 5, "files": [{"filename": f"f{i}.py"} for i in range(300)]},
     )
     assert rv.changed_files("o/r", "old", "new") is None
+
+
+# --------------------------------------------------------------------------
+# the third reviewer, which is not on GitHub — decision 064
+# --------------------------------------------------------------------------
+
+
+def test_a_local_reviewer_is_not_a_github_account() -> None:
+    """The anchored login table stays exactly as strict as it was.
+
+    Adding ponytail to REVIEWERS would mean an account called `ponytail` could
+    raise findings on a public repository and satisfy the reviewed check. It is
+    not an account: it runs in the session, on the machine that wrote the code.
+    """
+    assert "ponytail" in rv.LOCAL_REVIEWERS
+    assert "ponytail" not in rv.REVIEWERS
+    assert rv.reviewer_of("ponytail") is None
+    assert rv.reviewer_of("ponytail[bot]") is None
+
+
+def test_local_findings_survive_a_write_and_a_read(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    rv.add_local(forge, 4, [("app.py", "42", "duplicates slugify in helpers.py")])
+
+    back = rv.read_local(forge, 4)
+    assert len(back) == 1
+    assert back[0].path == "app.py" and back[0].line == "42"
+    assert "duplicates slugify" in back[0].body
+    assert back[0].reviewer == "ponytail"
+    assert back[0].resolved is False
+
+
+def test_filing_the_same_finding_twice_does_not_raise_it_twice(tmp_path: Path) -> None:
+    """A second pass over the same diff must not re-ask what was answered."""
+    forge = fs.init(tmp_path)
+    rv.add_local(forge, 4, [("app.py", "42", "duplicates slugify")])
+    rv.add_local(forge, 4, [("app.py", "42", "duplicates slugify"), ("b.py", "1", "new one")])
+
+    findings = rv.read_local(forge, 4)
+    assert [f.thread_id for f in findings] == ["ponytail-1", "ponytail-2"]
+
+
+def test_a_local_finding_is_closed_in_its_own_file(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    rv.add_local(forge, 4, [("app.py", "42", "duplicates slugify")])
+
+    assert rv.resolve_local(forge, 4, "ponytail-1") is True
+    assert rv.read_local(forge, 4)[0].resolved is True
+    assert rv.resolve_local(forge, 4, "ponytail-9") is False, "and an unknown id is not silent"
+
+
+def test_nothing_is_deleted_when_a_finding_is_closed(tmp_path: Path) -> None:
+    forge = fs.init(tmp_path)
+    rv.add_local(forge, 4, [("app.py", "42", "duplicates slugify")])
+    rv.resolve_local(forge, 4, "ponytail-1")
+
+    text = rv.local_path(forge, 4).read_text(encoding="utf-8")
+    assert "duplicates slugify" in text, "the finding stays readable after it is handled"
+
+
+def test_local_findings_count_towards_the_same_gate(tmp_path: Path) -> None:
+    """The whole point: one list, one bar, whoever raised it."""
+    forge = fs.init(tmp_path)
+    review = rv.Review(pr=4, reviewers=["coderabbit"])
+    assert review.is_clean is True
+
+    rv.add_local(forge, 4, [("app.py", "42", "this did not need writing")])
+    review.findings.extend(rv.read_local(forge, 4))
+
+    assert review.is_clean is False
+    assert len(review.open_by_reviewer("ponytail")) == 1

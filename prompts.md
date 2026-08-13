@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 62
+entries: 63
 generated: 2026-08-13
 ---
 
@@ -1213,5 +1213,27 @@ about Forge.
 **Reasoning given:**
 
 > The hallucination that costs the most here is the confident one: an import of a package that is in no manifest, a relative import with no file behind it, or 'as decided in decision 014' when 014 is about something else. All three are plausible, none is caught by tests written in the same turn that invented them, and all three are decidable from the file and the manifests without judging whether the code is right. `scripts/grounded.py` runs after the write rather than before, because a reference cannot be checked until it exists, and it never fixes anything: a silent correction is a second guess stacked on the first and the user learns nothing from a mistake they never saw. Each finding is one of three things, a dependency to add and record, a file about to be written, or something invented, and which one it is belongs to the user. Blocking the write was rejected: the check needs the file to exist, and a hook that stops work on suspicion is one people turn off.
+
+---
+
+## 064 · How does a reviewer that runs in the session join the two that run on GitHub?
+
+**Asked:**
+
+> How does a reviewer that runs in the session join the two that run on GitHub?
+
+**Options put to the user:**
+
+- It does not. ponytail advises the builder and never files a finding
+- Its findings go in their own file, merged into the combined one on every fetch
+- Write them straight into pr-<n>.md
+- Post them to the pull request from the user's account so the fetch picks them up
+- Run ponytail in CI so it posts like the other two
+
+**Answered by the user:** ponytail's findings are filed in pr-<n>.local.md, merged into pr-<n>.md on every fetch, and gated exactly like CodeRabbit's and Sourcery's
+
+**Reasoning given:**
+
+> CodeRabbit and Sourcery are GitHub apps: they post to the pull request and a workflow reads them (decisions 025, 026). ponytail is a plugin in the user's session, on the machine that wrote the code, and it has no account to post from. Writing straight into pr-<n>.md was rejected because the workflow rewrites that file on every review, so the local findings would vanish at the next fetch and nobody would see them go. Posting from the user's account was rejected because the reviewer table is anchored to the two bot logins on purpose: the repository is public, and any account whose name contains the right word could otherwise raise findings and satisfy the reviewed check on its own. Running it in CI would need Claude Code and credentials in Actions to review a diff that was already reviewed here for free. So the local findings get their own committed file, and `fetch_and_save` assembles the combined view from both every time: decision 026 stays true, nothing is overwritten, the anchored check stays as strict as it was, and `is_clean` counts all three so a step is not finished while any of them is open. Closing one routes on its id, since a local finding has no GitHub thread behind it.
 
 ---
