@@ -368,8 +368,6 @@ UPDATE_COMMANDS = (
 # now something that has been watched running.
 SLASH_COMMANDS = ("/plugin marketplace update forge-marketplace",)
 
-# For the panel, which is the manual route when a command is not enough.
-PANEL_ROUTE = "/plugin  then the Installed tab"
 
 
 def how_to_update() -> str:

@@ -39,9 +39,6 @@ import forge_state as fs  # noqa: E402
 
 MAX_ATTEMPTS = 3  # decision 009 — escalate rather than loop forever
 
-# Commands that make work permanent. Only these are gated; ordinary git use
-# (status, diff, log, add) is never interrupted.
-COMMIT_PATTERN = re.compile(r"\bgit\s+(commit|push)\b")
 
 # The subcommands that make work permanent.
 GATED_SUBCOMMANDS = frozenset({"commit", "push"})

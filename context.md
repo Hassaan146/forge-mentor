@@ -370,14 +370,14 @@ Tests:
 python -m pytest
 ```
 
-885 tests, ~88% coverage, no model calls anywhere in the suite.
+870 tests, ~88% coverage, no model calls anywhere in the suite.
 
 ---
 
 ## State, honestly
 
-**Built:** all ten phases. 885 tests. The governor, safety hooks, gates, state
-layer with a verified hash chain (70 records, ids 1 to 70; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
+**Built:** all ten phases. 870 tests. The governor, safety hooks, gates, state
+layer with a verified hash chain (71 records, ids 1 to 71; 12 was answered by 021 to 023 and never written), MCP engine, skills, subagents,
 the pipeline with three modes, usage metering, two-reviewer integration,
 opt-in push, `prompts.md` and Code Explained generation.
 

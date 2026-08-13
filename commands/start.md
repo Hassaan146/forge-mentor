@@ -133,12 +133,16 @@ offer a reduced mode — there isn't one.
 
 ## Step 5 — Create the notes
 
-Create `.claude/forge/` in the project with:
+Create the notes with Forge's own creator, not by hand:
 
-- `progress.md` — the labelled header must include `open_question:` and
-  `override_active:`, because the governor reads them on every write
-- `decisions/` — one file per decision
-- `settings.md` — which AI does which job, with the defaults from decision 002
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_state.py" init
+```
+
+It writes `progress.md` with the labelled header the governor reads, the
+`decisions/` folder, and `settings.md` carrying decision 002's defaults. Doing
+it by hand here is how two versions of "what a Forge project looks like" drift
+apart, and the governor reads the one this writes.
 
 Commit and push it (decision 016 — `.claude/forge/` is committed, never ignored).
 

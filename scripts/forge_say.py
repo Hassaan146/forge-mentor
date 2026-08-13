@@ -73,3 +73,35 @@ def framed(title: str, body: str, ways_out: list[str] | None = None) -> str:
     lines.append("│" + " " * inner + "│")
     lines.append("└" + "─" * inner + "┘")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# the one shape every non-blocking hook shares
+# --------------------------------------------------------------------------
+
+
+def emit(message_for: "callable", event: str = "PostToolUse") -> None:
+    """Read the payload, print the envelope, and never fail loudly.
+
+    Three hooks had this eighteen lines each, identical but for one string.
+    They are all the same contract: take stdin, say something or nothing, and
+    never be the reason a session stops. `message_for` takes the payload and
+    returns the text, or "" for silence.
+    """
+    import json
+    import sys
+
+    try:
+        payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+        name = str(payload.get("hook_event_name") or event)
+        text = message_for(payload)
+    except Exception:
+        name, text = event, ""
+
+    print(
+        json.dumps(
+            {"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}}
+            if text
+            else {}
+        )
+    )

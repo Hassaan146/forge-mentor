@@ -1,7 +1,7 @@
 ---
 type: prompts
 project: forge-mentor
-entries: 69
+entries: 70
 generated: 2026-08-14
 ---
 
@@ -1361,5 +1361,26 @@ about Forge.
 **Reasoning given:**
 
 > The foundation asked what the project *is* and never what it is *called* or where it lives, which Forge needs to push, to open a pull request and to read reviews back. Asked second because it does not depend on the stack and everything written afterwards goes into it, and renaming a repository later breaks every link, clone and pipeline pointing at it. Left open with no menu on purpose: a menu here would be Forge naming somebody's project for them, and the answer is two facts it cannot guess. Reading it from the git remote was rejected because a remote that exists is not the same as a remote the user meant to use, and decision 006 already makes the repository theirs to create.
+
+---
+
+## 071 · How many ways should there be to draw a block?
+
+**Asked:**
+
+> How many ways should there be to draw a block?
+
+**Options put to the user:**
+
+- Five: the one that ships, plus four kept behind switches for other clients
+- One: the route decision 045 settled, and delete the rest
+- Two: the fenced box and a plain-text fallback
+- Keep them but document that they are unsupported
+
+**Answered by the user:** One. The four switch-guarded renderers are deleted, along with the tests that only they reached
+
+**Reasoning given:**
+
+> A ponytail review of the whole plugin returned net: -511 lines possible, and two thirds of it was here: _diff_block, _boxed_markdown, as_markdown and its five _md_* helpers, reachable only through FORGE_DIFF, FORGE_TABLE, FORGE_ANSI_FENCE and FORGE_NO_COLOUR, which nothing sets. yagni names it exactly: config for a value that never changes. They were kept because the rendering failure is per-client and another terminal might behave differently, and that argument does not survive the count: 361 lines of the product carried for a client nobody has, in a file where the same wrap arithmetic was already copied four times because the file was too large to see whole. The search that produced the answer is written down in decisions 044 to 046, which is where it belongs, rather than in four branches of a function. Applied with the deletions ponytail found alongside it: seven symbols nothing referenced, three copies of the same hook boilerplate, two spellings of one normalisation. Net -656 lines, and coverage rose from 88.1 to 88.9 because what went was code no test could reach honestly.
 
 ---

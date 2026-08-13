@@ -240,12 +240,6 @@ COMPANION_SOURCE: dict[str, tuple[str, str]] = {
 # required companion is a line here instead of a new branch everywhere.
 REQUIRED: tuple[str, ...] = ("ponytail",)
 
-
-def missing_required(home: Path | None = None) -> list[str]:
-    """Required companions that are not installed on this machine."""
-    return [name for name in REQUIRED if not companion_installed(name, home)]
-
-
 def companions_for(stage: str) -> tuple[str, ...]:
     """Optional skills that improve a stage, if the user has them."""
     return COMPANIONS.get(stage, ())

@@ -70,10 +70,6 @@ class Stage(str, Enum):
 # The foundation loop, in order. Runs once, before any code exists.
 FOUNDATION = (Stage.INTERROGATION, Stage.CHALLENGE, Stage.PLANNING)
 
-# The build loop, in order. Runs per step, repeatedly, and it opens with a
-# question, which is the whole point of it. A loop starting at BUILDING is a
-# loop that writes code nobody was asked about.
-BUILD = (Stage.STEP_DECISION, Stage.BUILDING, Stage.REVIEW_FIX, Stage.TEACH_BACK)
 
 DEFAULT_MODE = Mode.PIPELINE
 

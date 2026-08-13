@@ -63,7 +63,6 @@ def paused(forge_dir: Path) -> bool:
 REQUIRED_PROGRESS_FIELDS = ("stage", "open_question", "override_active")
 
 _TRUE = {"true", "yes", "1", "on"}
-_NONE = {"", "none", "null", "-"}
 
 # Header keys `Decision` models as its own attributes. Anything else a record
 # carries is kept in `extra` rather than discarded, so the fingerprint covers
@@ -778,3 +777,21 @@ def init(project_root: Path, total_questions: int = 0) -> Path:
         ),
     ).write(forge)
     return forge
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI surface
+    # `/forge:start` used to describe this folder in prose and let the model
+    # build it by hand, so the canonical creator sat here with no caller and
+    # two versions of "what a Forge project looks like" drifted apart.
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "init":
+        where = Path(sys.argv[2]) if len(sys.argv) > 2 else Path.cwd()
+        try:
+            print(f"Forge notes created at {init(where)}")
+        except StateError as exc:
+            print(str(exc))
+            raise SystemExit(1) from None
+    else:
+        print("usage: forge_state.py init [project-root]")
+        raise SystemExit(2)

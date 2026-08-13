@@ -106,26 +106,11 @@ def message(cwd: Path) -> str:
 
 
 def main() -> None:  # pragma: no cover - exercised as a subprocess
-    try:
-        payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
-        cwd = Path(str(payload.get("cwd") or os.getcwd()))
-        text = message(cwd)
-    except Exception:
-        text = ""
+    import forge_say as say
 
-    if not text:
-        print(json.dumps({}))
-        return
-
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": text,
-                }
-            }
-        )
+    say.emit(
+        lambda payload: message(Path(str(payload.get("cwd") or os.getcwd()))),
+        "SessionStart",
     )
 
 

@@ -62,49 +62,6 @@ def block(reason: str) -> None:
 # Printing it through this command puts it on the same channel as the banner.
 RENDER_COMMAND = "forge_ui.py"
 
-# Named once, in the shortest form that is still runnable. `start.md` carries
-# the full payload shape and the assistant has already read it.
-RENDER_HINT = 'python "$CLAUDE_PLUGIN_ROOT/scripts/forge_ui.py" render'
-
-
-def rendered_by_command(transcript: Path) -> bool:
-    """Did this turn print a block through the render command?
-
-    A turn that did is framed, whatever its text says: the frame is on the
-    user's screen, in colour, above whatever the assistant then wrote. Judging
-    only the reply text would refuse the very path that fixed the colours.
-    """
-    try:
-        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return False
-
-    for line in reversed(lines[-200:]):
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-
-        content = (entry.get("message") or {}).get("content")
-
-        # **A tool result is written as a `user` entry**, which is why this
-        # found nothing. Breaking on `type == "user"` was meant to stop at the
-        # turn boundary; it stopped at the result of the last tool call
-        # instead, one line in, so the render command sitting just above it was
-        # never seen. The user's own message is the one carrying no tool result.
-        if entry.get("type") == "user" and not _is_tool_result(content):
-            break
-
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict) or part.get("type") != "tool_use":
-                continue
-            command = str((part.get("input") or {}).get("command", ""))
-            if RENDER_COMMAND in command and " render" in command:
-                return True
-    return False
-
 
 def _is_tool_result(content: object) -> bool:
     """Is this `user` entry a tool result rather than something a person typed?"""

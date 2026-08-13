@@ -1,7 +1,7 @@
 ---
 type: asked-for
 project: forge-mentor
-entries: 24
+entries: 25
 generated: yes, from the decision records; do not edit
 ---
 
@@ -155,3 +155,9 @@ already recorded, and deleting a record removes its line.
 > There are some basic questions Claude should have, for example the repository name, and other things. There are a few fundamentals to add in the governor.
 
 **What it became:** A question for the name and the repository, asked straight after the idea
+
+### 071 · How many ways should there be to draw a block?
+
+> Start making these changes as ponytail said, almost 500 lines of code will be reduced.
+
+**What it became:** One. The four switch-guarded renderers are deleted, along with the tests that only they reached

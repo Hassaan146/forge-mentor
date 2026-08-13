@@ -90,22 +90,9 @@ def message(cwd: Path) -> str:
 
 
 def main() -> None:  # pragma: no cover - exercised as a subprocess
-    try:
-        payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
-        event = str(payload.get("hook_event_name") or "PostToolUse")
-        text = message(Path(str(payload.get("cwd") or os.getcwd())))
-    except Exception:
-        event, text = "PostToolUse", ""
+    import forge_say as say
 
-    if not text:
-        print(json.dumps({}))
-        return
-
-    print(
-        json.dumps(
-            {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
-        )
-    )
+    say.emit(lambda payload: message(Path(str(payload.get("cwd") or os.getcwd()))))
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI surface

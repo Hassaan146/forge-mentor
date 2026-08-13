@@ -91,14 +91,6 @@ def test_carrying_on_without_it_is_possible_and_leaves_a_trace(
     assert "record_override" in text
     assert "their call" in text
 
-
-def test_required_names_what_setup_will_not_finish_without() -> None:
-    import forge_skills as sk
-
-    assert "ponytail" in sk.REQUIRED
-    assert sk.missing_required(home=Path("/nowhere-at-all")) == ["ponytail"]
-
-
 def test_it_is_silent_where_forge_was_switched_off(project: Path, monkeypatch) -> None:
     monkeypatch.setattr(companion, "_installed", lambda: True)
     (project / fs.FORGE_DIR / "paused.md").write_text("off\n", encoding="utf-8")

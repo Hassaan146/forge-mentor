@@ -681,56 +681,6 @@ def test_a_long_teaching_line_cannot_break_the_frame() -> None:
     assert len({ui.visible_width(ln) for ln in framed}) == 1, "the frame went ragged"
 
 
-# --------------------------------------------------------------------------
-# the same block, for a client that colours markdown and not escape codes
-# --------------------------------------------------------------------------
-
-
-def test_the_markdown_renderer_still_carries_everything() -> None:
-    out = ui.as_markdown(
-        {
-            "kind": "decision",
-            "number": 2,
-            "title": "What are you building this with?",
-            "subtitle": "the first decision",
-            "means": ["a line of teaching"],
-            "choices": [["A", "Front end only", "no server"], ["B", "Back end only", "later"]],
-            "recommend": ["A", "nothing to host"],
-            "against": "the data stays here",
-            "important_lines": ["This cannot be undone."],
-            "done": 1,
-            "total": 6,
-            "stage": "foundation",
-        }
-    )
-
-    for expected in (
-        "DECISION 002",
-        "What are you building this with?",
-        "a line of teaching",
-        "**Front end only**",
-        "Recommended: A",
-        "Against it:",
-        "This cannot be undone.",
-        "1 of ~6",
-        "Your call: A, or B?",
-    ):
-        assert expected in out, f"the markdown block lost {expected!r}"
-
-
-def test_every_kind_survives_the_markdown_route() -> None:
-    for payload in (
-        {"kind": "decision", "title": "t"},
-        {"kind": "note", "heading": "h", "lines": ["one"], "ask": "yes?"},
-        {"kind": "action", "ask": "go?", "ask_kind": "confirm"},
-        {"kind": "legend"},
-        {"kind": "roadmap", "phases": [
-            {"number": 1, "title": "First", "delivers": "d", "state": "now", "built": 0,
-             "steps": [{"text": "s", "built": False}]}]},
-    ):
-        assert ui.as_markdown(payload).strip(), f"{payload['kind']} rendered nothing"
-
-
 def test_the_banner_stays_as_it_is() -> None:
     """There is no markdown for a logo."""
     assert "▄" in ui.render_from({"kind": "banner", "project": "todo"})
@@ -776,80 +726,6 @@ def test_the_width_can_be_narrowed_for_a_split_pane(monkeypatch) -> None:
 
     monkeypatch.setenv("FORGE_BOX_WIDTH", "not a number")
     assert ui._box_inner() == 92, "a bad value is not a reason to draw badly"
-
-
-def test_the_concept_is_on_screen_with_the_question() -> None:
-    """A user who remembers picking B has learned nothing worth carrying."""
-    payload = {
-        "kind": "decision",
-        "title": "What is stored, and what happens if it is lost?",
-        "concept": "where the information lives when the program is not running",
-    }
-
-    assert "Concept: where the information lives" in ui.render_from(payload)
-    assert "Concept: where the information lives" in plain(ui.decision(
-        payload["title"], concept=payload["concept"]
-    ))
-
-
-def test_the_table_is_still_available_behind_a_switch(monkeypatch) -> None:
-    """Tried as the default and beaten by the fence on this renderer.
-
-    It drew a border after every row, so one block arrived as a stack of boxes,
-    and it printed `&nbsp;` literally. Kept because another client may do both
-    properly.
-    """
-    monkeypatch.setenv("FORGE_TABLE", "1")
-    out = ui.render_from({"kind": "decision", "title": "t"})
-
-    assert out.startswith("| ") and "| :--- |" in out
-    assert "&nbsp;" not in out, "the entity was never rendered; it is gone"
-
-
-def test_every_kind_survives_the_table_route() -> None:
-    for payload in (
-        {"kind": "decision", "title": "t"},
-        {"kind": "note", "heading": "h", "lines": ["one"], "ask": "yes?"},
-        {"kind": "action", "ask": "go?", "ask_kind": "confirm"},
-        {"kind": "legend"},
-        {"kind": "roadmap", "phases": [
-            {"number": 1, "title": "First", "delivers": "d", "state": "now", "built": 0,
-             "steps": [{"text": "s", "built": False}]}]},
-    ):
-        out = ui._boxed_markdown(payload)
-        assert out.startswith("| ") and "| :--- |" in out, payload["kind"]
-
-
-def test_a_decision_table_keeps_everything_the_box_had() -> None:
-    out = ui._boxed_markdown(
-        {
-            "kind": "decision",
-            "number": 2,
-            "title": "What are you building this with?",
-            "subtitle": "the first decision",
-            "means": ["a line of teaching"],
-            "choices": [["A", "Front end only", "no server"], ["B", "Back end only", "later"]],
-            "recommend": ["A", "nothing to host"],
-            "against": "the data stays here",
-            "important_lines": ["This cannot be undone."],
-            "done": 1,
-            "total": 6,
-            "stage": "foundation",
-        }
-    )
-
-    for expected in (
-        "DECISION 002",
-        "What are you building this with?",
-        "a line of teaching",
-        "**Front end only**",
-        "Recommended: A",
-        "Against it:",
-        "This cannot be undone.",
-        "1 of ~6",
-        "Your call: A, or B?",
-    ):
-        assert expected in out, f"the table lost {expected!r}"
 
 
 def test_the_palette_is_put_back_after_drawing() -> None:
@@ -921,17 +797,6 @@ def test_the_box_is_drawn_and_the_left_border_is_what_colours_it() -> None:
     assert any(line.startswith("+") for line in body), "the frame and the options are green"
     assert any(line.startswith("-") for line in body), "and the cost is red"
 
-
-def test_the_uncoloured_box_is_available_for_a_client_without_a_highlighter(
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("FORGE_NO_COLOUR", "1")
-    out = ui.render_from({"kind": "decision", "number": 7, "title": "t"})
-
-    assert out.startswith("```\n"), "no language tag, nothing to highlight"
-    assert "┌" in out and "└" in out, "and the drawn box instead"
-
-
 def test_the_coloured_version_is_still_available_behind_a_switch(monkeypatch) -> None:
     """Nine attempts, and this is the one that stopped carrying the colour.
 
@@ -953,65 +818,6 @@ def test_the_coloured_version_is_still_available_behind_a_switch(monkeypatch) ->
             "against": "a cost",
         }
     )
-
-    assert out.startswith("```diff"), "a language the highlighter knows"
-    assert "\033[" not in out, "the colour is applied there, not carried there"
-
-
-def test_every_marker_sits_in_column_zero(monkeypatch) -> None:
-    """highlight.js anchors them with `^`.
-
-    A left border in front of a `+` makes it an ordinary line, which is why the
-    drawn border is gone and the fence is the container.
-    """
-    monkeypatch.setenv("FORGE_DIFF", "1")
-    out = ui.render_from(
-        {
-            "kind": "decision",
-            "title": "t",
-            "subtitle": "sub",
-            "choices": [["A", "one", "x"], ["B", "two", "y"]],
-            "against": "a cost",
-            "done": 1,
-            "total": 6,
-        }
-    )
-    body = out.split("```diff\n", 1)[1].rsplit("\n```", 1)[0].splitlines()
-
-    for marker, meaning in (("+", "an option"), ("-", "a cost"), ("#", "quiet detail")):
-        marked = [line for line in body if line.startswith(marker)]
-        assert marked, f"nothing carries {marker} for {meaning}"
-
-    rules = [line for line in body if line.startswith("@@")]
-    assert len(rules) == 3, "one opens the block, one opens the turn, one shuts it"
-    for rule in rules:
-        assert rule.rstrip().endswith("@@"), "and every rule closes its own line"
-    assert body[-1].startswith("@@"), "the block ends shut, not trailing off"
-
-
-def test_the_markers_carry_forge_meanings_not_version_control_ones(monkeypatch) -> None:
-    """Options are things you can pick, so they are additions. The cost is the
-    one line rule R11 paints yellow, so it is a deletion."""
-    monkeypatch.setenv("FORGE_DIFF", "1")
-    out = ui.render_from(
-        {
-            "kind": "decision",
-            "title": "t",
-            "choices": [["A", "Front end only", "no server"]],
-            "against": "the data stays on this machine",
-            "important_lines": ["This cannot be undone."],
-        }
-    )
-
-    assert "+   A  Front end only" in out
-    assert any(
-        line.startswith("- ") and "the data stays on this machine" in line
-        for line in out.splitlines()
-    )
-    assert any(
-        line.startswith("- ") and "cannot be undone" in line for line in out.splitlines()
-    )
-
 
 def test_the_summary_box_carries_the_story_without_a_second_record() -> None:
     """Assembled from the records every time, never accumulated in a log.
@@ -1056,7 +862,7 @@ def test_a_long_bar_line_wraps_under_itself() -> None:
     assert len(carrying) == 1, "the bar is drawn once, on the first line only"
 
 
-def test_the_summary_survives_every_route() -> None:
+def test_the_summary_renders_on_both_surfaces() -> None:
     payload = {"kind": "summary", "title": "T", "facts": [["a", "b"]], "recent": ["one"]}
-    assert "T" in ui.as_markdown(payload)
+    assert "T" in ui.render_from(payload)
     assert "T" in plain(ui.summary("T", facts=[("a", "b")], recent=["one"]))

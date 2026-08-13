@@ -55,6 +55,20 @@ def message(payload: dict) -> str:
     except Exception:
         return ""
 
+    # The ledger learns the file exists here, which is the only place that
+    # knows a write happened. Without it nothing ever sets "written", so the
+    # unexplained-file guard in forge_build could never fire and the rule was
+    # a rule about a state the product could not reach.
+    try:
+        import forge_build as fb
+        import forge_steps as stp
+
+        step = stp.current(forge)
+        if step is not None:
+            fb.mark_written(forge, step.marker, path.name)
+    except Exception:
+        pass
+
     if not claims:
         return ""
 
@@ -74,26 +88,9 @@ def message(payload: dict) -> str:
 
 
 def main() -> None:  # pragma: no cover - exercised as a subprocess
-    try:
-        payload = json.load(sys.stdin) if not sys.stdin.isatty() else {}
-        text = message(payload)
-    except Exception:
-        text = ""
+    import forge_say as say
 
-    if not text:
-        print(json.dumps({}))
-        return
-
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "additionalContext": text,
-                }
-            }
-        )
-    )
+    say.emit(message)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI surface

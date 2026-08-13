@@ -43,11 +43,6 @@ THRESHOLDS: tuple[tuple[int, str], ...] = (
     (90, "nearly full"),
 )
 
-
-class MeterError(Exception):
-    """Usage could not be read. Never fatal — the caller reports and moves on."""
-
-
 # --------------------------------------------------------------------------
 # finding Claude Code's own logs
 # --------------------------------------------------------------------------
