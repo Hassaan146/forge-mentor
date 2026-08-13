@@ -58,14 +58,17 @@ question the user has already answered.
    smaller version you found, not at all. `record_lean` writes it and opens the step.
 3. `step_questions` — what the subject owes, if this step is the first to touch it.
 4. The step's own question, through `render_decision` with `project` set.
-5. The builder writes it.
-6. `lean_review` on the approach, before it is built. Unchanged means one line and carry on.
-   **Smaller means the user decides**, because a change to what gets built is theirs.
+5. `lean_review` on the approach the answer implies, **before a line of it is written**.
+   Unchanged means one line and carry on. **Smaller means the user decides**, because a change
+   to what gets built is theirs.
+6. The builder writes what they settled on.
 7. The gate, then the explain-back.
 
-Steps 1 and 6 are the two moments over-building happens: once when a line on a plan becomes
-a feature, and once when a feature becomes four files. The second is the one that is easy to
-skip, because by then everybody has agreed on the goal and stopped looking.
+Steps 1 and 5 are the two moments over-building happens: once when a line on a plan becomes a
+feature, and once when a feature becomes four files. The second is the one that is easy to
+skip, because by then everybody has agreed on the goal and stopped looking, and it has to
+happen *before* the code exists: reviewing afterwards means arguing to delete something that
+already works, which is an argument the code usually wins.
 
 ## The subject comes before the step
 

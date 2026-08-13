@@ -104,9 +104,11 @@ before it, does this need writing and how much of it, was never asked.
    question. `record_lean` writes it, and it is refused with a rung missing.
 2. `step_questions`, if this step is the first to touch a subject.
 3. The step's own question.
-4. The builder writes it.
-5. `lean_review` on the approach **before** it is built. Unchanged is one line. **Smaller is the
-   user's decision**, not the reviewer's.
+4. `lean_review` on the approach the answer implies, **before a line of it is written**.
+   Unchanged is one line. **Smaller is the user's decision**, not the reviewer's. Reviewing
+   after the code exists means arguing to delete something that already works, which is an
+   argument the code usually wins.
+5. The builder writes what they settled on.
 
 The gate is `next_gap` returning `unchallenged`. Nothing here judges whether code is minimal:
 the model reasons, the gate remembers. Note the marker trap this hit on the way in: `lean:` plus
