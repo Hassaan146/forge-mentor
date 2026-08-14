@@ -1497,12 +1497,47 @@ def render_from(payload: dict) -> str:
     )
 
 
+def engine_missing() -> str:
+    """The one block for "you installed it in this session, so nothing started".
+
+    **Two lines to act on and nothing else.** This state produced eleven
+    paragraphs on a real screen: which parts of a plugin load when, why the
+    slash command worked while the tools did not, and what would happen to the
+    record if the questions were asked by hand. All true, and none of it was
+    the answer, which is one command long. Their words: "just do a few things,
+    like go and reload the plugins or exit Claude, and all that, encapsulated
+    in a box which would look good, not this thing with so much theory."
+
+    Drawn here rather than written into `start.md` because the engine being
+    down is exactly when no render tool can be called, and a second copy of a
+    box is a second box to keep in step (decision 071).
+    """
+    return render_from(
+        {
+            "kind": "note",
+            "heading": "Forge is installed but not running yet",
+            "symbol": BLOCKED,
+            "lines": [
+                "A plugin starts with the session. This one arrived after it.",
+                "1.  /reload-plugins",
+                "2.  /forge:start",
+            ],
+            "important_lines": [
+                "Still nothing? Quit Claude Code completely, open it again, "
+                "then /forge:start. Nothing is lost either way."
+            ],
+        }
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover - CLI surface
     arg = sys.argv[1] if len(sys.argv) > 1 else "demo"
     if arg == "banner":
         print(banner(sys.argv[2] if len(sys.argv) > 2 else None))
     elif arg == "legend":
         print(legend())
+    elif arg == "engine":
+        print(engine_missing())
     elif arg == "render":
         # JSON on stdin, a coloured block on stdout. The whole point is that
         # the model never retypes it.

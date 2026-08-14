@@ -866,3 +866,35 @@ def test_the_summary_renders_on_both_surfaces() -> None:
     payload = {"kind": "summary", "title": "T", "facts": [["a", "b"]], "recent": ["one"]}
     assert "T" in ui.render_from(payload)
     assert "T" in plain(ui.summary("T", facts=[("a", "b")], recent=["one"]))
+
+
+def test_the_engine_block_is_two_commands_and_no_theory() -> None:
+    """Installed mid-session, the engine never starts, and the fix is one line.
+
+    That state produced eleven paragraphs on a real screen: which parts of a
+    plugin load when, why the slash command worked while the tools did not,
+    what would happen to the record if the questions were asked by hand. All
+    true and none of it the answer. "not this thing with so much theory."
+    """
+    block = ui.engine_missing()
+
+    assert "/reload-plugins" in block
+    assert "/forge:start" in block
+    assert "Quit Claude Code completely" in block, "the fallback, in one line"
+    assert len([line for line in block.splitlines() if line.strip()]) <= 12, "a box, not an essay"
+
+
+def test_start_checks_the_engine_before_it_prints_anything() -> None:
+    """Six green ticks above a stop sign teaches the user to distrust the check.
+
+    The readiness check tests Python, mcp, git, sign-in and ponytail, and none
+    of those can tell whether Forge's own engine is loaded in this session.
+    """
+    start = (Path(__file__).resolve().parents[1] / "commands" / "start.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "forge_ui.py\" engine" in start
+    assert start.index("color_legend") < start.index("forge_ui.py\" banner"), (
+        "the engine check comes before the banner"
+    )

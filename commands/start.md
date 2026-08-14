@@ -36,6 +36,28 @@ If `.claude/forge/paused.md` exists, someone ran `/forge:stop` in this project.
 Delete it, say in one line that Forge is back on, and then take the resume path
 above. The answers are already recorded.
 
+## Step 0 — is the engine even here?
+
+**Call `color_legend` first.** It reads nothing and changes nothing, and it is
+Forge's own MCP tool, so it answers one question no readiness check can: is the
+engine loaded in *this* session.
+
+If it is not available, the user installed Forge during this session and the
+engine was never started. Do this and nothing else:
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_ui.py" engine
+```
+
+Paste that block as your whole reply and stop. No banner, no readiness check,
+no explanation of how plugins load, no account of what would go wrong if you
+asked the questions by hand. All of that was on a real screen and none of it was
+the answer, which is one command long. The block already carries the two steps
+and the fallback.
+
+Six green ticks above a stop sign is worse than no check at all, so this comes
+**before** the banner, not after it.
+
 ## Before anything else
 
 Print the banner, then the colour key, then the readiness check — in that order,
