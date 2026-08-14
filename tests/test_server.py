@@ -1244,6 +1244,29 @@ def test_catching_up_summarises_and_then_continues(project: str, forge: Path) ->
     assert ff.NAME.question in caught["next_block"], "and it hands over the next question"
 
 
+def test_catching_up_with_nothing_open_carries_on_instead_of_stopping(
+    project: str, forge: Path
+) -> None:
+    """"good but didnt asked me the next question", from a real session.
+
+    The step was decided, so no question was owed, so `next_block` was empty,
+    and the instruction said to stop. What reached the user was a report ending
+    "No question is open; nothing is blocking you" and no next move.
+    """
+    _answer_everything(project)
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["show the list"])
+    pass_lean(forge)
+    asked = ask_question(project, "how does it render?", affects="phase-1.step-1")
+    record_answer(project, asked["id"], "textContent", "never innerHTML")
+
+    caught = call(srv.catch_up)(project)
+
+    assert caught["next_block"] == "", "nothing is waiting on the user"
+    assert "keep going in the same turn" in caught["next"]
+    assert "plan_files" in caught["next"], "and it names what to call"
+
+
 def test_the_summary_is_assembled_from_the_records_not_from_a_log(
     project: str, forge: Path
 ) -> None:

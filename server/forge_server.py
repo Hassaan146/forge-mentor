@@ -730,11 +730,29 @@ def catch_up(project: str) -> dict[str, Any]:
         "writes_blocked": not fs.writes_allowed(forge)[0],
         "stage": progress.stage,
         "lean_pass_done": bool(step and ln.passed(forge, step.marker)),
+        # Two different endings, and giving the second one the first one's
+        # instruction is what left a user staring at a report with nothing to
+        # do. "Nothing is blocking you" was true and useless: the step was
+        # decided, so no question was owed, so `next_block` was empty, so the
+        # turn ended on a summary. Their words: "good but didnt asked me the
+        # next question". A status that stops when the next move is Forge's own
+        # is a status that ends the session it was called to resume.
         "next": (
-            "Paste `block` first, then `next_block` if there is one, and stop. "
-            "Those two are the whole reply: a summary followed by the question "
-            "they were on. Do not re-explain what the summary already says, and "
-            "do not re-ask anything that is recorded."
+            (
+                "Paste `block` first, then `next_block`, and stop. Those two are "
+                "the whole reply: a summary followed by the question they were "
+                "on. Do not re-explain what the summary already says, and do not "
+                "re-ask anything that is recorded."
+            )
+            if carry_on.get("block")
+            else (
+                "Paste `block`, then **keep going in the same turn**. Nothing is "
+                "open, which means the next move is yours, not theirs: call "
+                "`current_step`, then `plan_files`, and build it. Do not end the "
+                "turn on the summary and do not ask permission to continue — "
+                "they ran this to carry on, and a report with nothing to act on "
+                "is how a session dies at the moment it should resume."
+            )
         ),
     }
 

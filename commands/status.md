@@ -8,6 +8,13 @@ Show where the work is, and carry on from it.
 Paste them in that order and stop. That is the whole reply on the common path, which is
 somebody reopening after a gap and needing to know where they were.
 
+**Unless there is no second block.** An empty `next_block` does not mean there is nothing to do,
+it means nothing is waiting on the *user* — the step is decided and the next move is Forge's. Do
+not stop there. Carry straight on in the same turn: `current_step`, then `plan_files`, then
+build it. This ended a real session on the line "No question is open; nothing is blocking you",
+which reads as a finished report and is actually a loop that forgot to take its turn. Follow the
+`next` field that `catch_up` returns; it says which of the two endings applies.
+
 The summary is assembled from the records every time rather than kept in a log, so there is no
 second version of the history to drift from the first (decision 011: the repository is the
 memory). It carries the idea in the user's own words, how many questions are answered against
