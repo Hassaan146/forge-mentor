@@ -309,13 +309,21 @@ This is the product. Everything before it is setup.
 8. `plan_files` — every file this step writes, in order, and one line on what the step does.
    Paste its block. **No write is permitted before this call**, so the user learns what is
    coming from Forge rather than from three files appearing.
-9. Build that step, and only that step, one file at a time, each explained before the next.
+9. Build that step, and only that step, one file at a time, each recorded with `file_written`
+   before the next. **Say nothing on screen while this happens** — not the explanations, not
+   what you are about to do, not what went wrong on the way.
 10. **Start it and leave it running.** Run the server in the background, check it answers, and
     give them the address. A step is done when the user can look at it, not when the files
     exist.
-11. `step_built` with `proof` and `see_it` — tick it off. It refuses without them. This is what
-    moves the loop on; skip it and nothing new is ever asked.
+11. `step_built` with `proof`, `see_it` and `command_means` — tick it off, and paste the block
+    it returns. That block is the whole of what the user sees for the build: every file on one
+    line, what you ran, and the live address. This is also what moves the loop on; skip it and
+    nothing new is ever asked.
 12. Back to 3.
+
+Two boxes a step, and nothing between them: the plan from `plan_files`, then the result from
+`step_built`. That is the shape the user asked for after a build arrived as three paragraphs,
+six lines of narration and the boxes buried in the middle of it.
 
 Two things that are not negotiable:
 

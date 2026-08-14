@@ -471,3 +471,38 @@ def test_a_table_row_carrying_a_symbol_is_the_block(project: Path) -> None:
 
     plain_table = "\n".join(["| a | b |", "|---|---|", "| 1 | 2 |"])
     assert blocked(stop(project, plain_table)), "any old table is not a Forge block"
+
+
+def test_a_build_is_speech_too(project: Path) -> None:
+    """It only ever watched questions, and a build is where the prose was.
+
+    Nothing is open during a build, so every turn of one was allowed: three
+    paragraphs of file explanation and six lines about ports, with two good
+    boxes lost in the middle. "only the box info should be displayed".
+    """
+    import forge_steps as stp
+
+    forge = project / fs.FORGE_DIR
+    phases = forge / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "1-first.md").write_text(
+        "---\nphase: 1\ntitle: First\n---\n\n## Steps\n\n1. [ ] the first slice\n",
+        encoding="utf-8",
+    )
+    assert stp.current(forge) is not None, "a step is in progress"
+
+    assert blocked(stop(project, "just chatting about what I am doing"))
+
+
+def test_prose_after_the_boxes_counts_as_prose(project: Path) -> None:
+    """The half the lead-in rule could not see.
+
+    The boxes came first and the wall came after, so "prose before the block"
+    was zero and the turn passed with a screen full of paragraphs.
+    """
+    ask(project)
+    boxed = "```diff\n+-- ⚒ FORGE · DECISION 001 ---+\n|  what's the idea?           |\n+-----+\n```"
+    wall = "\n".join(f"paragraph {n}, explaining at length." for n in range(1, 12))
+
+    assert not blocked(stop(project, boxed))
+    assert blocked(stop(project, f"{boxed}\n\n{wall}"))

@@ -872,7 +872,10 @@ def next_file(project: str) -> dict[str, Any]:
         "be missing without it, `how` is the way it does its job. What without "
         "why leaves somebody who can read the code and not question it; why "
         "without how leaves somebody who agrees with a thing they could not "
-        "maintain. Say all three to the user in the same turn, in that order. "
+        "maintain. **Say none of it on screen.** The three go to the record; "
+        "`what` comes back in the step's own box at the end, one line a file, "
+        "which is the shape the user asked for. A paragraph a file turned the "
+        "build into a wall of prose with the boxes lost inside it. "
         "**Writes the ledger.**"
     ),
 )
@@ -905,19 +908,25 @@ def file_written(
             "missing": missing,
         }
 
-    fb.mark_explained(forge, step.marker, path)
+    fb.mark_explained(forge, step.marker, path, what=what)
     fr.write_chain(forge)
 
     upcoming = fb.next_file(forge, step.marker)
     return {
         "recorded": path,
         "next_file": upcoming.path if upcoming else None,
+        "say_nothing": True,
         "next": (
-            f"Now {upcoming.path}: say what it is, why it exists and how it works, "
-            "then write it."
-            if upcoming
-            else "Every planned file is written and explained. Run the tests, then "
-            "the explain-back gate."
+            (
+                f"Recorded, and say nothing about it on screen. Now {upcoming.path}: "
+                "work out what it is, why it exists and how it works, write it, and "
+                "record it the same way."
+                if upcoming
+                else "Every planned file is written and explained, and none of it "
+                "has been said on screen, which is right. Run it, then call "
+                "`step_built` — its block is where all of this reaches the user, "
+                "one line a file."
+            )
         ),
     }
 
@@ -2373,9 +2382,16 @@ def current_step(project: str) -> dict[str, Any]:
     ),
 )
 def step_built(
-    project: str, phase: int, number: int, proof: str = "", see_it: str = ""
+    project: str,
+    phase: int,
+    number: int,
+    proof: str = "",
+    see_it: str = "",
+    command_means: str = "",
 ) -> dict[str, Any]:
+    import forge_build as fb
     import forge_steps as stp
+    import forge_ui as ui
 
     try:
         forge = _forge_dir(project)
@@ -2398,6 +2414,9 @@ def step_built(
             "missing": missing,
         }
 
+    marker = f"phase-{phase}.step-{number}"
+    files = [item for item in fb.read_plan(forge, marker) if item.written]
+
     try:
         done = stp.mark_built(forge, phase, number)
     except stp.StepError as exc:
@@ -2411,13 +2430,29 @@ def step_built(
         "steps_total": total,
         "proof": str(proof).strip(),
         "see_it": str(see_it).strip(),
+        # One box for the whole step, which is what the user asked for after a
+        # build reached them as three paragraphs, six lines of narration and the
+        # boxes lost somewhere inside it (decision 076). Every file on one line,
+        # the run underneath, and the address last because it is the only line
+        # they can act on.
+        "block": ui.render_from(
+            {
+                "kind": "note",
+                "heading": f"Built: {done.text}",
+                "symbol": ui.RECORDED,
+                "lines": [f"{item.path} — {item.what}" for item in files if item.what]
+                or [f"{item.path}" for item in files],
+                "important_lines": (
+                    [f"Ran: {str(proof).strip()}", f"See it now: {str(see_it).strip()}"]
+                    + ([str(command_means).strip()] if str(command_means).strip() else [])
+                ),
+            }
+        ),
         "show_the_user": (
-            f"Say what you ran and what came back ({str(proof).strip()}), then give "
-            f"them the live one: {str(see_it).strip()}. It should already be "
-            "running, so the address works when they click it. Then say in one line "
-            "what that command means, part by part: they did not type it, and a "
-            "command nobody explained is the first thing they will need when Forge "
-            "is not in the room."
+            "Paste `block` and add nothing around it. It carries every file with "
+            "its one line, what you ran, and the address that is already live. "
+            "Do not restate any of it in prose and do not narrate what happened "
+            "while you were building."
         ),
         "next": gap.reason if gap else "",
         # All three of these are questions to the user, and the flag is read as

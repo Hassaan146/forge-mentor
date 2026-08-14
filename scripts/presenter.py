@@ -45,6 +45,22 @@ def allow() -> None:
     sys.exit(0)
 
 
+def _building(forge_dir: Path) -> bool:
+    """Is there a step being worked on right now?
+
+    Imported here rather than at the top: the step layer reads the state layer,
+    and this hook has to survive a project whose phases are unreadable. Any
+    trouble at all is False, which allows the turn, because presentation is
+    never worth a wedged session.
+    """
+    try:
+        import forge_steps as stp
+
+        return stp.current(forge_dir) is not None
+    except Exception:
+        return False
+
+
 def block(reason: str) -> None:
     """Refuse the turn and say what to do instead.
 
@@ -73,7 +89,13 @@ def _is_tool_result(content: object) -> bool:
 
 
 def last_assistant_text(transcript: Path) -> str:
-    """The text of the most recent assistant turn, or "" if it cannot be read.
+    """Everything the assistant said this turn, or "" if it cannot be read.
+
+    **Everything, not the last thing.** A build is one turn with a dozen tool
+    calls in it, and the assistant speaks between them: a box, then a
+    paragraph, then another box, then six lines about a port. Reading only the
+    final text part saw the last of those and judged the turn on it, which is
+    how a screen full of prose passed a hook whose whole job is prose.
 
     The transcript is JSONL and its shape is the client's business, not ours —
     so every field is reached defensively and any surprise yields "", which
@@ -84,19 +106,30 @@ def last_assistant_text(transcript: Path) -> str:
     except OSError:
         return ""
 
+    said: list[str] = []
     for line in reversed(lines):
         try:
             entry = json.loads(line)
         except ValueError:
             continue
+
+        # A real user message ends the turn. Tool results arrive as `user`
+        # entries too, and stopping at those would cut the turn at its first
+        # tool call, which is where the speech starts.
+        if entry.get("type") == "user":
+            if _is_tool_result((entry.get("message") or {}).get("content")):
+                continue
+            break
+
         if entry.get("type") != "assistant":
             continue
 
         content = (entry.get("message") or {}).get("content")
         if isinstance(content, str):
-            return content
+            said.append(content)
+            continue
         if not isinstance(content, list):
-            return ""
+            continue
 
         parts = [
             part.get("text", "")
@@ -105,10 +138,10 @@ def last_assistant_text(transcript: Path) -> str:
         ]
         text = "\n".join(p for p in parts if p)
         if text.strip():
-            return text
-        # An assistant entry carrying only tool calls is not the turn's speech;
-        # keep looking back for the one that actually said something.
-    return ""
+            said.append(text)
+        # An assistant entry carrying only tool calls said nothing; keep going.
+
+    return "\n".join(reversed(said))
 
 
 # Forge speaking in markdown rather than in a box. Where escape codes cannot
@@ -175,6 +208,39 @@ def loose_lines(text: str) -> int:
     return len([line for line in lines if line.strip()])
 
 
+# A fenced block is how the block reaches a client that cannot take escape
+# codes, and it is what the user is looking at today. Where they are present,
+# they draw an exact line: inside a fence is Forge's block, outside it is the
+# assistant talking. Nothing else in this file can tell those apart, which is
+# why the wall of prose *after* a box was invisible to the lead-in rule.
+FENCE = "```"
+
+
+def prose_outside_blocks(text: str) -> int:
+    """Lines the assistant said around the boxes, in a reply that has fences.
+
+    Zero when there are no fences at all. The unfenced markdown presentation
+    puts the block's own body on plain lines, and counting those would refuse
+    every question drawn that way — the mistake this file has already made
+    twice, both times by tightening a check without asking what the other
+    presentation looks like.
+    """
+    inside = False
+    fenced = False
+    loose = 0
+    for line in text.splitlines():
+        if line.lstrip().startswith(FENCE):
+            inside = not inside
+            fenced = True
+            continue
+        if inside or not line.strip():
+            continue
+        if _starts_the_block(line):
+            continue
+        loose += 1
+    return loose if fenced else 0
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -196,9 +262,16 @@ def main() -> None:
         if paused(forge_dir):
             allow()  # switched off here; Forge has no opinion about the answer
 
+        # **A question is not the only thing that has to be framed, and
+        # believing it was is how a build reached a user as a wall of prose.**
+        # This allowed every turn where nothing was open, which is the whole of
+        # a build: three paragraphs of file explanation, six lines of narration
+        # about ports, and the two boxes lost somewhere inside it. Their words:
+        # "only the box info should be displayed". So a step in progress counts
+        # as Forge speaking, exactly like a question does.
         pending = open_question(forge_dir)
-        if pending is None:
-            allow()  # nothing is being asked, so nothing has to be framed
+        if pending is None and not _building(forge_dir):
+            allow()
 
         transcript = payload.get("transcript_path")
         if not transcript:
@@ -235,6 +308,19 @@ def main() -> None:
                 f"{loose_lines(said)} lines of prose around the block "
                 f"(rule R10 allows {MAX_LOOSE_LINES}). Move the rest into the "
                 "block or the decision record."
+            )
+
+        # The same rule counted the other way round, which is the half that was
+        # missing: prose *after* and *between* the boxes. A build put three
+        # paragraphs and six lines of narration on screen with two perfectly
+        # good boxes in among them, and every check here passed.
+        around = prose_outside_blocks(said)
+        if around > MAX_LOOSE_LINES:
+            block(
+                f"{around} lines of prose outside the boxes (rule R10 allows "
+                f"{MAX_LOOSE_LINES}). Forge speaks in blocks: put it in the one "
+                "the tool returned, or in the record, and say nothing between "
+                "them about what you are doing."
             )
     except Exception:
         # Never wedge a session over presentation. The governor can afford to

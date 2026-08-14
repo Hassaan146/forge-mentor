@@ -32,8 +32,12 @@ import forge_state as fs
 
 PLANS = "builds"
 
+# The trailing summary is optional on purpose: rows written before it existed
+# still parse, and a step half-built when the plugin updated keeps its ledger.
 _ROW = re.compile(
-    r"^(?P<state>\[[ x]\])\s+(?P<path>\S+)(?:\s+·\s+(?P<explained>explained))?\s*$"
+    r"^(?P<state>\[[ x]\])\s+(?P<path>\S+)"
+    r"(?:\s+·\s+(?P<explained>explained))?"
+    r"(?:\s+·\s+(?P<what>.+?))?\s*$"
 )
 
 
@@ -44,10 +48,12 @@ class Planned:
     path: str
     written: bool = False
     explained: bool = False
+    what: str = ""
 
     def row(self) -> str:
         mark = "[x]" if self.written else "[ ]"
-        return f"{mark} {self.path}" + (" · explained" if self.explained else "")
+        row = f"{mark} {self.path}" + (" · explained" if self.explained else "")
+        return row + (f" · {self.what}" if self.explained and self.what else "")
 
 
 def plan_path(forge_dir: Path, marker: str) -> Path:
@@ -73,6 +79,7 @@ def read_plan(forge_dir: Path, marker: str) -> list[Planned]:
                     path=match.group("path"),
                     written=match.group("state") == "[x]",
                     explained=bool(match.group("explained")),
+                    what=(match.group("what") or "").strip(),
                 )
             )
     return out
@@ -166,12 +173,22 @@ def mark_written(forge_dir: Path, marker: str, path: str) -> None:
     write_plan(forge_dir, marker, files)
 
 
-def mark_explained(forge_dir: Path, marker: str, path: str) -> None:
+def mark_explained(forge_dir: Path, marker: str, path: str, what: str = "") -> None:
+    """Tick the file off, and keep the one line that goes in the step's box.
+
+    The three-part explanation is the record's, not the screen's (decision 076).
+    What the user asked to see is one line a file, all of them together, so the
+    line has to be somewhere the box can read it back after the fact.
+    """
     files = read_plan(forge_dir, marker)
     for item in files:
         if item.path == path:
             item.written = True
             item.explained = True
+            if what.strip():
+                # One line, whatever arrives. A paragraph here would break the
+                # ledger's row-per-file shape and land in the box sideways.
+                item.what = " ".join(what.split())
     write_plan(forge_dir, marker, files)
 
 
