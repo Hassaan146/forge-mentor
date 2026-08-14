@@ -119,3 +119,40 @@ def test_an_innocent_word_is_not_read_as_a_container() -> None:
 
 def test_nothing_is_contradicted_when_nothing_is_known_yet() -> None:
     assert fo.contradicted("Run it in Docker", set()) == ("", "")
+
+
+def test_an_option_that_counts_files_is_not_an_option() -> None:
+    """"Dont tell me how many files to add, just tell what functionality."
+
+    The size question invites it: "how big should this step be" is answered in
+    the model's head as a number of files, and what reached a real screen was
+    "A Three files / B Five files" — a layout for code the user had not seen.
+    """
+    counted = [
+        fo.Option("Three files", "db.py, the .sql file, a test"),
+        fo.Option("Five files", "the same, split into three modules"),
+        fo.Option("Skip it", "fold the table into step 3"),
+    ]
+    found = fo.problems(counted, "How big should step 2 be?")
+
+    assert any("quantity, not a thing" in problem for problem in found)
+    assert sum("quantity, not a thing" in problem for problem in found) == 2
+
+    named = [
+        fo.Option("The table and the code that creates it", "three files, one to open"),
+        fo.Option("The table, with the layout split up front", "five files, three imports"),
+        fo.Option("Skip it", "fold the table into step 3"),
+    ]
+    assert fo.problems(named, "How big should step 2 be?") == []
+
+
+def test_a_label_that_names_the_thing_and_counts_it_is_fine() -> None:
+    """The rule is about labels that are *only* a count, not any count at all."""
+    assert fo.problems(
+        [
+            fo.Option("One table, one model, one migration", "one file to open"),
+            fo.Option("A table per feature", "more files, less coupling"),
+            fo.Option("No table yet", "nothing is stored until step 3"),
+        ],
+        "How big should step 2 be?",
+    ) == []

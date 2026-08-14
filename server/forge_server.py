@@ -394,10 +394,14 @@ def lean_check(project: str) -> dict[str, Any]:
         "next": (
             "Answer all five rungs yourself, in order, before you speak. Then call "
             "`render_decision` with what you found in `means`, and offer at least "
-            "three sizes: as proposed, the smaller version you found, and not at "
-            "all. Record the answer with `record_lean`. Do not skip a rung because "
-            "the answer seems obvious: the rung nobody asked is the one that would "
-            "have removed the feature."
+            "three: as proposed, the smaller version you found, and not at all. "
+            "**Name each option by what the project gets, never by how many files "
+            "it is.** 'The table and the code that creates it' is a choice; 'Three "
+            "files' is a layout for code the user has not seen and cannot picture. "
+            "Put the file count in the consequence line if it matters, where it "
+            "reads as a cost. Record the answer with `record_lean`. Do not skip a "
+            "rung because the answer seems obvious: the rung nobody asked is the "
+            "one that would have removed the feature."
         ),
     }
 

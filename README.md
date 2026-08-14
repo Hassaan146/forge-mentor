@@ -332,7 +332,7 @@ rather than written afterwards:
 
 ## Status
 
-v1.26.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project, and built using
+v1.26.1. Built in the open as an Arbisoft Internship 2026 Phase 3 project, and built using
 itself: the 75 decisions behind it are recorded in `.claude/forge/decisions/`, in the same
 format your project gets, each one fingerprinted against the one before it.
 

@@ -43,6 +43,25 @@ MAX_OPTIONS = 6
 
 LETTERS = "ABCDEFGH"
 
+# An option label that counts code instead of naming a capability. The size
+# question invites it — "how big should this step be" is answered in the
+# model's head as a number of files — and what reaches the user is a menu of
+# "Three files / Five files", which asks them to pick a layout for code they
+# have not seen. Their words: "Dont tell me how many files to add, just tell
+# for each option what functionality will be added."
+#
+# Only when the label is *nothing but* the count, and only in the plural.
+# "One table, one migration" names the thing and happens to count it, which is
+# a fine label. And "a file" is a real answer to where data is stored, sitting
+# next to SQLite and Postgres — catching that one cost a test the first time
+# this rule was written.
+_COUNTS_CODE = re.compile(
+    r"^(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
+    r"(?:more\s+|extra\s+|new\s+|separate\s+)?"
+    r"(?:files|modules|classes|functions|lines|scripts|folders|directories)$",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class Option:
@@ -225,6 +244,15 @@ def problems(options: list[Option], question: str = "") -> list[str]:
             found.append(
                 f"{option.label!r} has no consequence line. Every option says what "
                 "it costs you, or it is a word rather than a choice."
+            )
+
+    for option in clean:
+        if _COUNTS_CODE.match(str(option.label).strip()):
+            found.append(
+                f"{option.label!r} is a quantity, not a thing. Name what the user "
+                "gets: 'the table and the code that creates it', not how many "
+                "files it lands in. The count belongs in the consequence line, "
+                "where it is a cost rather than the choice itself."
             )
 
     labels = [str(o.label).strip().lower() for o in clean]
