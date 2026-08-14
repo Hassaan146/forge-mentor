@@ -2396,7 +2396,10 @@ def step_built(
         "show_the_user": (
             f"Say what you ran and what came back ({str(proof).strip()}), then give "
             f"them the live one: {str(see_it).strip()}. It should already be "
-            "running, so the address works when they click it."
+            "running, so the address works when they click it. Then say in one line "
+            "what that command means, part by part: they did not type it, and a "
+            "command nobody explained is the first thing they will need when Forge "
+            "is not in the room."
         ),
         "next": gap.reason if gap else "",
         # All three of these are questions to the user, and the flag is read as
