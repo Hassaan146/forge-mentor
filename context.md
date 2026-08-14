@@ -111,10 +111,17 @@ before it, does this need writing and how much of it, was never asked.
    after the code exists means arguing to delete something that already works, which is an
    argument the code usually wins.
 5. The builder writes what they settled on, **one file at a time** (decision 069):
-   `plan_files` names them skeleton-first, and each is announced as *what it is, why it exists,
-   how it works* before it is written and recorded with `file_written` after. The governor
-   refuses anything else while a written file is unexplained, so the explanation is the price of
-   the next file rather than a note somebody meant to add at the end.
+   `plan_files` names them skeleton-first and says in one line what the step does, and each file
+   is announced as *what it is, why it exists, how it works* before it is written and recorded
+   with `file_written` after. The governor refuses anything else while a written file is
+   unexplained, so the explanation is the price of the next file rather than a note somebody
+   meant to add at the end. **It also refuses every write until `plan_files` has been called**
+   (decision 073): the ledger was opt-in, and a step that skipped it went from a decision to
+   three finished files with nothing said in between.
+6. Then the builder **starts it and leaves it running**, and `step_built` refuses to tick the
+   step off without `proof` (what was run, what came back) and `see_it` (the command and address
+   the user can use now). Proving it on a spare port and shutting it down is how a user ends up
+   reading about a run they never saw.
 
 The gate is `next_gap` returning `unchallenged`. Nothing here judges whether code is minimal:
 the model reasons, the gate remembers. Note the marker trap this hit on the way in: `lean:` plus

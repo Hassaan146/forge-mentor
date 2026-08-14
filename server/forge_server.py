@@ -743,17 +743,22 @@ def catch_up(project: str) -> dict[str, Any]:
     name="plan_files",
     description=(
         "Name the files this step will touch, in the order they will be "
-        "written, **before writing any of them**. Skeleton first: the file that "
-        "is the shape of the thing before the file that fills it in, so the "
-        "user watches a project take form rather than a pile arrive "
-        "alphabetically. After this the governor allows one file at a time, in "
-        "this order, and each one has to be explained before the next is "
-        "written. **Writes the build ledger.**"
+        "written, **before writing any of them**, and say in plain words what "
+        "the step does. Nothing can be written until this is called: an "
+        "unplanned step used to go straight to finished files with nothing said "
+        "in between, which is the surprise this product exists to remove. "
+        "Skeleton first: the file that is the shape of the thing before the "
+        "file that fills it in, so the user watches a project take form rather "
+        "than a pile arrive alphabetically. After this the governor allows one "
+        "file at a time, in this order, and each one has to be explained before "
+        "the next is written. **Paste the `block` it returns before you write "
+        "anything. Writes the build ledger.**"
     ),
 )
-def plan_files(project: str, files: list[str]) -> dict[str, Any]:
+def plan_files(project: str, files: list[str], does: str = "") -> dict[str, Any]:
     import forge_build as fb
     import forge_steps as stp
+    import forge_ui as ui
 
     try:
         forge = _forge_dir(project)
@@ -764,6 +769,15 @@ def plan_files(project: str, files: list[str]) -> dict[str, Any]:
     if step is None:
         return {"error": "There is no step in progress to plan files for."}
 
+    if not str(does).strip():
+        return {
+            "error": (
+                "Say what this step does, in one line and in the user's terms. A "
+                "list of filenames tells somebody what is about to appear and not "
+                "what it is for, and what it is for is the part they asked about."
+            )
+        }
+
     try:
         planned = fb.plan(forge, step.marker, files or [])
     except fs.StateError as exc:
@@ -773,10 +787,22 @@ def plan_files(project: str, files: list[str]) -> dict[str, Any]:
         "step": step.text,
         "files": [item.path for item in planned],
         "first": planned[0].path,
+        "block": ui.render_from(
+            {
+                "kind": "note",
+                "heading": f"About to build: {step.text}",
+                "symbol": ui.MARK,
+                "lines": [str(does).strip()],
+                "important_lines": [
+                    f"{len(planned)} file(s), in this order: "
+                    + " → ".join(item.path for item in planned)
+                ],
+            }
+        ),
         "next": (
-            f"Say what {planned[0].path} is, why it exists and how it works, then "
-            "write it, then call `file_written`. Nothing else can be written "
-            "until that one is explained."
+            f"Paste the block, then say what {planned[0].path} is, why it exists "
+            "and how it works, then write it, then call `file_written`. Nothing "
+            "else can be written until that one is explained."
         ),
     }
 
@@ -2314,21 +2340,45 @@ def current_step(project: str) -> dict[str, Any]:
 @server.tool(
     name="step_built",
     description=(
-        "Tick a step off, once its code is written and its tests pass. This is "
-        "what moves the loop to the next question. **Until it is called the "
-        "current step stays current**, so nothing new is asked — a stall, "
-        "which is the right failure: the alternative is a loop that advances "
-        "on a model's say-so, which is how a phase gets built in one turn. "
-        "**Writes the phase file.**"
+        "Tick a step off, once its code is written, its tests pass and **you "
+        "have watched it run**. This is what moves the loop to the next "
+        "question. `proof` is the command you ran and what came back. `see_it` "
+        "is how the user looks at it themselves right now — the command that "
+        "starts it and the address it serves, or the command that shows the "
+        "output. Start it before you call this, in the background, and hand "
+        "over an address that is already live: a step that ends with "
+        "instructions the user has to carry out is a step they have not seen "
+        "working. Both are required. **Until it is called the current step "
+        "stays current**, so nothing new is asked — a stall, which is the right "
+        "failure: the alternative is a loop that advances on a model's say-so, "
+        "which is how a phase gets built in one turn. **Writes the phase file.**"
     ),
 )
-def step_built(project: str, phase: int, number: int) -> dict[str, Any]:
+def step_built(
+    project: str, phase: int, number: int, proof: str = "", see_it: str = ""
+) -> dict[str, Any]:
     import forge_steps as stp
 
     try:
         forge = _forge_dir(project)
     except ValueError as exc:
         return {"error": str(exc)}
+
+    missing = [
+        name
+        for name, text in (("proof", proof), ("see_it", see_it))
+        if not str(text).strip()
+    ]
+    if missing:
+        return {
+            "error": (
+                f"This step is not built until {' and '.join(missing)} is given. "
+                "`proof` is what you ran and what came back; `see_it` is how the "
+                "user looks at it now. A step nobody has seen running is a step "
+                "that is finished only on paper."
+            ),
+            "missing": missing,
+        }
 
     try:
         done = stp.mark_built(forge, phase, number)
@@ -2341,6 +2391,13 @@ def step_built(project: str, phase: int, number: int) -> dict[str, Any]:
         "built": {"phase": done.phase, "number": done.number, "text": done.text},
         "steps_built": built,
         "steps_total": total,
+        "proof": str(proof).strip(),
+        "see_it": str(see_it).strip(),
+        "show_the_user": (
+            f"Say what you ran and what came back ({str(proof).strip()}), then give "
+            f"them the live one: {str(see_it).strip()}. It should already be "
+            "running, so the address works when they click it."
+        ),
         "next": gap.reason if gap else "",
         # All three of these are questions to the user, and the flag is read as
         # "does the loop stop here". Counting only `undecided` said no while the

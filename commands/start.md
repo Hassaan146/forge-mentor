@@ -306,10 +306,16 @@ This is the product. Everything before it is setup.
    project. It ends in the YOUR TURN frame.
 6. **Wait.** Do not answer it. Do not build ahead. Do not write the file you can already see.
 7. `record_answer` — their words, their reasoning, the options they were shown.
-8. Build that step, and only that step.
-9. `step_built` — tick it off. This is what moves the loop on; skip it and nothing new is
-   ever asked.
-10. Back to 3.
+8. `plan_files` — every file this step writes, in order, and one line on what the step does.
+   Paste its block. **No write is permitted before this call**, so the user learns what is
+   coming from Forge rather than from three files appearing.
+9. Build that step, and only that step, one file at a time, each explained before the next.
+10. **Start it and leave it running.** Run the server in the background, check it answers, and
+    give them the address. A step is done when the user can look at it, not when the files
+    exist.
+11. `step_built` with `proof` and `see_it` — tick it off. It refuses without them. This is what
+    moves the loop on; skip it and nothing new is ever asked.
+12. Back to 3.
 
 Two things that are not negotiable:
 

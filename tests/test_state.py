@@ -323,6 +323,13 @@ def ready_to_build(forge) -> None:
     asked = fs.ask(forge, "phase 1 step 1", affects="phase-1.step-1")
     fs.answer(forge, asked.id, "# A\n\n## Why\n\nbecause\n")
 
+    # And the step has to have said what it writes (decision 073). The ledger
+    # was opt-in, so a step that skipped it went from a decision straight to
+    # three finished files with nothing said in between.
+    import forge_build as fb
+
+    fb.plan(forge, "phase-1.step-1", ["app.py"])
+
 
 def test_writes_allowed_once_answered(project: Path) -> None:
     forge = project / fs.FORGE_DIR

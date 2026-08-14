@@ -57,10 +57,23 @@ def ready(forge: Path) -> None:
 # ==========================================================================
 
 
-def test_a_step_with_no_plan_is_not_held_up(project: Path, forge: Path) -> None:
-    """The ledger is opt-in per step. A step that never planned its files is
-    governed by the gates that came before it and nothing new."""
+def test_a_step_that_never_said_what_it_writes_writes_nothing(
+    project: Path, forge: Path
+) -> None:
+    """The ledger used to be opt-in, and the opt-out is what a user hit.
+
+    A decided step went straight to three finished files with nothing said in
+    between: "you are executing the steps directly. I don't know what is
+    happening in this step." The gates before this one are about the decision,
+    not about the code, so nothing caught it.
+    """
     ready(forge)
+    allowed, why = fs.writes_allowed(forge, project / "anything.py")
+
+    assert allowed is False
+    assert "plan_files" in why
+
+    fb.plan(forge, MARKER, ["anything.py"])
     assert fs.writes_allowed(forge, project / "anything.py")[0] is True
 
 

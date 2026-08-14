@@ -180,8 +180,14 @@ def allowed(forge_dir: Path, marker: str, target: Path, project: Path) -> tuple[
 
     Three answers, and the middle one is the whole feature:
 
-    * No plan for this step: allowed. The ledger is opt-in per step, and a step
-      that never planned its files is governed by the gates that came before.
+    * No plan for this step: refused, and it names `plan_files`. **This was
+      opt-in and the opt-out is what a user hit.** A decided step went straight
+      to three finished files with nothing said in between, because a step that
+      never planned its files fell through to the gates before it — and those
+      gates are about the decision, not about the code. The user's words:
+      "you are executing the steps directly. I don't know what is happening in
+      this step." A ledger nobody is obliged to open is a ledger for the runs
+      that were going to announce themselves anyway.
     * A file written but not explained: refused, whatever the target is. This is
       what makes the explanation the price of the next file rather than a note
       somebody meant to add at the end.
@@ -190,7 +196,11 @@ def allowed(forge_dir: Path, marker: str, target: Path, project: Path) -> tuple[
     """
     files = read_plan(forge_dir, marker)
     if not files:
-        return True, ""
+        return False, (
+            "This step has not said what it writes. Call `plan_files` with every "
+            "file it touches, in the order they will be written, and say in one "
+            "line what the step does — then the first one can be written."
+        )
 
     owed = owed_explanation(forge_dir, marker)
     if owed is not None:

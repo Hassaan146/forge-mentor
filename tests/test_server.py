@@ -1047,12 +1047,58 @@ def test_a_step_decision_unblocks_only_that_step(project: str, forge: Path) -> N
 
     assert call(srv.current_step)(project)["decided"] is True
 
-    done = call(srv.step_built)(project, 1, 1)
+    done = call(srv.step_built)(
+        project, 1, 1, proof="pytest -q, 3 passed", see_it="uvicorn main:app, :8000/docs"
+    )
     assert done["steps_built"] == 1
     assert done["next_is_a_question"] is True
     assert "save a todo" in done["next"]
 
     assert call(srv.current_step)(project)["decided"] is False, "step 2 is a fresh question"
+
+
+def test_a_step_nobody_has_watched_run_is_not_built(project: str, forge: Path) -> None:
+    """The user's second complaint, in one gate: "it should run the server".
+
+    The builder proved it on a spare port, shut it down and reported success, so
+    what reached the user was a description of a run they never saw.
+    """
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["show the list"])
+    pass_lean(forge)
+    asked = ask_question(project, "how does it render?", affects="phase-1.step-1")
+    record_answer(project, asked["id"], "textContent", "never innerHTML")
+
+    refused = call(srv.step_built)(project, 1, 1)
+    assert refused["missing"] == ["proof", "see_it"]
+
+    half = call(srv.step_built)(project, 1, 1, proof="pytest -q, 3 passed")
+    assert half["missing"] == ["see_it"], "running it privately is not showing it"
+
+    assert call(srv.current_step)(project)["decided"] is True, "and the step is still open"
+
+
+def test_the_plan_says_what_the_step_does_before_any_file_appears(
+    project: str, forge: Path
+) -> None:
+    """A list of filenames says what is coming, not what it is for."""
+    plan_one_phase(forge)
+    call(srv.plan_steps)(project, 1, ["show the list"])
+    pass_lean(forge)
+    asked = ask_question(project, "how does it render?", affects="phase-1.step-1")
+    record_answer(project, asked["id"], "textContent", "never innerHTML")
+
+    bare = call(srv.plan_files)(project, ["index.html", "app.js"])
+    assert "error" in bare
+
+    planned = call(srv.plan_files)(
+        project,
+        ["index.html", "app.js"],
+        does="puts the todo list on screen and nothing else yet",
+    )
+    assert planned["first"] == "index.html"
+    assert "puts the todo list on screen" in planned["block"]
+    assert "index.html" in planned["block"]
 
 
 def test_ticking_a_step_that_does_not_exist_is_an_error_not_an_exception(

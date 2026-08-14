@@ -18,9 +18,14 @@ from a block message wastes the user's turn and reads as a bug rather than as th
 ## One file at a time, and each one explained
 
 **Call `plan_files` before you write anything**, naming every file this step touches in the
-order you will write them. Skeleton first: the file that is the shape of the thing before the
-file that fills it in, so the user watches a project take form rather than a pile arrive
-alphabetically.
+order you will write them, and saying in one plain line what the step does. Skeleton first: the
+file that is the shape of the thing before the file that fills it in, so the user watches a
+project take form rather than a pile arrive alphabetically.
+
+Paste the `block` it returns before the first file. The governor refuses every write until this
+call has happened, so there is no version of this step where code appears before the user has
+been told what is coming — that was the complaint that put the gate here: "you are executing
+the steps directly. I don't know what is happening in this step."
 
 Then, for each file, before it is written, say three things in this order:
 
@@ -50,9 +55,21 @@ about, and it has happened: four files and an entire application in a single tur
 question after the sixth. Every one of those writes was permitted, and the product looked like
 it was working the whole time.
 
-When the step's code is written and its tests pass, call `step_built`. That is what moves the
-loop to the next question. Until you call it nothing new is asked, so do not leave it until
-the end of a batch — there are no batches.
+## Leave it running
+
+**Start the thing and hand over an address that already works.** A step ends with the user
+looking at what they decided, not with instructions for producing it themselves. Run the server
+in the background, hit it once to confirm it answers, and give them the URL — do not start it on
+a spare port, confirm it privately and shut it down, which leaves the user reading about a run
+they never saw.
+
+If the step produces no server, the same rule in its own shape: run the command that shows the
+output and paste what came back.
+
+Then call `step_built` with both `proof` (what you ran, what came back) and `see_it` (the
+command and address they can use now). It refuses without them. That is what moves the loop to
+the next question — until you call it nothing new is asked, so do not leave it until the end of
+a batch. There are no batches.
 
 **Write the least code that answers the decision.** Call `skills_for_stage("building")`: if
 `also_use` names `ponytail`, apply it. It is a separate plugin whose whole job is checking
