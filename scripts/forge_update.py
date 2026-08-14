@@ -288,6 +288,9 @@ def restart_notice(update: Update, *, resume: str | None = None) -> str:
         f"      {ui.BOLD}{command}{ui.NC}",
         f"      {ui.DIM}{tail}{ui.NC}",
         "",
+        f"  {ui.DIM}None of that has to happen now. Whatever you just ran carries on,{ui.NC}",
+        f"  {ui.DIM}on this version, and the restart keeps until it suits you.{ui.NC}",
+        "",
     ]
     body += ui._important_lines(
         ["Nothing is lost. Your decisions live in the project, not in the plugin."]
@@ -298,16 +301,7 @@ def restart_notice(update: Update, *, resume: str | None = None) -> str:
         f"{ui.YELLOW}{ui.BOLD}{ui.COST} Forge {update.latest} is downloaded, "
         f"this session runs {update.installed}{ui.NC}"
     )
-    return (
-        "\n"
-        + ui.box(body, title=title, edge=ui.YELLOW)
-        + "\n"
-        + ui.action(
-            "Restart now, or finish what you are on and restart after",
-            hint="both are fine. Nothing expires and nothing is half applied",
-            kind="confirm",
-        )
-    )
+    return "\n" + ui.box(body, title=title, edge=ui.YELLOW) + "\n"
 
 
 def check(plugin_root: Path, *, force: bool = False) -> Update | None:
@@ -363,13 +357,11 @@ def notice(update: Update) -> str:
             f"You have {update.installed}. {update.latest} is out.",
             "Your decisions and notes are untouched. They live in your project, "
             "not in the plugin.",
+            "Nothing waits on it. What you just ran carries on, and the commands "
+            "below keep until you want them.",
         ],
         symbol=ui.COST,
-    ) + how_to_update() + ui.action(
-        "Shall I run those for you now?",
-        hint="yes and I will do both, then tell you when to restart",
-        kind="confirm",
-    )
+    ) + how_to_update()
 
 
 # The pair, in order. The second reads the local catalogue and the first is what
@@ -457,107 +449,25 @@ def report(plugin_root: Path, *, force: bool = False) -> str:
     return notice(found) if found else ""
 
 
-# Prompts that start real work. A stale plugin is harmless while someone is
-# reading; it is expensive the moment it starts writing state into a project,
-# because the questions, the gates and the file layout are all version-shaped.
+# **There was a gate here, and it deadlocked a real session.**
 #
-# **`/forge:status` and `/forge:update` are deliberately not here, and both were.**
-# The block message tells the user to run `/forge:status` to see which question
-# is open, and the same list then refused it: a gate that blocks the way out it
-# just recommended. `/forge:update` was worse, because its entire job is the
-# thing the gate is asking for. Both read; neither writes anything
-# version-shaped, so neither is what this is protecting.
+# A `UserPromptSubmit` hook held `/forge:start` back whenever a newer version
+# sat in the plugin cache unloaded, on the reasoning that setting a project up
+# on a stale build writes a notes layout and a question sequence shaped by the
+# wrong version. The block named `/forge:status` as the way out. In an empty
+# directory `/forge:status` has nothing to read, so it answered "this is not a
+# Forge project, run /forge:start" — and the gate blocked that too. The user ran
+# the pair four times before reporting it.
 #
-# `/forge:add` is here because it writes phases and decisions into an existing
-# project, which is exactly the state a stale version shapes wrongly. It was
-# missing for the same reason things are usually missing from lists: it was
-# added to the product after the list was written.
-STARTING = ("forge:start", "forge:add", "forge:mode")
-
-# How someone gets past it. There is always a way past — decision 004, and
-# challenge finding H1: a gate with no exit is a gate that gets ripped out.
-OVERRIDE = ("anyway", "skip the update", "ignore the update")
-
-
-def _pick_up_line() -> str:
-    command = resume_command()
-    if command == "/forge:status":
-        return "Run /forge:status to see which question is open"
-    return "Run /forge:start again to set this project up"
-
-
-def gate(prompt: str, plugin_root: Path) -> str:
-    """Should this prompt be held back, and what should the user be told?
-
-    Returns "" to let it through, which is nearly always.
-
-    **Why a hook and not a line in `start.md`.** That line already exists, and
-    rule R13 is what it is: an instruction the model can skip is advice. Setting
-    a project up on a stale plugin is not a small waste — `/forge:start` writes
-    the notes layout, asks the fixed question sequence and records decisions
-    against it, all of which are shaped by the version doing the writing. Doing
-    that twice is the whole afternoon this has already cost.
-    """
-    text = (prompt or "").lower()
-    if not any(name in text for name in STARTING):
-        return ""
-    if any(word in text for word in OVERRIDE):
-        return ""
-
-    # A downloaded-but-not-loaded version comes first, and needs no network.
-    # It is also the more urgent of the two: the user has already done the
-    # updating, and one restart is between them and the version they asked for.
-    import forge_say as say
-
-    waiting = pending_restart(plugin_root)
-    if waiting is not None:
-        return say.framed(
-            f"Forge {waiting.latest} is downloaded, this session runs {waiting.installed}",
-            "Hooks, the engine and the commands are read once at startup, so this "
-            "session keeps the old ones however many times you update. That is why "
-            "the change you are looking for has not appeared.\n"
-            "\n"
-            "Nothing is lost. Your decisions live in the project, so reopening puts "
-            "you back exactly here.",
-            [
-                "Quit Claude Code completely, then open it again",
-                _pick_up_line(),
-                'Or say it again with "anyway" to carry on regardless',
-            ],
-        )
-
-    found = check(plugin_root)
-    if found is None:
-        return ""
-
-    return _framed_gate(found)
-
-
-def _framed_gate(found: Update) -> str:
-    """The version notice, in Forge's shape, with the commands for this surface."""
-    import forge_say as say
-
-    inside = bool(os.environ.get("CLAUDECODE"))
-    fetch = (
-        f"Run {SLASH_COMMANDS[0]}"
-        if inside
-        else f"Run {UPDATE_COMMANDS[0]}, then {UPDATE_COMMANDS[1]}"
-    )
-    return say.framed(
-        f"Forge {found.installed} is running, and {found.latest} is out",
-        "Starting a project on the older build is worth avoiding: /forge:start "
-        "writes the notes layout, asks the fixed question sequence and records "
-        "decisions against it, and all three are shaped by the version doing the "
-        "writing.\n"
-        "\n"
-        "Your decisions are safe either way. They live in the project, not the "
-        "plugin.",
-        [
-            fetch,
-            "Then quit Claude Code completely and open it again",
-            'Or say it again with "anyway" to carry on regardless',
-        ],
-    )
+# The check itself was never the problem; refusing to start was. A stale build
+# is worth a sentence, not a locked door, and `start.md` prints the notice
+# before Step 1 and then carries on — the user gets the update command and the
+# project they asked for in the same turn. Every notice in this file is now
+# something the user reads on the way past.
+#
+# Nothing replaced it on purpose. Its one remaining job, saying the version is
+# behind, is already done twice: once by the SessionStart hook and once by
+# `start.md` itself. A third copy in front of every prompt was the noise.
 
 
 def _plugin_root() -> Path:
@@ -570,40 +480,20 @@ def _plugin_root() -> Path:
     return Path(root) if root else Path(__file__).resolve().parent.parent
 
 
-def _gate_mode() -> None:
-    """UserPromptSubmit: hold `/forge:start` back when the plugin is stale.
-
-    Fails open on absolutely everything. This one sits in front of every prompt
-    the user types, so a bug here does not cost a turn or a session — it costs
-    the ability to say anything at all.
-    """
-    import sys
-
-    try:
-        payload = json.load(sys.stdin)
-        if payload.get("hook_event_name") != "UserPromptSubmit":
-            print(json.dumps({}))
-            return
-
-        reason = gate(str(payload.get("prompt", "")), _plugin_root())
-    except Exception:
-        reason = ""
-
-    print(json.dumps({"decision": "block", "reason": reason} if reason else {}))
-
-
 def main() -> None:
-    """Three shapes of the same answer, chosen by how it was invoked.
+    """Two shapes of the same answer, chosen by how it was invoked.
 
-    `--gate` speaks the UserPromptSubmit protocol and can hold a prompt back;
     `--hook` speaks SessionStart and only adds context; bare prints the block
-    for a terminal. All three say nothing when there is nothing to say, which
-    is most days.
+    for a terminal. Both say nothing when there is nothing to say, which is most
+    days, and neither can hold anything back — see the note above `report`.
+
+    `--gate` is accepted and does nothing, so a hooks file left over from an
+    earlier install prints an empty object rather than an error into a prompt.
     """
     import sys
 
     if "--gate" in sys.argv:
-        _gate_mode()
+        print(json.dumps({}))
         return
 
     hook_mode = "--hook" in sys.argv

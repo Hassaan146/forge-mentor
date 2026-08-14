@@ -59,8 +59,11 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/forge_preflight.py"
 
 The update check prints nothing when the copy is current, which is most of the
 time — print what it returns and say nothing when it returns nothing. If it does
-report a version, show it before the readiness check: setting up a project with a
-plugin that is about to be replaced wastes the setup.
+report a version, show it before the readiness check, then **carry on with the
+setup in the same turn**. It is a notice, not a gate: the user asked to start a
+project, and an update that can wait is not a reason to hand them back an empty
+turn. Do not ask whether to restart first, do not offer to run the update, and
+do not stop for an answer — the block already says the restart keeps.
 
 The legend is not decoration. From here on, Forge asks the user to *act* on
 colour — red means it stopped, yellow means the turn is theirs — and none of

@@ -229,11 +229,15 @@ printed "0.1.0" from a default argument while the manifest said 1.0.0, and it is
 thing anybody checks to see whether an update landed. A number that is wrong is worse than no
 number, because it is believed.
 
-**And the notice is enforced, not suggested.** `start.md` already said to run the check, which
-by rule R13 makes it advice. A `UserPromptSubmit` hook now holds `/forge:start` back when the
-plugin is stale and hands over the command — because that command writes the notes layout, asks
-the fixed question sequence and records decisions against it, and all three are shaped by the
-version doing the writing. Saying it again with "anyway" gets past, per decision 004.
+**And the notice never stops the command it appears on.** A `UserPromptSubmit` hook used to
+hold `/forge:start` back while a newer version sat downloaded and unloaded, on the reasoning
+that starting on an old build writes a notes layout and a question sequence shaped by the wrong
+version. It named `/forge:status` as the way out; in an empty directory that command answers
+"not a Forge project, run `/forge:start`", which the hook then blocked as well. A user ran the
+pair four times before reporting it, and the hook is gone. The check stayed: `start.md` prints
+it before Step 1 and carries straight on, so the update command and the project both arrive in
+the same turn. A stale build is worth a sentence, not a locked door — and a way out that leads
+back to the door is worse than no gate at all.
 
 The command it hands over is one that exists: `claude plugin update forge@forge-marketplace`,
 taken from `claude plugin update --help`, whose own text supplies the restart line. An earlier

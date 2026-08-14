@@ -158,9 +158,10 @@ You want `forge@forge-marketplace` showing the version you expect and `Status: â
 ### Updating
 
 Forge tells you. It checks its own version against this repository once a day and prints
-one frame with the command when there is something newer; `/forge:start` is held back
-until you have either updated or said to carry on anyway. Ask on demand with
-`/forge:update`, and turn the whole thing off with `FORGE_NO_UPDATE_CHECK=1`.
+one frame with the command when there is something newer. The frame never stops what you
+were doing: `/forge:start` shows it and then starts the project in the same turn, and the
+restart keeps until it suits you. Ask on demand with `/forge:update`, and turn the whole
+thing off with `FORGE_NO_UPDATE_CHECK=1`.
 
 Your decisions are never at risk in an update â€” they live in your project's
 `.claude/forge/`, not in the plugin.

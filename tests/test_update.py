@@ -126,20 +126,21 @@ def test_the_same_version_says_nothing(plugin: Path, monkeypatch) -> None:
     assert up.check(plugin) is None
 
 
-def test_the_notice_offers_to_do_it_rather_than_handing_over_commands(
+def test_the_notice_hands_over_the_commands_without_taking_the_turn(
     plugin: Path, monkeypatch
 ) -> None:
-    """The user has Claude Code open and Claude Code has a shell.
+    """It used to end by offering to run them, which is a question.
 
-    Handing someone two commands to retype is work the tool could have done, and
-    getting the order wrong is the loop that cost an afternoon: the second reads
-    the local catalogue, the first is what refreshes it.
+    A question on this block is a question the user has to answer before the
+    command they actually ran gets to happen, and this block appears on
+    `/forge:start`. The offer lives in `/forge:update`, where it is the point.
     """
     answers(monkeypatch, "1.1.0")
     text = up.report(plugin)
 
     assert "1.0.0" in text and "1.1.0" in text
-    assert "run those for you" in text
+    assert "run those for you" not in text
+    assert up.UPDATE_COMMAND in text, "the commands are still there to copy"
     assert "untouched" in text, "their decisions live in the project, not the plugin"
 
 
@@ -365,24 +366,57 @@ def test_a_missing_manifest_is_silence(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------
-# holding /forge:start back — the gate the user asked for
+# nothing here holds a prompt back — the deadlock that removed the gate
 # --------------------------------------------------------------------------
 
 
-def test_starting_a_project_on_a_stale_plugin_is_held_back(plugin: Path, monkeypatch) -> None:
-    """`/forge:start` writes the notes layout and the question sequence.
+def test_no_hook_of_this_module_can_block_a_prompt() -> None:
+    """A stale build is worth a sentence, not a locked door.
 
-    Both are shaped by the version doing the writing, so doing it twice is the
-    afternoon this has already cost.
+    The `UserPromptSubmit` gate blocked `/forge:start` while a newer version sat
+    downloaded, and named `/forge:status` as the way out. In an empty directory
+    that command answers "not a Forge project, run /forge:start" — which the
+    gate blocked in turn. The user ran the pair four times before reporting it.
     """
-    answers(monkeypatch, "1.1.0")
-    held = up.gate("/forge:start", plugin)
+    root = Path(__file__).resolve().parent.parent
+    hooks = json.loads((root / "hooks" / "hooks.json").read_text(encoding="utf-8"))
 
-    assert held
-    assert "1.1.0 is out" in held
-    assert "quit claude code" in held.lower()
-    assert "anyway" in held, "and there is always a way past"
-    assert held.lstrip().startswith("┌"), "framed, like everything else Forge says"
+    assert "UserPromptSubmit" not in hooks["hooks"]
+    assert not hasattr(up, "gate"), "and the function behind it is gone, not orphaned"
+
+
+def test_a_leftover_hooks_file_still_gets_a_clean_answer(capsys) -> None:
+    """An install from before the removal keeps calling `--gate`.
+
+    It has to print a valid empty result, not a traceback: whatever this writes
+    lands in front of a prompt the user typed.
+    """
+    import sys
+
+    argv = sys.argv
+    sys.argv = ["forge_update.py", "--gate"]
+    try:
+        up.main()
+    finally:
+        sys.argv = argv
+
+    assert json.loads(capsys.readouterr().out) == {}
+
+
+def test_the_notice_never_asks_for_the_turn(tmp_path: Path, monkeypatch) -> None:
+    """Both notices ride along with the command the user ran.
+
+    A YOUR TURN frame on an update notice spends the turn the user meant for
+    `/forge:start`, which is the same bug as the gate wearing softer clothes.
+    """
+    monkeypatch.chdir(tmp_path)
+    waiting = ANSI.sub("", up.restart_notice(up.Update("1.5.0", "1.6.0", "x")))
+    assert "YOUR TURN" not in waiting
+    assert "carries on" in waiting
+
+    available = ANSI.sub("", up.notice(up.Update("1.5.0", "1.6.0", "x")))
+    assert "YOUR TURN" not in available
+    assert up.UPDATE_COMMAND in available, "the command is still handed over"
 
 
 def test_the_command_it_hands_over_is_one_that_exists(plugin: Path) -> None:
@@ -395,80 +429,15 @@ def test_the_command_it_hands_over_is_one_that_exists(plugin: Path) -> None:
     assert "forge@forge-marketplace" in up.UPDATE_COMMAND
 
 
-def test_a_current_plugin_holds_nothing_back(plugin: Path, monkeypatch) -> None:
+def test_a_current_plugin_says_nothing_at_all(plugin: Path, monkeypatch) -> None:
     answers(monkeypatch, "1.0.0")
-    assert up.gate("/forge:start", plugin) == ""
+    assert up.report(plugin) == ""
 
 
-@pytest.mark.parametrize(
-    "prompt",
-    ["what does this project do?", "fix the login bug", "", "forge is a good name"],
-)
-def test_ordinary_prompts_are_never_touched(plugin: Path, monkeypatch, prompt) -> None:
-    """It sits in front of every prompt the user types. Nearly all of them pass."""
-    answers(monkeypatch, "1.1.0")
-    assert up.gate(prompt, plugin) == ""
-
-
-@pytest.mark.parametrize(
-    "prompt", ["/forge:start", "/forge:add a photo on each todo", "run /forge:mode auto"]
-)
-def test_every_command_that_writes_state_is_covered(plugin: Path, monkeypatch, prompt) -> None:
-    answers(monkeypatch, "1.1.0")
-    assert up.gate(prompt, plugin) != ""
-
-
-@pytest.mark.parametrize("prompt", ["/forge:status", "/forge:update"])
-def test_the_gate_never_blocks_its_own_way_out(plugin: Path, monkeypatch, prompt) -> None:
-    """It told the user to run `/forge:status` and then refused it.
-
-    Both commands read; neither writes anything version-shaped. `/forge:update`
-    was the worse of the two, because its entire job is the thing the gate is
-    asking for. Reported from a real session, where the block arrived twice: once
-    for the command the user ran, and once for the command the block recommended.
-    """
-    answers(monkeypatch, "1.1.0")
-    assert up.gate(prompt, plugin) == ""
-
-
-def test_what_the_block_recommends_is_something_it_lets_through(
-    plugin: Path, monkeypatch
-) -> None:
-    """The general form of the same bug, so the next one is caught by the test.
-
-    A way out named in the message and refused by the list is worse than no way
-    out at all: it reads as the product contradicting itself.
-    """
-    answers(monkeypatch, "1.1.0")
-    blocked = up.gate("/forge:start", plugin)
-
-    # Only the arrowed lines. The body names `/forge:start` while explaining why
-    # it is being held, which is the opposite of recommending it: a check that
-    # cannot tell those apart reports the message for describing itself.
-    for line in blocked.splitlines():
-        if "→" not in line:
-            continue
-        for command in re.findall(r"/forge:\w+", line):
-            assert up.gate(command, plugin) == "", f"{command} is recommended and blocked"
-
-
-@pytest.mark.parametrize("prompt", ["/forge:start anyway", "/forge:start, skip the update"])
-def test_saying_anyway_gets_past_it(plugin: Path, monkeypatch, prompt) -> None:
-    """Decision 004 and challenge finding H1: a gate with no exit gets ripped out."""
-    answers(monkeypatch, "1.1.0")
-    assert up.gate(prompt, plugin) == ""
-
-
-def test_no_network_never_holds_a_prompt_back(plugin: Path, monkeypatch) -> None:
-    """This runs in front of every prompt. It cannot be the reason one fails."""
-    offline(monkeypatch)
-    assert up.gate("/forge:start", plugin) == ""
-
-
-def test_the_switch_turns_the_gate_off_too(plugin: Path, monkeypatch) -> None:
+def test_the_switch_turns_the_check_off(plugin: Path, monkeypatch) -> None:
     monkeypatch.setenv("FORGE_NO_UPDATE_CHECK", "1")
     answers(monkeypatch, "1.1.0")
-    assert up.gate("/forge:start", plugin) == ""
+    assert up.report(plugin) == ""
 
 
 # --------------------------------------------------------------------------
@@ -558,12 +527,16 @@ def test_a_clone_is_not_a_version_directory(tmp_path: Path) -> None:
     assert up.pending_restart(root) is None
 
 
-def test_the_gate_holds_forge_start_on_a_pending_restart(tmp_path: Path) -> None:
-    """It is the more urgent of the two: the update is done, one restart is left."""
-    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
-    held = up.gate("/forge:start", root)
+def test_a_pending_restart_is_said_once_and_stands_aside(tmp_path: Path) -> None:
+    """It is the more urgent of the two: the update is done, one restart is left.
 
-    assert "is downloaded" in held
-    assert "Quit Claude Code" in held
-    assert "anyway" in held
-    assert held.lstrip().startswith("┌"), "framed, like everything else Forge says"
+    Urgent is still not a reason to hold the command back. It says what is on
+    disk, what a restart costs, and that whatever the user ran carries on.
+    """
+    root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
+    said = up.report(root)
+
+    assert "is downloaded" in said
+    assert "Quit Claude Code" in said
+    assert "carries on" in said
+    assert said.lstrip().startswith("┌"), "framed, like everything else Forge says"
