@@ -69,7 +69,10 @@ Say these three things, in this order, and nothing else:
    (decision 016). The plugin is the tool, not the work.
 3. **How to pick it back up:** `/forge:status` after reopening. It reads the
    files and says which question is open and what happens next, so the thread is
-   never held in the conversation.
+   never held in the conversation. **Unless this project has no notes yet** — a
+   project still in setup has no open question for it to read, so the command is
+   `/forge:start` again. Forge prints whichever of the two applies; show what it
+   returns rather than naming one from memory.
 
 If the user would rather finish what they are doing first, that is a reasonable
 answer and the notice says so. Do not press it. An update that interrupts is an

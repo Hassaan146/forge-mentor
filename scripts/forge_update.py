@@ -241,7 +241,26 @@ def pending_restart(plugin_root: Path) -> Update | None:
     return None
 
 
-def restart_notice(update: Update) -> str:
+def resume_command(cwd: Path | None = None) -> str:
+    """What to type after the restart, which is not the same command every time.
+
+    `/forge:status` reads the notes and says which question is open. A project
+    that has no notes yet has no open question and nothing for it to read, so
+    telling someone who is *setting up* to run it sends them to an empty answer
+    and leaves the setup they came for unstarted. There, the command to pick
+    back up with is the one they were already running.
+    """
+    import forge_state as st
+
+    root = Path(cwd) if cwd is not None else Path.cwd()
+    try:
+        started = (root / st.FORGE_DIR / st.PROGRESS).is_file()
+    except OSError:
+        started = False
+    return "/forge:status" if started else "/forge:start"
+
+
+def restart_notice(update: Update, *, resume: str | None = None) -> str:
     """What to do, and what it costs, which is nothing.
 
     No commands here on purpose. There is no command for this: the download is
@@ -251,6 +270,12 @@ def restart_notice(update: Update) -> str:
     """
     import forge_ui as ui
 
+    command = resume or resume_command()
+    tail = (
+        "it reads your notes and says which question is open"
+        if command == "/forge:status"
+        else "you have no notes yet, so this picks the setup up where it was"
+    )
     body = [
         "",
         f"  {ui.DIM}A session reads its hooks and its engine once, at startup, so this{ui.NC}",
@@ -260,8 +285,8 @@ def restart_notice(update: Update) -> str:
         f"      {ui.DIM}the whole application. Not /clear, not a new tab.{ui.NC}",
         "",
         f"  {ui.YELLOW}{ui.BOLD}Open it again, then run{ui.NC}",
-        f"      {ui.BOLD}/forge:status{ui.NC}",
-        f"      {ui.DIM}it reads your notes and says which question is open{ui.NC}",
+        f"      {ui.BOLD}{command}{ui.NC}",
+        f"      {ui.DIM}{tail}{ui.NC}",
         "",
     ]
     body += ui._important_lines(
@@ -454,6 +479,13 @@ STARTING = ("forge:start", "forge:add", "forge:mode")
 OVERRIDE = ("anyway", "skip the update", "ignore the update")
 
 
+def _pick_up_line() -> str:
+    command = resume_command()
+    if command == "/forge:status":
+        return "Run /forge:status to see which question is open"
+    return "Run /forge:start again to set this project up"
+
+
 def gate(prompt: str, plugin_root: Path) -> str:
     """Should this prompt be held back, and what should the user be told?
 
@@ -489,7 +521,7 @@ def gate(prompt: str, plugin_root: Path) -> str:
             "you back exactly here.",
             [
                 "Quit Claude Code completely, then open it again",
-                "Run /forge:status to see which question is open",
+                _pick_up_line(),
                 'Or say it again with "anyway" to carry on regardless',
             ],
         )

@@ -220,12 +220,33 @@ def test_the_restart_notice_offers_no_command_to_run() -> None:
     Offering one would send the user back to the update they already ran, which
     is the exact loop this notice exists to end.
     """
-    text = ANSI.sub("", up.restart_notice(up.Update("1.5.0", "1.6.0", "x")))
+    text = ANSI.sub(
+        "", up.restart_notice(up.Update("1.5.0", "1.6.0", "x"), resume="/forge:status")
+    )
 
     assert "claude plugin update" not in text
     assert "Quit Claude Code completely" in text
     assert "/forge:status" in text
     assert "Nothing is lost" in text
+
+
+def test_a_project_with_no_notes_is_sent_back_to_start(tmp_path: Path, monkeypatch) -> None:
+    """`/forge:status` has nothing to read before setup has run.
+
+    Sending someone mid-setup to it answers with an empty project and leaves the
+    setup they came for unstarted.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert up.resume_command() == "/forge:start"
+
+    text = ANSI.sub("", up.restart_notice(up.Update("1.5.0", "1.6.0", "x")))
+    assert "/forge:start" in text
+    assert "/forge:status" not in text
+
+    (tmp_path / ".claude" / "forge").mkdir(parents=True)
+    (tmp_path / ".claude" / "forge" / "progress.md").write_text("stage: build\n")
+    assert up.resume_command() == "/forge:status"
+    assert "/forge:status" in ANSI.sub("", up.restart_notice(up.Update("1.5.0", "1.6.0", "x")))
 
 
 def test_the_notice_is_framed_like_everything_else(plugin: Path, monkeypatch) -> None:
@@ -491,8 +512,13 @@ def test_running_the_newest_downloaded_version_is_not(tmp_path: Path) -> None:
     assert up.pending_restart(root) is None
 
 
-def test_the_restart_notice_says_it_costs_nothing(tmp_path: Path) -> None:
+def test_the_restart_notice_says_it_costs_nothing(tmp_path: Path, monkeypatch) -> None:
     """The reason people put a restart off is not knowing what it will lose."""
+    project = tmp_path / "project"
+    (project / ".claude" / "forge").mkdir(parents=True)
+    (project / ".claude" / "forge" / "progress.md").write_text("stage: build\n")
+    monkeypatch.chdir(project)
+
     root = cache_with(tmp_path, "1.3.0", "1.4.0", running="1.3.0")
     text = up.report(root)
 
