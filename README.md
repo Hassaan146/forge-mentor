@@ -175,6 +175,11 @@ Your decisions are never at risk in an update — they live in your project's
 After that just run `claude` as usual. Forge reads its notes and continues where you
 left off — including on a different machine or a different account.
 
+Coming back after a gap, `/forge:status` gives you the story so far and then carries straight
+on: what the project is, how far in it is, what was decided lately, and either the question you
+were on or the next piece of work. It does not stop at a report. If nothing is waiting on you,
+the next move is Forge's and it takes it.
+
 ### First run
 
 `/forge:start` does three things, and all three are required:
@@ -227,6 +232,14 @@ It is listed in Forge's own marketplace, so there is no second marketplace to ad
 to it at the building and review steps, and **setup will not finish without it**: the output of
 this tool is your codebase, and the thing keeping that code small is not an optional extra.
 
+**Every step climbs the ladder before you are asked anything about it.** Does this need to exist
+at all, does the project already do it, does the standard library do it, what is the smallest
+version worth having, what the extra size costs. All five, and the answers are shown to you with
+the question, so you are choosing a size rather than approving a plan. This one is enforced the
+same way decisions are: the step stays shut until the pass is recorded, and a pass with a rung
+missing is refused, because three plausible sentences with two rungs quietly absent reads as a
+completed pass in every summary anybody will ever look at.
+
 Where the two disagree Forge wins. The security floor is not overridable, and a recorded
 decision is not optimised away because a shorter version exists.
 
@@ -262,8 +275,34 @@ make it for you.
 | **You decide** | Options with a project-derived recommendation; you answer freely |
 | **Records why** | Every decision becomes a file in `.claude/forge/`, committed with the code |
 | **Blocks drift** | Code cannot move past an undecided question |
+| **Announces itself** | Every step says what it writes before it writes it |
+| **Leaves it running** | The step ends with the thing started and an address you can open |
 | **Reviews** | Pushes each step, takes review findings, and applies the fixes |
 | **Checks you understood** | You explain it back before the step closes |
+
+## What a step looks like
+
+A phase is never built in one pass. It is a list of steps, and each step is one question, one
+piece of code, and exactly two blocks on your screen.
+
+**First the plan.** Before a single file is written, Forge says in plain words what the step
+does and names every file it will touch, in the order it will write them. Skeleton first: the
+file that is the shape of the thing before the file that fills it in. This is a gate, not a
+courtesy. The governor refuses every write until it has happened, so there is no version of a
+step where code appears and the explanation follows.
+
+**Then silence.** The files are written one at a time, and each one is recorded with what it
+is, why it exists and how it works before the next is allowed. That goes to the record, not to
+your screen. A paragraph a file turns a three-file step into a wall of prose with the blocks
+lost inside it.
+
+**Then the result.** One block: every file on one line, what was run to prove it works, and
+the address it is already serving on. Forge starts it for you and hands you a live URL rather
+than instructions to produce one, and it says what the command means part by part, because a
+command nobody explained is the first thing you need on the day Forge is not in the room.
+
+Every load-bearing idea in the code is named in plain words as it is written. Forge writes the
+code; the concepts are yours to keep.
 
 ## How it is built
 
@@ -293,9 +332,9 @@ rather than written afterwards:
 
 ## Status
 
-v1.0.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project — and built
-using itself: every decision behind it is recorded in `.claude/forge/decisions/`, which is the
-same format your project gets.
+v1.25.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project, and built using
+itself: the 75 decisions behind it are recorded in `.claude/forge/decisions/`, in the same
+format your project gets, each one fingerprinted against the one before it.
 
 Known gap, stated plainly: Forge drives Claude Code, so it runs on Anthropic models only
 (decision 027).
