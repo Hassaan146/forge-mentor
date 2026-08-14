@@ -57,10 +57,6 @@ class Update:
     latest: str
     repository: str
 
-    @property
-    def releases(self) -> str:
-        return f"{self.repository}/commits"
-
 
 def _manifest(plugin_root: Path) -> dict:
     try:
@@ -399,29 +395,36 @@ def how_to_update() -> str:
     here = bool(os.environ.get("CLAUDECODE"))
     rows: list[str] = [""]
 
-    def block(title: str, commands: tuple[str, ...], current: bool) -> None:
+    def block(
+        title: str, commands: tuple[str, ...], current: bool, note: str = ""
+    ) -> None:
         mark = f"  {ui.DIM}(you are here){ui.NC}" if current else ""
         ink = ui.YELLOW if current else ui.DIM
         rows.append(f"  {ink}{ui.BOLD}{title}{ui.NC}{mark}")
         rows.extend(f"      {ui.BOLD}{command}{ui.NC}" for command in commands)
+        if note:
+            rows.append(f"      {ui.DIM}{note}{ui.NC}")
         rows.append("")
 
     if here:
-        block("Inside Claude Code, one command", SLASH_COMMANDS, True)
-        rows.insert(
-            len(rows) - 1,
-            f"      {ui.DIM}refreshing the marketplace downloads the plugin with it{ui.NC}",
+        block(
+            "Inside Claude Code, one command",
+            SLASH_COMMANDS,
+            True,
+            "refreshing the marketplace downloads the plugin with it",
         )
-        block("Or in a terminal, outside Claude Code", UPDATE_COMMANDS, False)
-        rows.insert(
-            len(rows) - 1,
-            f"      {ui.DIM}two, in that order: the second reads what the first refreshes{ui.NC}",
+        block(
+            "Or in a terminal, outside Claude Code",
+            UPDATE_COMMANDS,
+            False,
+            "two, in that order: the second reads what the first refreshes",
         )
     else:
-        block("In this terminal, both in this order", UPDATE_COMMANDS, True)
-        rows.insert(
-            len(rows) - 1,
-            f"      {ui.DIM}the second reads the catalogue the first refreshes{ui.NC}",
+        block(
+            "In this terminal, both in this order",
+            UPDATE_COMMANDS,
+            True,
+            "the second reads the catalogue the first refreshes",
         )
         block("Or inside Claude Code, one command", SLASH_COMMANDS, False)
 
@@ -487,14 +490,8 @@ def main() -> None:
     for a terminal. Both say nothing when there is nothing to say, which is most
     days, and neither can hold anything back — see the note above `report`.
 
-    `--gate` is accepted and does nothing, so a hooks file left over from an
-    earlier install prints an empty object rather than an error into a prompt.
     """
     import sys
-
-    if "--gate" in sys.argv:
-        print(json.dumps({}))
-        return
 
     hook_mode = "--hook" in sys.argv
     try:

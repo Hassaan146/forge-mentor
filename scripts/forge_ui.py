@@ -78,8 +78,6 @@ def _colour_enabled() -> bool:
     """
     if os.environ.get("NO_COLOR"):
         return False
-    if os.environ.get("FORGE_NO_COLOR"):
-        return False
     if os.environ.get("TERM") == "dumb":
         return False
 
@@ -127,20 +125,6 @@ _CODES = {
     "BOLD": "\033[1m",
     "RESET": "\033[0m",
 }
-
-
-def _apply_colour(on: bool) -> None:
-    """Turn the palette on or off for the whole module.
-
-    The builders read these as module constants, so switching the palette means
-    rebinding them rather than threading a flag through fifteen functions. Used
-    only by `render_from`, and always put back.
-    """
-    globals()["_ON"] = on
-    for name, code in _CODES.items():
-        globals()[name] = code if on else ""
-    globals()["CYAN"] = globals()["BLUE"]
-    globals()["NC"] = globals()["RESET"]
 
 
 # --------------------------------------------------------------------------
@@ -1142,66 +1126,6 @@ def summary(
     return box(body, f"{AMBER}{BOLD}{MARK} FORGE{RESET}")
 
 
-def _plain_block(payload: dict) -> str:
-    """The drawn block, whatever the colour setting says.
-
-    `render_from` sends everything here when escape codes cannot arrive, so it
-    has to build the frame directly rather than going back through the branch
-    that chose this route.
-    """
-    kind = str(payload.get("kind", "")).strip().lower()
-
-    if kind == "summary":
-        return summary(
-            str(payload.get("title", "THE STORY SO FAR")),
-            idea=str(payload.get("idea", "")),
-            facts=[tuple(f) for f in (payload.get("facts") or [])],
-            recent=list(payload.get("recent") or []),
-            important_lines=list(payload.get("important_lines") or []),
-        )
-
-    if kind == "legend":
-        return legend()
-    if kind == "roadmap":
-        return roadmap(list(payload.get("phases") or []), payload.get("title", "THE PLAN"))
-    if kind == "action":
-        return action(
-            str(payload.get("ask", "")),
-            str(payload.get("hint", "")),
-            kind=str(payload.get("ask_kind", "answer")),
-        )
-    if kind == "note":
-        return note(
-            str(payload.get("heading", "")),
-            list(payload.get("lines") or []),
-            symbol=str(payload.get("symbol", "")),
-            ask=str(payload.get("ask", "")),
-            important_lines=list(payload.get("important_lines") or []) or None,
-        )
-    if kind == "decision":
-        recommend = payload.get("recommend")
-        return decision(
-            str(payload.get("title", "")),
-            number=payload.get("number") or None,
-            subtitle=str(payload.get("subtitle", "")),
-            concept=str(payload.get("concept", "")),
-            means=list(payload.get("means") or []) or None,
-            choices=[tuple(c) for c in (payload.get("choices") or [])] or None,
-            recommend=(tuple(recommend) if recommend else None),
-            against=str(payload.get("against", "")),
-            important_lines=list(payload.get("important_lines") or []) or None,
-            done=int(payload.get("done") or 0),
-            total=int(payload.get("total") or 0),
-            stage=str(payload.get("stage", "")),
-            ask=str(payload.get("ask", "")),
-        )
-
-    raise ValueError(
-        f"Unknown block kind {kind!r}. "
-        "Use one of: decision, note, action, legend, roadmap, banner."
-    )
-
-
 def _coloured_box(payload: dict) -> str:
     """A drawn box whose left border is also the thing that colours the line.
 
@@ -1229,8 +1153,17 @@ def _coloured_box(payload: dict) -> str:
     def row(text: str = "", mark: str = "|") -> str:
         return f"{mark}  {text.ljust(inner - 3)}|"
 
+    def room(indent: str = "") -> int:
+        """How much text fits on one row, once the border and the indent are off.
+
+        The same arithmetic was written out three times, and a box whose three
+        wrappers disagree by a character wraps one kind of line early for no
+        reason anybody can see from the output.
+        """
+        return inner - 6 - len(indent)
+
     def wrapped(text: str, mark: str = "|", indent: str = "") -> list[str]:
-        return [row(indent + line, mark) for line in _wrap(text, inner - 6 - len(indent), "")]
+        return [row(indent + line, mark) for line in _wrap(text, room(indent), "")]
 
     def barred(text: str) -> list[str]:
         """A yellow-bar line, with its continuation under itself.
@@ -1240,8 +1173,7 @@ def _coloured_box(payload: dict) -> str:
         options had, in the one place the text is longest.
         """
         lead = f"{BAR} "
-        room = max(20, inner - 6 - len(lead))
-        first, *rest = _wrap(str(text), room, "") or [""]
+        first, *rest = _wrap(str(text), max(20, room(lead)), "") or [""]
         return [row(f"{lead}{first}", "-")] + [
             row(" " * len(lead) + line, "-") for line in rest
         ]
@@ -1362,8 +1294,7 @@ def _coloured_box(payload: dict) -> str:
             # option reads as another option: the continuation carries the same
             # `+` in column zero, which is what marks a line as choosable.
             lead = f"  {letter}  {str(label).ljust(width)}   "
-            room = max(20, inner - 6 - len(lead))
-            first, *rest = _wrap(str(note_text), room, "") or [""]
+            first, *rest = _wrap(str(note_text), max(20, room(lead)), "") or [""]
             out.append(row(f"{lead}{first}", "+"))
             out += [row(" " * len(lead) + line, "+") for line in rest]
 

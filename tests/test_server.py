@@ -21,8 +21,16 @@ import forge_server as srv
 
 
 def call(tool) -> object:
-    """Unwrap a registered tool back to the function under it."""
-    return getattr(tool, "fn", getattr(tool, "__wrapped__", tool))
+    """Unwrap a registered tool back to the function under it.
+
+    **`__wrapped__` is deliberately not consulted.** `server.tool` hands back
+    the function it was given, so a tool is already callable, and every tool
+    that reads the notes carries `_says_why` over it. Following `__wrapped__`
+    stepped past that decorator and tested a function no caller ever reaches,
+    which showed up as a ValueError escaping a tool whose whole job is to
+    answer with `error` instead.
+    """
+    return getattr(tool, "fn", tool)
 
 
 choose_model = call(srv.choose_model)
@@ -1096,7 +1104,7 @@ def test_the_plan_says_what_the_step_does_before_any_file_appears(
         ["index.html", "app.js"],
         does="puts the todo list on screen and nothing else yet",
     )
-    assert planned["first"] == "index.html"
+    assert planned["files"][0] == "index.html"
     assert "puts the todo list on screen" in planned["block"]
     assert "index.html" in planned["block"]
 

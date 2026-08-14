@@ -193,52 +193,41 @@ def is_framed(text: str) -> bool:
     return any(_starts_the_block(line) for line in text.splitlines())
 
 
-def loose_lines(text: str) -> int:
-    """Prose *before* the block, which is the lead-in rule R10 is about.
+# A fenced block is how a block reaches a client that cannot take escape codes,
+# and it is what the user is looking at today. Where fences are present they
+# draw an exact line: inside is Forge's block, outside is the assistant talking.
+FENCE = "```"
 
-    Counted up to the block rather than across the whole reply. Everything
-    after it is the block's own body, and in the markdown presentation that
-    body is ordinary lines with no frame character in them, so counting the
-    whole reply refused every question it was given.
+
+def loose_lines(text: str) -> int:
+    """Prose around the blocks, counted the way this reply is actually drawn.
+
+    **Fenced**, which is every reply the current renderer produces: everything
+    outside a fence is the assistant. That covers the lead-in *and* the wall
+    after the last box, which is what a build put on screen with two perfectly
+    good frames sitting in the middle of it.
+
+    **Unfenced**, the older markdown presentation: the block's own body is
+    ordinary lines with nothing to mark them, so only the lead-in can be
+    counted. Counting the rest refused every question drawn that way, twice,
+    both times by tightening this check without asking what the other
+    presentation looks like.
     """
     lines = text.splitlines()
+    if any(line.lstrip().startswith(FENCE) for line in lines):
+        inside = False
+        loose = 0
+        for line in lines:
+            if line.lstrip().startswith(FENCE):
+                inside = not inside
+            elif line.strip() and not inside and not _starts_the_block(line):
+                loose += 1
+        return loose
+
     for position, line in enumerate(lines):
         if _starts_the_block(line):
             return len([earlier for earlier in lines[:position] if earlier.strip()])
     return len([line for line in lines if line.strip()])
-
-
-# A fenced block is how the block reaches a client that cannot take escape
-# codes, and it is what the user is looking at today. Where they are present,
-# they draw an exact line: inside a fence is Forge's block, outside it is the
-# assistant talking. Nothing else in this file can tell those apart, which is
-# why the wall of prose *after* a box was invisible to the lead-in rule.
-FENCE = "```"
-
-
-def prose_outside_blocks(text: str) -> int:
-    """Lines the assistant said around the boxes, in a reply that has fences.
-
-    Zero when there are no fences at all. The unfenced markdown presentation
-    puts the block's own body on plain lines, and counting those would refuse
-    every question drawn that way — the mistake this file has already made
-    twice, both times by tightening a check without asking what the other
-    presentation looks like.
-    """
-    inside = False
-    fenced = False
-    loose = 0
-    for line in text.splitlines():
-        if line.lstrip().startswith(FENCE):
-            inside = not inside
-            fenced = True
-            continue
-        if inside or not line.strip():
-            continue
-        if _starts_the_block(line):
-            continue
-        loose += 1
-    return loose if fenced else 0
 
 
 def main() -> None:
@@ -303,21 +292,10 @@ def main() -> None:
                 "`block` it returns, verbatim, as your whole answer."
             )
 
-        if loose_lines(said) > MAX_LOOSE_LINES:
+        loose = loose_lines(said)
+        if loose > MAX_LOOSE_LINES:
             block(
-                f"{loose_lines(said)} lines of prose around the block "
-                f"(rule R10 allows {MAX_LOOSE_LINES}). Move the rest into the "
-                "block or the decision record."
-            )
-
-        # The same rule counted the other way round, which is the half that was
-        # missing: prose *after* and *between* the boxes. A build put three
-        # paragraphs and six lines of narration on screen with two perfectly
-        # good boxes in among them, and every check here passed.
-        around = prose_outside_blocks(said)
-        if around > MAX_LOOSE_LINES:
-            block(
-                f"{around} lines of prose outside the boxes (rule R10 allows "
+                f"{loose} lines of prose around the blocks (rule R10 allows "
                 f"{MAX_LOOSE_LINES}). Forge speaks in blocks: put it in the one "
                 "the tool returned, or in the record, and say nothing between "
                 "them about what you are doing."

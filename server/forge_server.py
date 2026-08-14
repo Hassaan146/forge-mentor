@@ -21,6 +21,7 @@ cost time to find once already.
 
 from __future__ import annotations
 
+import functools
 import sys
 from pathlib import Path
 from typing import Any
@@ -140,6 +141,30 @@ def _forge_dir(project: str) -> Path:
             "This is not a Forge project. Run /forge:start here first."
         )
     return found
+
+
+def _says_why(fn):
+    """Turn "this is not a Forge project" into an answer instead of a traceback.
+
+    Twenty-five tools opened with the same four lines: resolve the notes, catch
+    the one thing resolving them raises, hand it back as `error`. Written out
+    each time it is not a policy, it is a habit, and a twenty-sixth tool that
+    forgets it crashes the engine rather than saying what is wrong.
+
+    `functools.wraps` earns its place here rather than by convention: the MCP
+    layer reads each tool's signature to build its schema, `inspect.signature`
+    follows `__wrapped__`, and so the wrapper is invisible to it. The test that
+    lists every registered tool by name is what holds that true.
+    """
+
+    @functools.wraps(fn)
+    def answering(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    return answering
 
 
 def _project_facts(project: str) -> set[str]:
@@ -315,15 +340,13 @@ def record_answer(
         "and which of the three it is belongs to the user. Reads only."
     ),
 )
+@_says_why
 def check_grounding(
     project: str, files: list[str] | None = None, said: str = ""
 ) -> dict[str, Any]:
     import forge_grounding as gr
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     root = Path(project)
     claims = gr.check([root / name for name in (files or [])], root)
@@ -366,14 +389,12 @@ def check_grounding(
         "the step until `record_lean` has written the answer. Reads only."
     ),
 )
+@_says_why
 def lean_check(project: str) -> dict[str, Any]:
     import forge_lean as ln
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -417,6 +438,7 @@ def lean_check(project: str) -> dict[str, Any]:
         "look at. **Writes to disk**, and it is what opens the step."
     ),
 )
+@_says_why
 def record_lean(
     project: str,
     keep: str,
@@ -428,10 +450,7 @@ def record_lean(
     import forge_lean as ln
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -551,14 +570,12 @@ def lean_review(project: str, approach: str, simpler: str = "") -> dict[str, Any
         "Reads only; changes nothing."
     ),
 )
+@_says_why
 def plan_feature(project: str, description: str) -> dict[str, Any]:
     import forge_feature as fe
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     if not description.strip():
         return {"error": "Say what the feature is, in the user's own words."}
@@ -615,14 +632,12 @@ def plan_feature(project: str, description: str) -> dict[str, Any]:
         "**Writes one new phase file.**"
     ),
 )
+@_says_why
 def add_phase(project: str, title: str, delivers: str) -> dict[str, Any]:
     import forge_feature as fe
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     try:
         path = fe.add_phase(forge, title, delivers)
@@ -651,15 +666,13 @@ def add_phase(project: str, title: str, delivers: str) -> dict[str, Any]:
         "the same way as the second's. Reads only; changes nothing."
     ),
 )
+@_says_why
 def catch_up(project: str) -> dict[str, Any]:
     import forge_lean as ln
     import forge_steps as stp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     try:
         progress = fs.Progress.read(forge)
@@ -777,15 +790,13 @@ def catch_up(project: str) -> dict[str, Any]:
         "anything. Writes the build ledger.**"
     ),
 )
+@_says_why
 def plan_files(project: str, files: list[str], does: str = "") -> dict[str, Any]:
     import forge_build as fb
     import forge_steps as stp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -808,7 +819,6 @@ def plan_files(project: str, files: list[str], does: str = "") -> dict[str, Any]
     return {
         "step": step.text,
         "files": [item.path for item in planned],
-        "first": planned[0].path,
         "block": ui.render_from(
             {
                 "kind": "note",
@@ -836,14 +846,12 @@ def plan_files(project: str, files: list[str], does: str = "") -> dict[str, Any]
         "only; changes nothing."
     ),
 )
+@_says_why
 def next_file(project: str) -> dict[str, Any]:
     import forge_build as fb
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -883,16 +891,14 @@ def next_file(project: str) -> dict[str, Any]:
         "**Writes the ledger.**"
     ),
 )
+@_says_why
 def file_written(
     project: str, path: str, what: str, why: str, how: str
 ) -> dict[str, Any]:
     import forge_build as fb
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -944,14 +950,12 @@ def file_written(
         "writing files nobody announced. **Writes the ledger.**"
     ),
 )
+@_says_why
 def add_file(project: str, path: str, because: str = "") -> dict[str, Any]:
     import forge_build as fb
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -984,6 +988,7 @@ def add_file(project: str, path: str, because: str = "") -> dict[str, Any]:
         "disk.**"
     ),
 )
+@_says_why
 def record_build_choice(
     project: str,
     choice: str,
@@ -993,10 +998,7 @@ def record_build_choice(
 ) -> dict[str, Any]:
     import forge_pipeline as pp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     if not choice.strip() or not reasoning.strip():
         return {"error": "A build choice needs both what was chosen and why."}
@@ -1254,15 +1256,13 @@ def check_review_setup(project: str) -> dict[str, Any]:
         "to disk.**"
     ),
 )
+@_says_why
 def record_review_findings(
     project: str, pr: int, findings: list[list[str]] | None = None, reviewer: str = "ponytail"
 ) -> dict[str, Any]:
     import forge_review as rv
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     if reviewer not in rv.LOCAL_REVIEWERS:
         return {
@@ -1337,6 +1337,7 @@ def fetch_review(project: str, pr: int) -> dict[str, Any]:
         "nothing else."
     ),
 )
+@_says_why
 def usage_report(project: str) -> dict[str, Any]:
     import forge_meter as fm
 
@@ -1344,10 +1345,7 @@ def usage_report(project: str) -> dict[str, Any]:
     # server. The tools added in phases 3-5 still let this propagate; making
     # all ten consistent is a change to their signatures and belongs in its own
     # commit, not buried in this one.
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     return fm.report(Path(project), forge)
 
@@ -1531,13 +1529,11 @@ def set_mode(project: str, mode: str) -> dict[str, Any]:
         "**Writes `.claude/forge/code-explained.md`.**"
     ),
 )
+@_says_why
 def explain_code(project: str, name: str = "") -> dict[str, Any]:
     import forge_explain as fe
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     return fe.report(forge, name or Path(project).name)
 
@@ -1646,6 +1642,7 @@ def resolve_finding(project: str, pr: int, thread_id: str) -> dict[str, Any]:
         "`asks_user: false`. **Writes to disk.**"
     ),
 )
+@_says_why
 def settle_small_decision(
     project: str,
     decision_id: int,
@@ -1655,10 +1652,7 @@ def settle_small_decision(
 ) -> dict[str, Any]:
     import forge_pipeline as pp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     pending = fs.open_question(forge)
     if pending is None or pending.id != decision_id:
@@ -1704,13 +1698,11 @@ def settle_small_decision(
         "`prompts.md`.**"
     ),
 )
+@_says_why
 def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
     import forge_prompts as fpr
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     out = fpr.report(Path(project), forge, name or Path(project).name)
     out["asked_for"] = str(fpr.write_asked_for(forge, name or Path(project).name))
@@ -1728,14 +1720,12 @@ def write_prompts_log(project: str, name: str = "") -> dict[str, Any]:
         "that is not recorded. **Writes the index.**"
     ),
 )
+@_says_why
 def what_did_i_ask_for(project: str) -> dict[str, Any]:
     import forge_explain as fe
     import forge_prompts as fpr
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     path = fpr.write_asked_for(forge, Path(project).name)
     said = [e for e in fe.collect(forge) if e.asked_for.strip()]
@@ -1904,13 +1894,11 @@ def render_decision(
         "Reads only; changes nothing."
     ),
 )
+@_says_why
 def foundation_question(project: str) -> dict[str, Any]:
     import forge_foundation as ff
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     question = ff.next_question(forge)
     done, total = ff.position(forge)
@@ -2019,14 +2007,12 @@ def render_note(
         "**Writes `.claude/forge/phases/`.**"
     ),
 )
+@_says_why
 def compile_phases(project: str, phases: list[list[str]]) -> dict[str, Any]:
     import forge_roadmap as rm
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     try:
         pairs = [(p[0], p[1] if len(p) > 1 else "") for p in (phases or [])]
@@ -2063,15 +2049,13 @@ def compile_phases(project: str, phases: list[list[str]]) -> dict[str, Any]:
         "thing it writes is the page."
     ),
 )
+@_says_why
 def show_roadmap(project: str) -> dict[str, Any]:
     import forge_roadmap as rm
     import forge_steps as stp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     phases = stp.roadmap(forge)
     if not phases:
@@ -2122,15 +2106,13 @@ def show_roadmap(project: str) -> dict[str, Any]:
         "only; changes nothing."
     ),
 )
+@_says_why
 def resume(project: str) -> dict[str, Any]:
     import forge_foundation as ff
     import forge_steps as stp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     try:
         progress = fs.Progress.read(forge)
@@ -2214,15 +2196,13 @@ def resume(project: str) -> dict[str, Any]:
         "the step until they are recorded. Reads only; changes nothing."
     ),
 )
+@_says_why
 def step_questions(project: str) -> dict[str, Any]:
     import forge_steps as stp
     import forge_topics as tp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     if step is None:
@@ -2301,13 +2281,11 @@ def step_questions(project: str) -> dict[str, Any]:
         "file.**"
     ),
 )
+@_says_why
 def plan_steps(project: str, phase: int, steps: list[str]) -> dict[str, Any]:
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     try:
         written = stp.write_steps(forge, phase, list(steps or []))
@@ -2335,13 +2313,11 @@ def plan_steps(project: str, phase: int, steps: list[str]) -> dict[str, Any]:
         "nothing."
     ),
 )
+@_says_why
 def current_step(project: str) -> dict[str, Any]:
     import forge_steps as stp
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     step = stp.current(forge)
     gap = stp.next_gap(forge)
@@ -2385,6 +2361,7 @@ def current_step(project: str) -> dict[str, Any]:
         "which is how a phase gets built in one turn. **Writes the phase file.**"
     ),
 )
+@_says_why
 def step_built(
     project: str,
     phase: int,
@@ -2397,10 +2374,7 @@ def step_built(
     import forge_steps as stp
     import forge_ui as ui
 
-    try:
-        forge = _forge_dir(project)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    forge = _forge_dir(project)
 
     missing = [
         name

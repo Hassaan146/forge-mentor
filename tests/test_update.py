@@ -385,24 +385,6 @@ def test_no_hook_of_this_module_can_block_a_prompt() -> None:
     assert not hasattr(up, "gate"), "and the function behind it is gone, not orphaned"
 
 
-def test_a_leftover_hooks_file_still_gets_a_clean_answer(capsys) -> None:
-    """An install from before the removal keeps calling `--gate`.
-
-    It has to print a valid empty result, not a traceback: whatever this writes
-    lands in front of a prompt the user typed.
-    """
-    import sys
-
-    argv = sys.argv
-    sys.argv = ["forge_update.py", "--gate"]
-    try:
-        up.main()
-    finally:
-        sys.argv = argv
-
-    assert json.loads(capsys.readouterr().out) == {}
-
-
 def test_the_notice_never_asks_for_the_turn(tmp_path: Path, monkeypatch) -> None:
     """Both notices ride along with the command the user ran.
 
