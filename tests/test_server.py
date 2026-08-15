@@ -1306,3 +1306,57 @@ def test_the_status_command_actually_calls_catch_up() -> None:
         encoding="utf-8"
     )
     assert "`catch_up`" in status
+
+
+# ==========================================================================
+# every tool has a caller — the rule is in the code but the code is in the path
+# ==========================================================================
+
+
+# Tools no brief calls **on purpose**, each with the reason. Anything else that
+# ends up here is a tool nobody can reach, which is this repository's oldest
+# failure shape: built, tested, green, and wired to nothing.
+UNCALLED_ON_PURPOSE = {
+    "forge": "the server itself, not a tool",
+    "choose_model": "routing lives in each agent's `model:` frontmatter, which is what "
+    "Claude Code actually reads; this table is a second source of truth",
+    "assemble_request": "Claude Code assembles and caches its own prompts",
+    "check_grounding": "the grounded.py hook runs it after every write, which is the "
+    "version that cannot be skipped",
+    "check_skills": "forge_preflight already checks ponytail and /forge:start stops "
+    "without it",
+    "next_file": "plan_files and file_written both return what comes next",
+    "clear_override": "the next recorded decision makes the flag irrelevant",
+}
+
+
+def test_every_registered_tool_is_called_by_something() -> None:
+    """A tool nothing calls is a promise nothing keeps.
+
+    Fifteen of forty-nine were unreachable when this was written, and eight of
+    those were features the README told users they had: the skill library that
+    setup never installed, the two generated documents nobody generated, the
+    push consent step the loop went around with plain git, the repair offered
+    to a user whose notes were damaged. Every one had passing tests, because
+    tests call a tool directly and a brief is the only thing that does not.
+    """
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    tools = set(
+        re.findall(r'name="(\w+)",', (root / "server" / "forge_server.py").read_text("utf-8"))
+    )
+    docs = "\n".join(
+        path.read_text(encoding="utf-8")
+        for folder in ("commands", "agents", "skills")
+        for path in (root / folder).rglob("*.md")
+    )
+
+    unreachable = sorted(
+        name for name in tools if name not in docs and name not in UNCALLED_ON_PURPOSE
+    )
+    assert not unreachable, (
+        f"{len(unreachable)} tool(s) no command or brief calls: {unreachable}. "
+        "Wire each into the brief that should invoke it, or add it to "
+        "UNCALLED_ON_PURPOSE with the reason it needs no caller."
+    )

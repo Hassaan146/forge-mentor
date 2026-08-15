@@ -21,8 +21,17 @@ memory). It carries the idea in the user's own words, how many questions are ans
 the estimate, how many decisions are recorded, phases finished, steps built, which step is open
 now, and the last three decisions with what was chosen.
 
-If it reports `needs_repair`, call `check_history`, show what is damaged and how to repair it,
-and stop. Nothing else on this screen is worth reading until the notes are sound.
+If it reports `needs_repair`, call `check_history`, show what is damaged, and **offer
+`repair_history`**, which is the tool that fixes it: it quarantines the damaged records before
+it writes anything, so nothing is destroyed and the original is still on disk afterwards. Say
+that, then ask, then run it if they say yes. Telling somebody their notes are broken and
+naming no repair is the shape of an error message, not of a product. Nothing else on this
+screen is worth reading until the notes are sound.
+
+**If the user asks whether they ever asked for something** — "did I say I wanted dark mode",
+"what did I ask about the database" — call `what_did_i_ask_for` with their words. It searches
+the records and returns what they asked, when, and what was decided. Answering from memory
+here is guessing about the one thing this product exists to have written down.
 
 Everything below is the longer report, for when the user asks for more than a glance.
 

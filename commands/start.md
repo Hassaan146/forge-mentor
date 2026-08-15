@@ -156,6 +156,20 @@ Every permission is required. If the user declines any of them, stop and say
 plainly that Forge cannot run without it, and what they would lose. Do not
 offer a reduced mode — there isn't one.
 
+## Step 4b — Install the skill library
+
+Call `install_skill_library`. It fetches the reviewed commit of the library into
+`~/.claude/skills`, about 46 MB, and says what landed.
+
+**Say what it is before you run it**, in one line: these are the skills Forge
+routes to while teaching and building, they are pinned to a commit so every
+machine gets the same set, and they live in the user's account rather than in
+this project. Then run it, and print what it returns.
+
+If it fails, say so in one line and carry on. A missing library costs teaching
+quality, not correctness, and setup that dies on a download is worse than setup
+that says which one did not arrive.
+
 ## Step 5 — Create the notes
 
 Create the notes with Forge's own creator, not by hand:
@@ -341,7 +355,26 @@ This is the product. Everything before it is setup.
     it returns. That block is the whole of what the user sees for the build: every file on one
     line, what you ran, and the live address. This is also what moves the loop on; skip it and
     nothing new is ever asked.
-12. Back to 3.
+12. **`preview_push`, then `push_work`.** Not `git push` through Bash. `preview_push` shows the
+    exact branch, commit and files that would leave the machine and refuses when it finds a
+    secret; `push_work` sends that commit and no other. Pushing with a bare git command skips
+    both, which is how "Forge asks before every push" became a sentence in the README rather
+    than a thing that happens.
+13. Back to 3.
+
+## When a phase finishes
+
+Two documents are generated from the records, and they are generated **here**, not at the end
+of the project. Both are promised in the README, and a document nobody generates is a promise
+nobody keeps.
+
+1. `explain_code` — writes `.claude/forge/code-explained.md`: why the project is built this
+   way, including the options that were turned down.
+2. `write_prompts_log` — writes `prompts.md`: every question asked and answered, and which
+   model handled each step.
+
+Say in one line that both are on disk and can be opened or shared. Then commit them with the
+phase, like everything else in `.claude/forge/`.
 
 Two boxes a step, and nothing between them: the plan from `plan_files`, then the result from
 `step_built`. That is the shape the user asked for after a build arrived as three paragraphs,

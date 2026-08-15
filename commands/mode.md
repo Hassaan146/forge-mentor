@@ -30,3 +30,11 @@ Steps:
    (rule R1 — the name tells a non-technical user nothing).
 5. If the new mode is `auto`, say plainly what Forge will now settle without asking, and what it
    will still stop for.
+
+**In auto mode, every settled choice goes through `settle_small_decision`.** That is the whole
+mechanism: it writes the choice, what was picked, and that Forge picked it rather than the
+user. Settling something and moving on without it produces a project whose history says a
+human made a decision nobody remembers making, which is worse than not recording it at all
+(decision 030 accepts records nobody chose, on the condition that the two are never confused
+when read back). Load-bearing decisions still go to the user through `render_decision` in
+every mode.
