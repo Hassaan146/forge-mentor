@@ -343,6 +343,10 @@ points, each carrying its reason inline.
 Known gap, stated plainly: Forge drives Claude Code, so it runs on Anthropic models only
 (decision 027).
 
+For the full writeup, including the hook wire protocol, the fingerprint chain, why the
+marketplace is a second repository, and the weaknesses a reviewer should push on, see
+[FORGE-EXPLAINED.md](FORGE-EXPLAINED.md).
+
 ## License
 
 MIT
