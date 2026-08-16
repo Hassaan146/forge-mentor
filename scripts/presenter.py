@@ -309,5 +309,5 @@ def main() -> None:
     allow()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - the process entry point, reached only when this file is run as a program
     main()

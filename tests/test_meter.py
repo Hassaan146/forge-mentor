@@ -346,3 +346,207 @@ def test_the_report_carries_the_budget_when_one_is_set(forge: Path, logs: Path) 
     report = fm.report(project, forge)
     assert report["budget"] == 1000
     assert report["threshold"] == "about half"
+
+
+# --------------------------------------------------------------------------
+# the logs, when the logs are not where or what they should be
+# --------------------------------------------------------------------------
+
+
+def test_no_transcript_folder_at_all_reports_nothing_rather_than_zero(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Zero is a number somebody would believe. "Unavailable" is the truth."""
+    monkeypatch.setattr(fm, "transcript_root", lambda: tmp_path / "nowhere")
+    assert fm.session_files(tmp_path) == []
+
+
+def test_a_session_is_found_by_what_it_says_its_directory_was(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The folder name is derived from the path, and the derivation has changed
+    before. Reading `cwd` out of the log is the fallback that survives that."""
+    root = tmp_path / "projects"
+    odd = root / "some-other-name"
+    odd.mkdir(parents=True)
+    project = tmp_path / "work" / "todo-app"
+    project.mkdir(parents=True)
+
+    (odd / "a.jsonl").write_text(
+        json.dumps({"cwd": str(project)}) + "\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(fm, "transcript_root", lambda: root)
+
+    assert [p.name for p in fm.session_files(project)] == ["a.jsonl"]
+
+
+def test_a_stray_file_beside_the_folders_is_stepped_over(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "projects"
+    root.mkdir(parents=True)
+    (root / "not-a-folder.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(fm, "transcript_root", lambda: root)
+
+    assert fm.session_files(tmp_path / "work") == []
+
+
+def test_a_log_whose_first_lines_are_blank_or_broken_is_still_read(tmp_path: Path) -> None:
+    """A partially written last line is normal in a live log, not an error."""
+    log = tmp_path / "a.jsonl"
+    log.write_text(
+        "\n" + "{not json at all\n" + json.dumps({"no_cwd": 1}) + "\n"
+        + json.dumps({"cwd": "C:/work"}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert fm._first_cwd(log) == "c:\work"
+
+
+def test_a_log_that_cannot_be_opened_is_skipped_not_fatal(tmp_path: Path, monkeypatch) -> None:
+    log = tmp_path / "a.jsonl"
+    log.write_text("{}\n", encoding="utf-8")
+
+    def refuse(*_a, **_k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "open", refuse)
+    assert fm._first_cwd(log) is None
+
+    monkeypatch.setattr(fm, "session_files", lambda _p: [log])
+    assert fm.read_turns(tmp_path) == []
+
+
+def test_a_log_with_no_cwd_anywhere_says_it_does_not_know(tmp_path: Path) -> None:
+    log = tmp_path / "a.jsonl"
+    log.write_text(json.dumps({"type": "assistant"}) + "\n", encoding="utf-8")
+
+    assert fm._first_cwd(log) is None
+
+
+def test_reading_the_logs_at_all_is_wrapped(tmp_path: Path, monkeypatch) -> None:
+    """The meter is a report, never a reason a session fails to start."""
+
+    def broken(*_a, **_k):
+        raise RuntimeError("the logs are unreadable")
+
+    monkeypatch.setattr(fm, "read_turns", broken)
+    usage = fm.measure(tmp_path)
+
+    assert usage.available is False
+    assert "Could not read" in usage.reason
+
+
+def test_an_unreadable_budget_reads_as_no_budget(tmp_path: Path, monkeypatch) -> None:
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+
+    def refuse(*_a, **_k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", refuse)
+    assert fm.budget(forge) == 0
+    assert fm._already_warned(forge) == set()
+
+
+def test_a_warning_that_cannot_be_recorded_still_warns(tmp_path: Path, monkeypatch) -> None:
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+
+    def refuse(*_a, **_k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "write_text", refuse)
+    fm._remember_warning(forge, {80})
+
+
+def test_the_usage_block_shows_the_split_and_who_spent_it() -> None:
+    """Cached against fresh is the number that changes behaviour, and by-model
+    is what tells you the teaching model is not writing the code."""
+    usage = fm.Usage(
+        available=True,
+        turns=120,
+        fresh_input=10_000,
+        cache_read=90_000,
+        cache_write=5_000,
+        output=8_000,
+        by_model={"claude-opus-5": 60_000, "claude-fable-5": 40_000},
+        subagent_turns=42,
+    )
+    drawn = fm.render(usage)
+
+    assert "120" in drawn
+    assert "claude-opus-5" in drawn
+    assert "42" in drawn
+    assert "reused" in drawn
+
+
+def test_a_line_that_is_not_a_turn_is_not_counted() -> None:
+    """Every one of these shapes appears in a real log, and counting any of
+    them would inflate the number the user is shown."""
+    assert fm._turn_from(json.dumps({"type": "user"})) is None
+    assert fm._turn_from(json.dumps({"type": "assistant", "message": "not a dict"})) is None
+    assert fm._turn_from(json.dumps({"type": "assistant", "message": {}})) is None
+    assert (
+        fm._turn_from(json.dumps({"type": "assistant", "message": {"usage": {}}})) is None
+    ), "no message id, so it cannot be told apart from its own duplicates"
+
+
+def test_no_session_logs_on_this_machine_is_said_plainly(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(fm, "transcript_root", lambda: tmp_path / "nowhere")
+    usage = fm.measure(tmp_path)
+
+    assert usage.available is False
+    assert "no session logs" in usage.reason.lower()
+
+
+def test_a_budget_that_is_not_a_number_is_no_budget(tmp_path: Path) -> None:
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+    (forge / fs.SETTINGS).write_text(
+        "---\ntoken_budget: lots\n---\n\n# Settings\n", encoding="utf-8"
+    )
+
+    assert fm.budget(forge) == 0, "a budget nobody can read as a number is no budget"
+
+
+def test_the_report_carries_the_budget_when_the_project_has_one(tmp_path: Path) -> None:
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+    (forge / fs.SETTINGS).write_text(
+        "---\ntoken_budget: 1_000_000\n---\n\n# Settings\n", encoding="utf-8"
+    )
+
+    out = fm.report(tmp_path, forge)
+    assert out["budget"] == 1_000_000
+
+
+def test_a_settings_file_that_will_not_parse_is_no_budget(tmp_path: Path) -> None:
+    """Both readers are guarded the same way, and both are asked on every
+    status report, so a malformed header must not stop one."""
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+
+    (forge / fs.SETTINGS).write_text("no labelled section at all\n", encoding="utf-8")
+    assert fm.budget(forge) == 0
+
+    (forge / fm.USAGE_FILE).write_text("no labelled section here either\n", encoding="utf-8")
+    assert fm._already_warned(forge) == set()
+
+
+def test_a_line_with_no_usage_block_is_not_a_turn() -> None:
+    assert fm._turn_from(json.dumps({"type": "assistant", "message": {"id": "m1"}})) is None
+
+
+def test_a_blank_line_in_the_log_is_not_a_turn() -> None:
+    assert fm._turn_from("   ") is None

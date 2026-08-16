@@ -786,3 +786,360 @@ def test_the_trigger_is_registered_where_it_will_run() -> None:
     assert sum("reviewed.py" in command for command in everywhere) >= 2, (
         "after the tool, and at the start of a session"
     )
+
+
+# --------------------------------------------------------------------------
+# the network edges — every one of these is an error the user has to act on
+# --------------------------------------------------------------------------
+
+
+class _Response:
+    """Enough of urlopen's return value to drive `_get`."""
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        return False
+
+
+def test_the_token_comes_from_the_environment_first(monkeypatch) -> None:
+    """Never typed by the user. Decision 014: delegated sign-in, never a secret."""
+    monkeypatch.setenv("GITHUB_TOKEN", "from-the-environment")
+    assert rv.github_token() == "from-the-environment"
+
+
+def test_the_token_falls_back_to_the_signed_in_gh_cli(monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    class Result:
+        returncode = 0
+        stdout = "  from-the-cli \n"
+
+    monkeypatch.setattr(rv.subprocess, "run", lambda *a, **k: Result())
+    assert rv.github_token() == "from-the-cli"
+
+
+def test_no_token_anywhere_is_none_rather_than_an_error(monkeypatch) -> None:
+    """A public repository needs no token, so absence is not a failure."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+
+    def missing(*_a, **_k):
+        raise FileNotFoundError("no gh here")
+
+    monkeypatch.setattr(rv.subprocess, "run", missing)
+    assert rv.github_token() is None
+
+
+def test_a_refused_request_names_the_command_that_fixes_it(monkeypatch) -> None:
+    """401 and 403 mean sign-in, and the message has to say which command."""
+    import urllib.error
+
+    def refuse(*_a, **_k):
+        raise urllib.error.HTTPError("u", 401, "no", {}, None)
+
+    monkeypatch.setattr(rv.urllib.request, "urlopen", refuse)
+    with pytest.raises(rv.ReviewError) as err:
+        rv._get("repos/o/r", None)
+
+    assert "gh auth login" in str(err.value)
+
+
+def test_a_missing_pull_request_says_not_found(monkeypatch) -> None:
+    import urllib.error
+
+    def missing(*_a, **_k):
+        raise urllib.error.HTTPError("u", 404, "no", {}, None)
+
+    monkeypatch.setattr(rv.urllib.request, "urlopen", missing)
+    with pytest.raises(rv.ReviewError, match="Not found"):
+        rv._get("repos/o/r/pulls/9", None)
+
+
+def test_any_other_status_is_reported_with_its_number(monkeypatch) -> None:
+    import urllib.error
+
+    def broken(*_a, **_k):
+        raise urllib.error.HTTPError("u", 500, "no", {}, None)
+
+    monkeypatch.setattr(rv.urllib.request, "urlopen", broken)
+    with pytest.raises(rv.ReviewError, match="500"):
+        rv._get("repos/o/r", None)
+
+
+def test_no_network_says_so_rather_than_raising_a_url_error(monkeypatch) -> None:
+    import urllib.error
+
+    def offline(*_a, **_k):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr(rv.urllib.request, "urlopen", offline)
+    with pytest.raises(rv.ReviewError, match="Could not reach GitHub"):
+        rv._get("repos/o/r", None)
+
+
+def test_a_successful_request_returns_the_parsed_body(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rv.urllib.request, "urlopen", lambda *a, **k: _Response(b'{"number": 8}')
+    )
+    assert rv._get("repos/o/r/pulls/8", "token")["number"] == 8
+
+
+def test_graphql_errors_are_raised_rather_than_returned_as_data(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rv.urllib.request,
+        "urlopen",
+        lambda *a, **k: _Response(b'{"errors": [{"message": "bad query"}]}'),
+    )
+    with pytest.raises(rv.ReviewError, match="bad query"):
+        rv._post_graphql("query {}", {}, "token")
+
+
+def test_graphql_with_no_network_says_so(monkeypatch) -> None:
+    import urllib.error
+
+    def offline(*_a, **_k):
+        raise urllib.error.URLError("down")
+
+    monkeypatch.setattr(rv.urllib.request, "urlopen", offline)
+    with pytest.raises(rv.ReviewError, match="Could not reach GitHub"):
+        rv._post_graphql("query {}", {}, None)
+
+
+def test_review_threads_are_paged_until_github_stops(monkeypatch) -> None:
+    """One page is the easy case; the second is where an off-by-one hides."""
+    pages = [
+        {
+            "repository": {"pullRequest": {"reviewThreads": {
+                "nodes": [
+                    {"isResolved": False, "id": "T1", "comments": {"nodes": [{"databaseId": 11}]}},
+                    {"isResolved": True, "id": "T2", "comments": {"nodes": [{"databaseId": 12}]}},
+                ],
+                "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+            }}}
+        },
+        {
+            "repository": {"pullRequest": {"reviewThreads": {
+                "nodes": [
+                    {"isResolved": False, "id": "T3", "comments": {"nodes": [{"databaseId": 13}]}}
+                ],
+                "pageInfo": {"hasNextPage": False},
+            }}}
+        },
+    ]
+    monkeypatch.setattr(rv, "_post_graphql", lambda *a, **k: pages.pop(0))
+
+    threads = rv.review_threads("o/r", 8, "token")
+    assert threads == {11: "T1", 13: "T3"}, "resolved threads are not offered again"
+
+
+def test_fetch_and_save_needs_a_github_remote(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(rv, "detect_repo", lambda _p: None)
+    with pytest.raises(rv.ReviewError, match="no GitHub remote"):
+        rv.fetch_and_save(tmp_path, tmp_path / ".claude" / "forge", 8)
+
+
+def test_fetch_and_save_merges_the_local_findings_into_the_combined_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Decision 064: the workflow owns pr-<n>.md, and ponytail's findings join it."""
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+    rv.add_local(forge, 8, [("app/db.py", "42", "reinvents sqlite3.Row")], "ponytail")
+
+    monkeypatch.setattr(rv, "detect_repo", lambda _p: "o/r")
+    monkeypatch.setattr(
+        rv,
+        "fetch",
+        lambda repo, pr, token=None: rv.Review(pr=pr, findings=[], reviewers=["coderabbit"]),
+    )
+
+    out = rv.fetch_and_save(tmp_path, forge, 8)
+    written = Path(str(out["file"])).read_text(encoding="utf-8")
+
+    assert "reinvents sqlite3.Row" in written
+    assert "ponytail" in written
+
+
+def test_an_unreadable_file_is_empty_rather_than_an_exception(tmp_path: Path, monkeypatch) -> None:
+    """Every read here is defensive on purpose: a review that cannot be read
+    must not stop the session that was going to act on it."""
+    import forge_state as fs
+
+    fs.init(tmp_path)
+    forge = tmp_path / fs.FORGE_DIR
+    rv.add_local(forge, 8, [("a.py", "1", "x")], "ponytail")
+
+    # The combined file has to exist for the read to be reached at all: each of
+    # these returns early when it is missing, which is a different branch.
+    combined = rv.combined_path(forge, 8)
+    combined.parent.mkdir(parents=True, exist_ok=True)
+    combined.write_text("thread: T1\n", encoding="utf-8")
+
+    real = Path.read_text
+
+    def unreadable(self, *a, **k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+
+    assert rv.remote_fingerprint(forge, 8) == ""
+    assert rv.reviewed_upto(forge, 8) == ""
+    assert rv.read_local(forge, 8) == []
+    assert rv.known_threads(forge, 8) == set()
+
+    monkeypatch.setattr(Path, "read_text", real)
+    assert rv.known_threads(forge, 8) == {"T1"}, "and it reads them when it can"
+    assert rv.remote_fingerprint(forge, 8), "a real file has a real fingerprint"
+
+
+def test_a_pull_request_number_has_to_be_one(tmp_path: Path) -> None:
+    for bad in ("not a number", "0", "-3", None):
+        with pytest.raises(rv.ReviewError, match="Not a pull request number"):
+            rv.valid_pr(bad)
+
+    assert rv.valid_pr(" 8 ") == 8
+
+
+def test_an_endless_page_run_is_refused_rather_than_followed(monkeypatch) -> None:
+    """A step would otherwise close on a review nobody finished reading."""
+    monkeypatch.setattr(rv, "_get", lambda path, token: [{"id": n} for n in range(100)])
+
+    with pytest.raises(rv.ReviewError, match="Forge stopped"):
+        rv._get_all("repos/o/r/comments", None, pages=2)
+
+
+def test_a_thread_that_will_not_resolve_reports_false(monkeypatch) -> None:
+    monkeypatch.setattr(rv, "_post_graphql", lambda *a, **k: {"resolveReviewThread": {}})
+    monkeypatch.setattr(rv, "github_token", lambda: "t")
+
+    assert rv.resolve_thread("T1", "t") is False
+    assert rv.resolve_thread("", "t") is False, "no id, nothing to close"
+
+    with pytest.raises(rv.ReviewError, match="not one of this project"):
+        rv.resolve_thread("T9", "t", allowed={"T1"})
+
+
+def test_changed_files_gives_up_quietly_when_github_will_not_say(monkeypatch) -> None:
+    """Used to decide whether a finding is stale. Not knowing is a real answer,
+    and a wrong guess would close a finding that is still live."""
+
+    def refuse(*_a, **_k):
+        raise rv.ReviewError("no")
+
+    monkeypatch.setattr(rv, "_get", refuse)
+    assert rv.changed_files("o/r", "a", "b") is None
+
+    monkeypatch.setattr(rv, "_get", lambda *a, **k: ["not a dict"])
+    assert rv.changed_files("o/r", "a", "b") is None
+
+
+def test_a_comparison_too_big_to_trust_is_not_trusted(monkeypatch) -> None:
+    """GitHub truncates the file list past 300, and a truncated list read as
+    complete marks live findings stale."""
+    monkeypatch.setattr(
+        rv,
+        "_get",
+        lambda *a, **k: {
+            "total_commits": 4,
+            "files": [{"filename": f"f{n}.py"} for n in range(300)],
+        },
+    )
+    assert rv.changed_files("o/r", "a", "b") is None
+
+
+def test_a_missing_git_command_means_no_repository_rather_than_a_crash(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def missing(*_a, **_k):
+        raise FileNotFoundError("no git")
+
+    monkeypatch.setattr(rv.subprocess, "run", missing)
+    assert rv.detect_repo(tmp_path) is None
+
+
+def test_the_setup_check_reports_a_missing_sign_in(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(rv, "detect_repo", lambda _p: "o/r")
+    monkeypatch.setattr(rv, "github_token", lambda: None)
+
+    answer = rv.check_setup(tmp_path)
+    assert answer["ready"] is False
+    assert "gh auth login" in str(answer.get("guide", ""))
+
+
+def test_the_setup_check_reports_what_github_refused(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(rv, "detect_repo", lambda _p: "o/r")
+    monkeypatch.setattr(rv, "github_token", lambda: "t")
+
+    def refuse(*_a, **_k):
+        raise rv.ReviewError("GitHub refused the request.")
+
+    monkeypatch.setattr(rv, "_get", refuse)
+    answer = rv.check_setup(tmp_path)
+
+    assert answer["ready"] is False
+    assert "refused" in str(answer["reason"])
+
+
+def test_a_comment_from_nobody_recognised_is_skipped(monkeypatch) -> None:
+    """Three reviewers are known. A human commenting on the pull request is not
+    a finding, and treating it as one would put a colleague's aside in a gate."""
+    monkeypatch.setattr(rv, "_get", lambda path, token: {"head": {"sha": "h"}, "base": {"sha": "b"}})
+    monkeypatch.setattr(
+        rv,
+        "_get_all",
+        lambda path, token, pages=10: [
+            {"user": {"login": "a-colleague"}, "body": "looks good to me", "path": "a.py"}
+        ],
+    )
+    monkeypatch.setattr(rv, "review_threads", lambda *a, **k: {})
+    monkeypatch.setattr(rv, "changed_files", lambda *a, **k: None)
+
+    review = rv.fetch("o/r", 8, token="t")
+    assert review.findings == []
+
+
+def test_graphql_hands_back_the_data_it_was_asked_for(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rv.urllib.request,
+        "urlopen",
+        lambda *a, **k: _Response(b'{"data": {"repository": {"name": "forge"}}}'),
+    )
+    assert rv._post_graphql("query {}", {}, "t")["repository"]["name"] == "forge"
+
+
+def test_a_comparison_small_enough_to_trust_names_the_files(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rv,
+        "_get",
+        lambda *a, **k: {"total_commits": 2, "files": [{"filename": "app/db.py"}]},
+    )
+    assert rv.changed_files("o/r", "a", "b") == {"app/db.py"}
+
+
+def test_a_reviewer_that_left_an_overall_verdict_is_listed(monkeypatch) -> None:
+    """The reviewer list is what the user reads to know who looked."""
+    monkeypatch.setattr(rv, "_get", lambda path, token: {"head": {"sha": "h"}, "base": {"sha": "b"}})
+    monkeypatch.setattr(
+        rv,
+        "_get_all",
+        lambda path, token, pages=10: (
+            [{"user": {"login": "coderabbitai[bot]"}, "body": "Looks fine overall."}]
+            if path.endswith("/reviews")
+            else []
+        ),
+    )
+    monkeypatch.setattr(rv, "review_threads", lambda *a, **k: {})
+    monkeypatch.setattr(rv, "changed_files", lambda *a, **k: None)
+
+    assert "coderabbit" in rv.fetch("o/r", 8, token="t").reviewers

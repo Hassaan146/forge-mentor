@@ -898,3 +898,348 @@ def test_start_checks_the_engine_before_it_prints_anything() -> None:
     assert start.index("color_legend") < start.index("forge_ui.py\" banner"), (
         "the engine check comes before the banner"
     )
+
+
+# --------------------------------------------------------------------------
+# the environment the renderer runs in
+# --------------------------------------------------------------------------
+
+
+def test_colour_is_off_where_the_user_or_the_terminal_says_so(monkeypatch) -> None:
+    """`NO_COLOR` is the standard and outranks everything, including FORCE_COLOR."""
+    for name in ("FORCE_COLOR", "CLAUDECODE", "TERM", "NO_COLOR"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert ui._colour_enabled() is False
+
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setenv("TERM", "dumb")
+    assert ui._colour_enabled() is False
+
+
+def test_colour_is_on_when_something_asks_for_it(monkeypatch) -> None:
+    """The MCP server sets FORCE_COLOR: it writes down a pipe, so `isatty` is
+    false, and every block it drew came out with the codes stripped."""
+    for name in ("NO_COLOR", "TERM", "CLAUDECODE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+
+    assert ui._colour_enabled() is True
+
+
+def test_inside_the_client_the_codes_are_not_emitted(monkeypatch) -> None:
+    """They would be stripped on arrival, and the leftovers printed the legend
+    as grey blocks."""
+    for name in ("NO_COLOR", "TERM", "FORCE_COLOR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CLAUDECODE", "1")
+
+    assert ui._colour_enabled() is False
+
+
+def test_a_plain_terminal_is_asked_whether_it_is_one(monkeypatch) -> None:
+    for name in ("NO_COLOR", "TERM", "FORCE_COLOR", "CLAUDECODE"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    assert ui._colour_enabled() is True
+
+
+def test_painting_nothing_leaves_the_text_alone() -> None:
+    assert ui.paint("", "plain") == "plain"
+    assert "plain" in ui.paint("", "plain", bold=True)
+
+
+def test_a_terminal_that_will_not_say_its_size_gets_a_usable_width(monkeypatch) -> None:
+    """A box drawn at zero columns is not a degraded box, it is a column of pipes."""
+    import shutil
+
+    def refuse(**_k):
+        raise OSError("no terminal")
+
+    monkeypatch.setattr(shutil, "get_terminal_size", refuse)
+    monkeypatch.delenv("FORGE_BOX_WIDTH", raising=False)
+
+    assert 56 <= ui._width() <= 96
+
+
+def test_the_version_falls_back_rather_than_inventing_one(monkeypatch) -> None:
+    """A wrong version is worse than none: it is the first thing anybody checks
+    to see whether an update landed, and it is believed."""
+    import pathlib
+
+    def unreadable(*_a, **_k):
+        raise OSError("no manifest")
+
+    monkeypatch.setattr(pathlib.Path, "read_text", unreadable)
+    assert ui.plugin_version() == "unknown"
+
+
+def test_a_console_that_cannot_be_reconfigured_does_not_crash(monkeypatch) -> None:
+    """On Windows the console is cp1252 and none of the symbols exist in it.
+    Printing a banner used to raise and take the whole hook down with it."""
+
+    class Stubborn:
+        def reconfigure(self, **kwargs):
+            raise OSError("this console will not")
+
+    monkeypatch.setattr(ui.sys, "stdout", Stubborn())
+    monkeypatch.setattr(ui.sys, "stderr", Stubborn())
+    ui._make_output_utf8_safe()
+
+
+def test_a_stream_with_no_reconfigure_at_all_is_skipped(monkeypatch) -> None:
+    monkeypatch.setattr(ui.sys, "stdout", object())
+    monkeypatch.setattr(ui.sys, "stderr", object())
+    ui._make_output_utf8_safe()
+
+
+def test_every_block_kind_can_be_drawn_from_a_dict() -> None:
+    """`render_from` is the one door into the renderer, so every kind that goes
+    through it has to come out drawn rather than raising."""
+    for payload in (
+        {"kind": "legend"},
+        {"kind": "banner", "project": "todo-app", "version": "1.0.0"},
+        {"kind": "roadmap", "phases": [{"number": 1, "title": "First", "delivers": "a thing that works", "steps": [{"text": "one", "built": False}], "built": 0, "state": "now"}]},
+        {"kind": "action", "ask": "A, B or C?", "ask_kind": "choose"},
+        {"kind": "note", "heading": "One thing", "lines": ["and its detail"]},
+        {"kind": "summary", "title": "WHERE YOU LEFT OFF", "facts": [["Steps", "1 of 5"]]},
+        {
+            "kind": "decision",
+            "title": "How should people log in?",
+            "choices": [["A", "a service", "someone else runs it"]],
+            "recommend": ["A", "least to maintain"],
+        },
+    ):
+        assert ui.render_from(payload).strip(), payload["kind"]
+
+
+def test_an_unknown_kind_names_the_real_ones() -> None:
+    with pytest.raises(ValueError, match="decision, note, action"):
+        ui.render_from({"kind": "poster"})
+
+
+def test_the_demo_draws_one_of_everything(capsys) -> None:
+    """It is how the identity is checked by eye after a change to the renderer."""
+    ui._demo()
+    assert capsys.readouterr().out.count("\n") > 20
+
+
+# --------------------------------------------------------------------------
+# every optional part of a block, and the coloured route through the renderer
+# --------------------------------------------------------------------------
+
+
+FULL_DECISION = {
+    "kind": "decision",
+    "number": 14,
+    "title": "How should people log in?",
+    "subtitle": "phase 2 of 5",
+    "concept": "a session is how a site remembers you between clicks",
+    "means": ["passwords are yours to store", "a service stores them for you"],
+    "choices": [
+        ["A", "a login service", "someone else runs it, and it costs"],
+        ["B", "your own table", "free, and the security is yours"],
+    ],
+    "recommend": ["A", "least to maintain while you are learning"],
+    "against": "it is one more account to hold",
+    "important_lines": ["Everyone will have to sign up again."],
+    "done": 7,
+    "total": 12,
+    "stage": "foundation",
+    "ask": "A or B?",
+}
+
+
+def test_a_decision_with_every_optional_part_draws_all_of_them() -> None:
+    """Each of these is an `if` in the renderer, and each was added because a
+    block without it read as incomplete."""
+    drawn = ANSI.sub("", ui.render_from(FULL_DECISION))
+
+    for expected in (
+        "phase 2 of 5",
+        "Concept:",
+        "What this means",
+        "login service",
+        "least to maintain",
+        "sign up again",
+        "7",
+    ):
+        assert expected in drawn, expected
+
+
+def test_the_same_block_draws_in_colour_when_colour_can_arrive(monkeypatch) -> None:
+    """The escape-code route is what a real terminal gets, and it is a
+    different branch of the renderer from the fenced one."""
+    monkeypatch.setattr(ui, "_ON", True)
+
+    for payload in (
+        FULL_DECISION,
+        {"kind": "legend"},
+        {"kind": "banner", "project": "todo-app"},
+        {"kind": "roadmap", "phases": [{"number": 1, "title": "First", "delivers": "a thing"}]},
+        {"kind": "action", "ask": "yes or no?", "ask_kind": "confirm"},
+        {
+            "kind": "note",
+            "heading": "One thing",
+            "lines": ["and its detail"],
+            "important_lines": ["and what it costs"],
+            "ask": "ready?",
+        },
+    ):
+        assert ui.render_from(payload).strip(), payload["kind"]
+
+
+def test_a_summary_carries_the_idea_and_what_is_waiting() -> None:
+    drawn = ANSI.sub("", ui.render_from({
+        "kind": "summary",
+        "title": "WHERE YOU LEFT OFF",
+        "idea": "a to-do app I can use from my phone",
+        "facts": [["Steps", "1 of 5"], ["Decisions", "15 recorded"]],
+        "recent": ["014  where do the packages go?  ->  a .venv folder"],
+        "important_lines": ["Waiting on you: which database?"],
+    }))
+
+    assert "from my phone" in drawn
+    assert "Waiting on you" in drawn
+
+
+def test_an_option_whose_consequence_runs_long_wraps_under_itself() -> None:
+    """Flat wrapping put the second line in column zero under the letter, where
+    it reads as another option rather than the rest of this one."""
+    drawn = ANSI.sub("", ui.render_from({
+        "kind": "decision",
+        "title": "How is it deployed?",
+        "choices": [["A", "a platform", " ".join(["a long consequence"] * 12)]],
+    }))
+
+    assert drawn.count("A  a platform") == 1, "the continuation is not a second option"
+
+
+def test_a_wide_character_is_measured_by_what_it_occupies() -> None:
+    """The symbols render wider than their Unicode class claims, and a frame
+    told otherwise closes in the wrong column."""
+    assert ui.visible_width("todo") == 4
+    assert ui.visible_width("⚒ todo") > 5
+
+
+def test_an_empty_string_wraps_to_nothing() -> None:
+    assert ui._wrap("", 40, "") == []
+
+
+# --------------------------------------------------------------------------
+# the plain renderers, which are what a real terminal gets
+# --------------------------------------------------------------------------
+
+
+LONG = " ".join(["a consequence long enough to need a second line"] * 3)
+
+
+def test_the_plain_renderers_draw_every_optional_part() -> None:
+    """These run where escape codes arrive, which is Forge's own commands in a
+    terminal. The fenced route is a different function, so covering one covers
+    neither of the other's branches."""
+    assert "Every block Forge prints is marked" in ANSI.sub("", ui.legend())
+    assert "titled" in ANSI.sub("", ui.box(["a line"], title="titled"))
+    assert "a line" in ANSI.sub("", ui.box(["a line"]))
+
+    asked = ANSI.sub("", ui.question_box("How should people log in?", "phase 2", 7))
+    assert "How should people log in?" in asked
+
+    drawn = ANSI.sub("", ui.decision(
+        "How should people log in?",
+        number=14,
+        subtitle="phase 2 of 5",
+        concept="a session is how a site remembers you",
+        means=["one line of what it means"],
+        choices=[("A", "a service", LONG), ("B", "your own", "free")],
+        recommend=("A", "least to maintain"),
+        against="one more account",
+        important_lines=["Everyone signs up again."],
+        done=7,
+        total=12,
+        stage="foundation",
+        ask="A or B?",
+    ))
+    assert "second line" in drawn, "a long consequence wraps under itself"
+    assert "Everyone signs up again." in drawn
+
+    story = ANSI.sub("", ui.summary(
+        "WHERE YOU LEFT OFF",
+        idea="a to-do app I can use from my phone",
+        facts=[("Steps", "1 of 5")],
+        recent=["014  packages  ->  a .venv folder"],
+        important_lines=["Waiting on you: which database?"],
+    ))
+    assert "from my phone" in story
+    assert "Waiting on you" in story
+
+
+def test_the_letters_offered_are_built_from_the_options_shown() -> None:
+    """A two-option question must not ask for a C that was never offered."""
+    assert ui._spoken_letters([]) == ""
+    assert ui._spoken_letters(["A"]) == "A"
+    assert ui._spoken_letters(["A", "B"]) == "A, or B"
+    assert ui._spoken_letters(["A", "B", "C"]) == "A, B, or C"
+
+
+def test_options_with_nothing_in_them_draw_nothing() -> None:
+    assert ui.options([]) == ""
+
+
+def test_a_combining_accent_does_not_widen_the_line() -> None:
+    """It sits on the character before it, so counting it would close the frame
+    a column early on any name with an accent in it."""
+    assert ui.visible_width("e\u0301") == 1
+
+
+def test_the_coloured_route_refuses_a_kind_it_does_not_know(monkeypatch) -> None:
+    monkeypatch.setattr(ui, "_ON", True)
+    with pytest.raises(ValueError, match="decision, note, action"):
+        ui.render_from({"kind": "poster"})
+
+
+def test_a_roadmap_block_shows_the_steps_of_the_phase_in_hand(monkeypatch) -> None:
+    monkeypatch.setattr(ui, "_ON", True)
+    drawn = ANSI.sub("", ui.roadmap([
+        {
+            "number": 1,
+            "title": "First",
+            "delivers": "a thing that works",
+            "state": "now",
+            "built": 1,
+            "steps": [{"text": "the list", "built": True}, {"text": "saving", "built": False}],
+        }
+    ]))
+
+    assert "the list" in drawn and "saving" in drawn
+
+
+def test_a_note_that_ends_in_an_ask_carries_the_frame_with_it() -> None:
+    """`render_note` with an `ask` is one block, not a note and a loose line:
+    the ask has to arrive inside the same box or it scrolls away on its own."""
+    drawn = ANSI.sub("", ui.render_from({
+        "kind": "note",
+        "heading": "Before the next step",
+        "lines": ["the database is created when the app starts"],
+        "important_lines": ["It is deleted if you delete the file."],
+        "ask": "ready to carry on?",
+    }))
+
+    assert "ready to carry on?" in drawn
+    assert "YOUR TURN" in drawn
+
+
+def test_a_long_meaning_and_a_long_consequence_both_continue_underneath(
+    monkeypatch,
+) -> None:
+    """Both wrap with a hanging indent, and both were flat once: the second
+    line landed in column zero and read as a new item rather than the rest."""
+    monkeypatch.setattr(ui, "WIDTH", 40)
+
+    key = ANSI.sub("", ui.legend())
+    assert key.count("⚒") >= 1, "the symbol key still draws at a narrow width"
+
+    listed = ANSI.sub("", ui.options([("A", "a service", LONG)]))
+    assert len(listed.splitlines()) > 2, "the consequence continues on its own line"

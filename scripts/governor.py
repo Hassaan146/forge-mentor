@@ -141,7 +141,7 @@ def main() -> None:
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - the process entry point, reached only when this file is run as a program
     try:
         main()
     except SystemExit:

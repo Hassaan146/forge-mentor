@@ -332,9 +332,13 @@ rather than written afterwards:
 
 ## Status
 
-v1.27.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project, and built using
-itself: the 75 decisions behind it are recorded in `.claude/forge/decisions/`, in the same
+v1.28.0. Built in the open as an Arbisoft Internship 2026 Phase 3 project, and built using
+itself: the 79 decisions behind it are recorded in `.claude/forge/decisions/`, in the same
 format your project gets, each one fingerprinted against the one before it.
+
+1,216 tests at 100% coverage, measured across the libraries, the hooks and the engine, with
+the gate in `pytest.ini` set to `--cov-fail-under=100`. The only exclusions are process entry
+points, each carrying its reason inline.
 
 Known gap, stated plainly: Forge drives Claude Code, so it runs on Anthropic models only
 (decision 027).

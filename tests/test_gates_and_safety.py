@@ -539,3 +539,188 @@ def test_anything_with_a_path_in_it_is_treated_as_a_path(
 def test_an_exact_credential_name_never_needs_a_file(command: str, tmp_path) -> None:
     """`.env` and `id_rsa` are unambiguous — nobody names an attribute that."""
     assert safety.secret_in_command(command, cwd=str(tmp_path)) is not None
+
+
+# --------------------------------------------------------------------------
+# the commit gate, driven end to end
+# --------------------------------------------------------------------------
+
+
+def commit_payload(project: Path, command: str = "git commit -m 'work'") -> dict:
+    return {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(project),
+        "tool_input": {"command": command},
+    }
+
+
+def test_a_project_with_a_test_suite_is_recognised(project: Path) -> None:
+    """Recognised from the config rather than from a folder name, because a
+    `tests/` directory with nothing runnable in it is not a test suite."""
+    assert gates._has_tests(project) is False
+
+    (project / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+    assert gates._has_tests(project) is True
+
+
+def test_an_unreadable_config_is_not_a_test_suite(project: Path, monkeypatch) -> None:
+    (project / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+
+    def unreadable(self, *a, **k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    assert gates._has_tests(project) is False
+
+
+def test_a_project_with_no_tests_passes_the_gate_and_says_why(project: Path) -> None:
+    passed, why = gates.run_tests(project)
+    assert passed is True
+    assert "no test suite" in why
+
+
+def test_a_missing_pytest_skips_the_gate_rather_than_blocking(project: Path, monkeypatch) -> None:
+    """A gate that cannot run must not become a wall. The user did not choose
+    to have pytest missing, and blocking every commit would be the wrong answer."""
+    (project / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+
+    def missing(*_a, **_k):
+        raise FileNotFoundError("no pytest")
+
+    monkeypatch.setattr(gates.subprocess, "run", missing)
+    passed, why = gates.run_tests(project)
+
+    assert passed is True
+    assert "not installed" in why
+
+
+def test_tests_that_never_finish_are_stopped_and_reported(project: Path, monkeypatch) -> None:
+    (project / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+
+    def hang(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="pytest", timeout=gates.TEST_TIMEOUT)
+
+    monkeypatch.setattr(gates.subprocess, "run", hang)
+    passed, why = gates.run_tests(project)
+
+    assert passed is False
+    assert "stopped" in why
+
+
+def test_a_failing_suite_returns_its_last_lines(project: Path, monkeypatch) -> None:
+    """The tail, not the whole run: the user needs the failure, not the log."""
+    (project / "pytest.ini").write_text("[pytest]\ntestpaths = tests\n", encoding="utf-8")
+
+    class Result:
+        returncode = 1
+        stdout = "\n".join(f"line {n}" for n in range(40))
+        stderr = ""
+
+    monkeypatch.setattr(gates.subprocess, "run", lambda *a, **k: Result())
+    passed, output = gates.run_tests(project)
+
+    assert passed is False
+    assert len(output.splitlines()) == 12
+    assert "line 39" in output
+
+
+def test_an_ordinary_git_command_is_never_interrupted(project: Path, monkeypatch, capsys) -> None:
+    answer = invoke(gates, monkeypatch, capsys, commit_payload(project, "git status"))
+    assert not is_deny(answer)
+
+
+def test_a_commit_is_blocked_while_the_history_is_damaged(
+    project: Path, monkeypatch, capsys
+) -> None:
+    """Rule 1: never make a damaged history permanent."""
+    forge = project / fs.FORGE_DIR
+    asked = fs.ask(forge, "which database?")
+    fs.answer(forge, asked.id, "# SQLite\n\n## Why\n\nsmall\n")
+    record = forge / fs.DECISIONS / fs.list_decisions(forge)[0].filename()
+    record.write_text(record.read_text(encoding="utf-8") + "\ntampered\n", encoding="utf-8")
+
+    answer = invoke(gates, monkeypatch, capsys, commit_payload(project))
+    assert is_deny(answer)
+
+
+def test_a_commit_with_failing_tests_is_blocked_and_counted(
+    project: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(gates, "run_tests", lambda _p: (False, "1 failed"))
+
+    answer = invoke(gates, monkeypatch, capsys, commit_payload(project))
+    assert is_deny(answer)
+
+    progress = fs.Progress.read(project / fs.FORGE_DIR)
+    assert progress.gate_attempts == 1
+
+
+def test_three_failures_escalate_rather_than_grind(project: Path, monkeypatch, capsys) -> None:
+    """Decision 009. Looping on the same error is how a step eats an afternoon,
+    and the third failure usually means the approach is wrong, not the code."""
+    monkeypatch.setattr(gates, "run_tests", lambda _p: (False, "1 failed"))
+
+    for _ in range(gates.MAX_ATTEMPTS):
+        answer = invoke(gates, monkeypatch, capsys, commit_payload(project))
+
+    reason = answer["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "may be wrong" in reason or "approach" in reason
+
+
+def test_a_passing_suite_lets_the_commit_through_and_resets_the_count(
+    project: Path, monkeypatch, capsys
+) -> None:
+    forge = project / fs.FORGE_DIR
+    monkeypatch.setattr(gates, "run_tests", lambda _p: (False, "1 failed"))
+    invoke(gates, monkeypatch, capsys, commit_payload(project))
+    assert fs.Progress.read(forge).gate_attempts == 1
+
+    monkeypatch.setattr(gates, "run_tests", lambda _p: (True, "3 passed"))
+    answer = invoke(gates, monkeypatch, capsys, commit_payload(project))
+
+    assert not is_deny(answer)
+    assert fs.Progress.read(forge).gate_attempts == 0, "a pass clears the record"
+
+
+def test_a_history_the_gate_cannot_read_at_all_blocks(project: Path, monkeypatch, capsys) -> None:
+    def broken(*_a, **_k):
+        raise RuntimeError("the notes are unreadable")
+
+    monkeypatch.setattr(gates.fr, "diagnose", broken)
+    answer = invoke(gates, monkeypatch, capsys, commit_payload(project))
+
+    assert is_deny(answer)
+
+
+def test_clearing_attempts_on_unreadable_notes_does_nothing(tmp_path: Path) -> None:
+    """It is called on the happy path, so it cannot be the thing that raises."""
+    gates.clear_attempts(tmp_path / "nowhere")
+
+
+def test_a_command_that_cannot_be_split_is_still_examined() -> None:
+    """An unbalanced quote is a command shlex refuses; falling back to a plain
+    split is what stops a malformed command walking past the gate."""
+    assert gates.is_commit_command('git commit -m "unclosed') is True
+    assert gates.is_commit_command("   ") is False
+
+
+def test_malformed_input_never_blocks_a_command(project: Path, monkeypatch, capsys) -> None:
+    """This sits in front of every Bash call. A parse error here would stop the
+    user working, which is a worse failure than the one it guards against."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO("not json at all"))
+    with pytest.raises(SystemExit):
+        gates.main()
+    assert not is_deny(json.loads(capsys.readouterr().out or "{}"))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"hook_event_name": "Stop", "tool_name": "Bash", "tool_input": {"command": "git commit"}},
+        {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {}},
+    ],
+)
+def test_another_event_or_tool_is_left_alone(project: Path, monkeypatch, capsys, payload) -> None:
+    payload["cwd"] = str(project)
+    assert not is_deny(invoke(gates, monkeypatch, capsys, payload))
